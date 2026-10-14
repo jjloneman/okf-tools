@@ -6,15 +6,16 @@ import {
   verifyRecord,
 } from "./okf-frontmatter.ts";
 
-const verifiedBy = "human:jjloneman";
-const at = "2026-10-02T13:30:00Z";
-const body = "\n# Title\n\nBody text.\n";
+const AT = "2026-10-02T13:30:00Z";
+const BODY = "\n# Title\n\nBody text.\n";
+const VERIFIED_BY = "human:jjloneman";
+const VERIFY_OPTIONS = { at: AT, verifiedBy: VERIFIED_BY };
 
 function record(frontmatter: string[]): string {
-  return `---\n${frontmatter.join("\n")}\n---\n${body}`;
+  return `---\n${frontmatter.join("\n")}\n---\n${BODY}`;
 }
 
-const draftLines = [
+const DRAFT_LINES = [
   "type: Decision",
   'title: "What every export promises"',
   "status: draft",
@@ -24,10 +25,10 @@ const draftLines = [
 describe("verifyRecord", () => {
   test("turns a draft into stable and adds a verified line after generated", () => {
     // Given - a draft record without a verified entry
-    const text = record(draftLines);
+    const text = record(DRAFT_LINES);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - stable status and a verified line after generated
     expect(result).toStrictEqual({
@@ -37,7 +38,7 @@ describe("verifyRecord", () => {
         'title: "What every export promises"',
         "status: stable",
         "generated: { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
-        `verified: { by: ${verifiedBy}, at: ${at} }`,
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
       ]),
     });
   });
@@ -47,7 +48,7 @@ describe("verifyRecord", () => {
     const text = record(["title: T", "status: draft", "type: Decision"]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the verified line follows status
     expect(result).toStrictEqual({
@@ -55,7 +56,7 @@ describe("verifyRecord", () => {
       text: record([
         "title: T",
         "status: stable",
-        `verified: { by: ${verifiedBy}, at: ${at} }`,
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
         "type: Decision",
       ]),
     });
@@ -64,40 +65,40 @@ describe("verifyRecord", () => {
   test("updates an existing inline entry instead of adding a second", () => {
     // Given - a stable record already verified by the owner
     const text = record([
-      ...draftLines.slice(0, 2),
+      ...DRAFT_LINES.slice(0, 2),
       "status: stable",
-      draftLines[3] ?? "",
-      `verified: { by: ${verifiedBy}, at: 2026-09-28T09:00:00Z }`,
+      DRAFT_LINES[3] ?? "",
+      `verified: { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }`,
     ]);
 
     // When - verifying it again
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the entry's timestamp is renewed, not duplicated
     expect(result).toStrictEqual({
       isOk: true,
-      text: text.replace("2026-09-28T09:00:00Z", at),
+      text: text.replace("2026-09-28T09:00:00Z", AT),
     });
   });
 
   test("updates the owner's entry in the list form", () => {
     // Given - a list-form verified field holding the owner's entry
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "  - { by: human:someone, at: 2026-09-01T00:00:00Z }",
-      `  - { by: ${verifiedBy}, at: 2026-09-28T09:00:00Z }`,
+      `  - { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }`,
       "tags: [a]",
     ]);
 
     // When - verifying it again
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - only the owner's timestamp is renewed
     expect(result).toStrictEqual({
       isOk: true,
       text: text
-        .replace("2026-09-28T09:00:00Z", at)
+        .replace("2026-09-28T09:00:00Z", AT)
         .replace("status: draft", "status: stable"),
     });
   });
@@ -105,25 +106,25 @@ describe("verifyRecord", () => {
   test("appends an entry to a list that lacks the owner's", () => {
     // Given - a list-form verified field without the owner's entry
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "  - { by: human:someone, at: 2026-09-01T00:00:00Z }",
       "tags: [a]",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the owner's entry is appended to the list
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
-        ...draftLines.slice(0, 2),
+        ...DRAFT_LINES.slice(0, 2),
         "status: stable",
-        draftLines[3] ?? "",
+        DRAFT_LINES[3] ?? "",
         "verified:",
         "  - { by: human:someone, at: 2026-09-01T00:00:00Z }",
-        `  - { by: ${verifiedBy}, at: ${at} }`,
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
         "tags: [a]",
       ]),
     });
@@ -132,23 +133,23 @@ describe("verifyRecord", () => {
   test("keeps another person's inline entry as a list item", () => {
     // Given - another person's inline verified entry
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified: { by: human:someone, at: 2026-09-01T00:00:00Z }",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - their entry becomes a list item beside the owner's
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
-        ...draftLines.slice(0, 2),
+        ...DRAFT_LINES.slice(0, 2),
         "status: stable",
-        draftLines[3] ?? "",
+        DRAFT_LINES[3] ?? "",
         "verified:",
         "  - { by: human:someone, at: 2026-09-01T00:00:00Z }",
-        `  - { by: ${verifiedBy}, at: ${at} }`,
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
       ]),
     });
   });
@@ -156,7 +157,7 @@ describe("verifyRecord", () => {
   test("adds verified after a nested generated block, not inside it", () => {
     // Given - a generated field written as a nested block
     const text = record([
-      ...draftLines.slice(0, 3),
+      ...DRAFT_LINES.slice(0, 3),
       "generated:",
       "  by: claude-code/model",
       "  at: 2026-10-01T15:00:00Z",
@@ -164,18 +165,18 @@ describe("verifyRecord", () => {
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the verified line follows the whole block
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
-        ...draftLines.slice(0, 2),
+        ...DRAFT_LINES.slice(0, 2),
         "status: stable",
         "generated:",
         "  by: claude-code/model",
         "  at: 2026-10-01T15:00:00Z",
-        `verified: { by: ${verifiedBy}, at: ${at} }`,
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
         "tags: [a]",
       ]),
     });
@@ -184,23 +185,23 @@ describe("verifyRecord", () => {
   test("does not mistake a longer actor name for the owner", () => {
     // Given - an entry by an actor whose name starts with the owner's
     const text = record([
-      ...draftLines,
-      `verified: { by: ${verifiedBy}2, at: 2026-09-01T00:00:00Z }`,
+      ...DRAFT_LINES,
+      `verified: { by: ${VERIFIED_BY}2, at: 2026-09-01T00:00:00Z }`,
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - their timestamp is kept and the owner gets a separate entry
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
-        ...draftLines.slice(0, 2),
+        ...DRAFT_LINES.slice(0, 2),
         "status: stable",
-        draftLines[3] ?? "",
+        DRAFT_LINES[3] ?? "",
         "verified:",
-        `  - { by: ${verifiedBy}2, at: 2026-09-01T00:00:00Z }`,
-        `  - { by: ${verifiedBy}, at: ${at} }`,
+        `  - { by: ${VERIFIED_BY}2, at: 2026-09-01T00:00:00Z }`,
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
       ]),
     });
   });
@@ -208,35 +209,35 @@ describe("verifyRecord", () => {
   test.each([
     {
       description: "an empty flow sequence",
-      expected: `[{ by: ${verifiedBy}, at: ${at} }]`,
+      expected: `[{ by: ${VERIFIED_BY}, at: ${AT} }]`,
       verified: "[]",
     },
     {
       description: "another person's entry in a flow sequence",
-      expected: `[{ by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${verifiedBy}, at: ${at} }]`,
+      expected: `[{ by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} }]`,
       verified: "[{ by: human:someone, at: 2026-09-01T00:00:00Z }]",
     },
     {
       description: "the owner's entry among others in a flow sequence",
-      expected: `[{ by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${verifiedBy}, at: ${at} }]`,
-      verified: `[{ by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${verifiedBy}, at: 2026-09-28T09:00:00Z }]`,
+      expected: `[{ by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} }]`,
+      verified: `[{ by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }]`,
     },
   ])(
     "keeps the flow-sequence form for $description",
     ({ expected, verified }) => {
       // Given - a verified field in the flow-sequence form
-      const text = record([...draftLines, `verified: ${verified}`]);
+      const text = record([...DRAFT_LINES, `verified: ${verified}`]);
 
       // When - verifying it
-      const result = verifyRecord({ at, text, verifiedBy });
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
       // Then - the entry is added or renewed inside the same sequence
       expect(result).toStrictEqual({
         isOk: true,
         text: record([
-          ...draftLines.slice(0, 2),
+          ...DRAFT_LINES.slice(0, 2),
           "status: stable",
-          draftLines[3] ?? "",
+          DRAFT_LINES[3] ?? "",
           `verified: ${expected}`,
         ]),
       });
@@ -246,23 +247,23 @@ describe("verifyRecord", () => {
   test("renews the owner's timestamp in a block-style list item", () => {
     // Given - a list item written as a block, with at: on its own line
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "  - by: human:someone",
       "    at: 2026-09-01T00:00:00Z",
-      `  - by: ${verifiedBy}`,
+      `  - by: ${VERIFIED_BY}`,
       "    at: 2026-09-28T09:00:00Z",
       "tags: [a]",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - only the owner's at: line changes
     expect(result).toStrictEqual({
       isOk: true,
       text: text
-        .replace("2026-09-28T09:00:00Z", at)
+        .replace("2026-09-28T09:00:00Z", AT)
         .replace("status: draft", "status: stable"),
     });
   });
@@ -270,7 +271,7 @@ describe("verifyRecord", () => {
   test("appends the owner after block-style items without splitting them", () => {
     // Given - a block-style list without the owner's entry
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "  - by: human:someone",
       "    at: 2026-09-01T00:00:00Z",
@@ -278,19 +279,19 @@ describe("verifyRecord", () => {
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the new entry follows the whole item
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
-        ...draftLines.slice(0, 2),
+        ...DRAFT_LINES.slice(0, 2),
         "status: stable",
-        draftLines[3] ?? "",
+        DRAFT_LINES[3] ?? "",
         "verified:",
         "  - by: human:someone",
         "    at: 2026-09-01T00:00:00Z",
-        `  - { by: ${verifiedBy}, at: ${at} }`,
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
         "tags: [a]",
       ]),
     });
@@ -299,14 +300,14 @@ describe("verifyRecord", () => {
   test("rejects a verified field that is a nested mapping without the owner", () => {
     // Given - a verified field written as one nested mapping
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "  by: human:someone",
       "  at: 2026-09-01T00:00:00Z",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - it is rejected rather than rewritten into invalid YAML
     expect(result).toStrictEqual({
@@ -318,13 +319,13 @@ describe("verifyRecord", () => {
   test("still marks a draft that carries a trailing comment", () => {
     // Given - a status line with a trailing YAML comment
     const text = record([
-      ...draftLines.slice(0, 2),
+      ...DRAFT_LINES.slice(0, 2),
       "status: draft # not settled",
-      draftLines[3] ?? "",
+      DRAFT_LINES[3] ?? "",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the status becomes stable and keeps its comment
     expect(result).toMatchObject({
@@ -336,18 +337,18 @@ describe("verifyRecord", () => {
   test("renews a quoted timestamp and keeps its quotes", () => {
     // Given - the owner's entry with a quoted timestamp
     const text = record([
-      ...draftLines,
-      `verified: { by: ${verifiedBy}, at: "2026-09-28T09:00:00Z" }`,
+      ...DRAFT_LINES,
+      `verified: { by: ${VERIFIED_BY}, at: "2026-09-28T09:00:00Z" }`,
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - only the timestamp inside the quotes changes
     expect(result).toStrictEqual({
       isOk: true,
       text: text
-        .replace("2026-09-28T09:00:00Z", at)
+        .replace("2026-09-28T09:00:00Z", AT)
         .replace("status: draft", "status: stable"),
     });
   });
@@ -355,19 +356,19 @@ describe("verifyRecord", () => {
   test("indents a new list item like the existing ones", () => {
     // Given - list items that start at column 0
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "- { by: human:someone, at: 2026-09-01T00:00:00Z }",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the new item also starts at column 0
     expect(result).toMatchObject({
       isOk: true,
       text: expect.stringContaining(
-        `\n- { by: human:someone, at: 2026-09-01T00:00:00Z }\n- { by: ${verifiedBy}, at: ${at} }\n`
+        `\n- { by: human:someone, at: 2026-09-01T00:00:00Z }\n- { by: ${VERIFIED_BY}, at: ${AT} }\n`
       ) as string,
     });
   });
@@ -375,21 +376,21 @@ describe("verifyRecord", () => {
   test("renews the owner's entry inside a multi-line flow sequence", () => {
     // Given - a flow sequence spread over several lines
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified: [",
       "    { by: human:someone, at: 2026-09-01T00:00:00Z },",
-      `    { by: ${verifiedBy}, at: 2026-09-28T09:00:00Z },`,
+      `    { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z },`,
       "  ]",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the owner's line is renewed in place
     expect(result).toStrictEqual({
       isOk: true,
       text: text
-        .replace("2026-09-28T09:00:00Z", at)
+        .replace("2026-09-28T09:00:00Z", AT)
         .replace("status: draft", "status: stable"),
     });
   });
@@ -397,14 +398,14 @@ describe("verifyRecord", () => {
   test("rejects a multi-line flow sequence without the owner's entry", () => {
     // Given - a flow sequence spread over several lines, missing the owner
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified: [",
       "    { by: human:someone, at: 2026-09-01T00:00:00Z },",
       "  ]",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - it is rejected rather than left with a dangling bracket
     expect(result).toStrictEqual({
@@ -416,36 +417,36 @@ describe("verifyRecord", () => {
   test("renews a block-style at: line that ends in a comment", () => {
     // Given - the owner's block entry with a trailing comment
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
-      `  - by: ${verifiedBy}`,
+      `  - by: ${VERIFIED_BY}`,
       "    at: 2026-09-28T09:00:00Z # first pass",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the timestamp changes and the comment stays
     expect(result).toStrictEqual({
       isOk: true,
       text: text
-        .replace("2026-09-28T09:00:00Z", at)
+        .replace("2026-09-28T09:00:00Z", AT)
         .replace("status: draft", "status: stable"),
     });
   });
 
   test("keeps a trailing comment on an inline flow sequence", () => {
     // Given - a one-line flow sequence with a comment
-    const text = record([...draftLines, "verified: [] # none yet"]);
+    const text = record([...DRAFT_LINES, "verified: [] # none yet"]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the entry goes inside the brackets, before the comment
     expect(result).toMatchObject({
       isOk: true,
       text: expect.stringContaining(
-        `verified: [{ by: ${verifiedBy}, at: ${at} }] # none yet\n`
+        `verified: [{ by: ${VERIFIED_BY}, at: ${AT} }] # none yet\n`
       ) as string,
     });
   });
@@ -453,13 +454,13 @@ describe("verifyRecord", () => {
   test("leaves a non-draft status alone", () => {
     // Given - a deprecated record
     const text = record([
-      ...draftLines.slice(0, 2),
+      ...DRAFT_LINES.slice(0, 2),
       "status: deprecated",
-      draftLines[3] ?? "",
+      DRAFT_LINES[3] ?? "",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the status stays deprecated
     expect(result).toMatchObject({
@@ -470,19 +471,19 @@ describe("verifyRecord", () => {
 
   test("keeps the file's CRLF line breaks and everything after the frontmatter", () => {
     // Given - a record with CRLF line breaks
-    const text = record(draftLines).replaceAll("\n", "\r\n");
+    const text = record(DRAFT_LINES).replaceAll("\n", "\r\n");
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - every line keeps its CRLF ending
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
-        ...draftLines.slice(0, 2),
+        ...DRAFT_LINES.slice(0, 2),
         "status: stable",
-        draftLines[3] ?? "",
-        `verified: { by: ${verifiedBy}, at: ${at} }`,
+        DRAFT_LINES[3] ?? "",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
       ]).replaceAll("\n", "\r\n"),
     });
   });
@@ -495,7 +496,7 @@ describe("verifyRecord", () => {
     },
   ])("rejects a record with $description", ({ text }) => {
     // When - verifying a record with $description
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - it is rejected for the missing block
     expect(result).toStrictEqual({
@@ -509,7 +510,7 @@ describe("verifyRecord", () => {
     const text = record(["type: Decision", "title: T"]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - the entry is added at the end and no status line appears
     expect(result).toStrictEqual({
@@ -517,7 +518,7 @@ describe("verifyRecord", () => {
       text: record([
         "type: Decision",
         "title: T",
-        `verified: { by: ${verifiedBy}, at: ${at} }`,
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
       ]),
     });
   });
@@ -526,10 +527,10 @@ describe("verifyRecord", () => {
     "promotes a quoted draft: %s",
     (statusLine) => {
       // Given - a draft status written with quotes
-      const text = record([...draftLines.slice(0, 2), statusLine]);
+      const text = record([...DRAFT_LINES.slice(0, 2), statusLine]);
 
       // When - verifying it
-      const result = verifyRecord({ at, text, verifiedBy });
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
       // Then - the status becomes stable
       expect(result).toMatchObject({
@@ -543,19 +544,19 @@ describe("verifyRecord", () => {
     "replaces an empty verified value: %s",
     (emptyValue) => {
       // Given - a verified field with a null value
-      const text = record([...draftLines, `verified: ${emptyValue}`]);
+      const text = record([...DRAFT_LINES, `verified: ${emptyValue}`]);
 
       // When - verifying it
-      const result = verifyRecord({ at, text, verifiedBy });
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
       // Then - the null becomes the owner's inline entry
       expect(result).toStrictEqual({
         isOk: true,
         text: record([
-          ...draftLines.slice(0, 2),
+          ...DRAFT_LINES.slice(0, 2),
           "status: stable",
-          draftLines[3] ?? "",
-          `verified: { by: ${verifiedBy}, at: ${at} }`,
+          DRAFT_LINES[3] ?? "",
+          `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
         ]),
       });
     }
@@ -564,20 +565,20 @@ describe("verifyRecord", () => {
   test("adds a fresh entry beside a block-style owner entry that has no timestamp", () => {
     // Given - the owner's block entry lacks an at: line
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
-      `  - by: ${verifiedBy}`,
+      `  - by: ${VERIFIED_BY}`,
       "    note: forgot the time",
     ]);
 
     // When - verifying it
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - a timestamped entry is appended rather than a wrong line edited
     expect(result).toMatchObject({
       isOk: true,
       text: expect.stringContaining(
-        `  - { by: ${verifiedBy}, at: ${at} }\n---`
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }\n---`
       ) as string,
     });
   });
@@ -587,12 +588,12 @@ describe("readRecordSummary", () => {
   test("reads the fields the checklist shows", () => {
     // Given - a verified record
     const text = record([
-      ...draftLines,
-      `verified: { by: ${verifiedBy}, at: 2026-09-28T09:00:00Z }`,
+      ...DRAFT_LINES,
+      `verified: { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }`,
     ]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - the checklist fields come back
     expect(summary).toStrictEqual({
@@ -607,14 +608,14 @@ describe("readRecordSummary", () => {
   test("reads the owner's timestamp out of a list, ignoring other people's", () => {
     // Given - a list that holds another person's entry first
     const text = record([
-      ...draftLines,
+      ...DRAFT_LINES,
       "verified:",
       "  - { by: human:someone, at: 2026-09-01T00:00:00Z }",
-      `  - { by: ${verifiedBy}, at: 2026-09-28T09:00:00Z }`,
+      `  - { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }`,
     ]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - only the owner's timestamp is read
     expect(summary?.verifiedAt).toBe("2026-09-28T09:00:00Z");
@@ -630,7 +631,7 @@ describe("readRecordSummary", () => {
     ]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - the timestamp is found inside the block
     expect(summary?.generatedAt).toBe("2026-10-01T15:00:00Z");
@@ -639,12 +640,12 @@ describe("readRecordSummary", () => {
   test("ignores an actor whose name merely starts with the owner's", () => {
     // Given - only a longer actor name has verified the record
     const text = record([
-      ...draftLines,
-      `verified: { by: ${verifiedBy}2, at: 2026-09-28T09:00:00Z }`,
+      ...DRAFT_LINES,
+      `verified: { by: ${VERIFIED_BY}2, at: 2026-09-28T09:00:00Z }`,
     ]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - the owner has not verified it
     expect(summary?.verifiedAt).toBeUndefined();
@@ -655,11 +656,11 @@ describe("readRecordSummary", () => {
     const text = record([
       "status: stable",
       'generated: { by: claude-code/model, at: "2026-10-01T15:00:00Z" }',
-      `verified: { by: ${verifiedBy}, at: '2026-10-02T15:00:00Z' }`,
+      `verified: { by: ${VERIFIED_BY}, at: '2026-10-02T15:00:00Z' }`,
     ]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - both timestamps parse, so the record reads as verified
     expect(summary === undefined ? undefined : getRecordState(summary)).toBe(
@@ -672,7 +673,7 @@ describe("readRecordSummary", () => {
     const text = record(['status: "draft" # wip']);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - the status is draft
     expect(summary?.status).toBe("draft");
@@ -683,7 +684,7 @@ describe("readRecordSummary", () => {
     const text = record(["status: stabel"]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - the status is undefined
     expect(summary?.status).toBeUndefined();
@@ -694,7 +695,7 @@ describe("readRecordSummary", () => {
     const text = record(["status: draft"]);
 
     // When - reading its summary
-    const summary = readRecordSummary({ text, verifiedBy });
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
     // Then - every other field is undefined
     expect(summary).toStrictEqual({
@@ -708,7 +709,10 @@ describe("readRecordSummary", () => {
 
   test("returns undefined without a frontmatter block", () => {
     // When - reading text with no frontmatter block
-    const summary = readRecordSummary({ text: "# Title\n", verifiedBy });
+    const summary = readRecordSummary({
+      text: "# Title\n",
+      verifiedBy: VERIFIED_BY,
+    });
 
     // Then - there is no summary
     expect(summary).toBeUndefined();
