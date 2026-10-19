@@ -24,6 +24,7 @@ import {
   outro,
   select,
 } from "@clack/prompts";
+import { DateTime } from "luxon";
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -498,7 +499,9 @@ async function main(): Promise<void> {
   const changed = all.filter(({ filePath }) => changedPaths.has(filePath));
   const selected = await chooseCandidates({ all, changed });
 
-  const at = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const at = DateTime.utc()
+    .startOf("second")
+    .toISO({ suppressMilliseconds: true });
 
   const edits = selected.map((candidate) => ({
     candidate,
