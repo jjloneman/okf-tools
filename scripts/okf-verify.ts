@@ -19,6 +19,7 @@ import {
   isCancel,
   log,
   multiselect,
+  MULTISELECT_INSTRUCTIONS,
   note,
   outro,
   select,
@@ -26,7 +27,7 @@ import {
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseArgs } from "node:util";
+import { parseArgs, styleText } from "node:util";
 
 import type { RecordState, RecordSummary } from "./lib/okf-frontmatter.ts";
 
@@ -228,18 +229,36 @@ async function chooseCandidates(params: {
     return process.exit(0);
   }
 
-  const chosen = await multiselect({
-    message: "Which records do you verify? (space toggles, a toggles all)",
-    options: shown.map((candidate) => ({
-      disabled: candidate.state === "verified",
-      hint: describeState(candidate),
-      label: `${candidate.summary.title ?? "(untitled)"} — ${path.basename(candidate.filePath)}`,
-      value: candidate,
-    })),
-    required: true,
-  });
+  /*
+   * clack has no option for the legend's text, so list the toggle-all key in
+   * the shared array it reads at render time, then take it back out.
+   *
+   * - Styled like clack's own entries: a dim key, then the action.
+   * - Inserted before `Enter: confirm`, which stays last.
+   */
+  const toggleAllInstruction = `${styleText("dim", "A:")} toggle all`;
 
-  return isCancel(chosen) ? cancelAndExit() : chosen;
+  MULTISELECT_INSTRUCTIONS.splice(-1, 0, toggleAllInstruction);
+
+  try {
+    const chosen = await multiselect({
+      message: "Which records do you verify?",
+      options: shown.map((candidate) => ({
+        disabled: candidate.state === "verified",
+        hint: describeState(candidate),
+        label: `${candidate.summary.title ?? "(untitled)"} — ${path.basename(candidate.filePath)}`,
+        value: candidate,
+      })),
+      required: true,
+    });
+
+    return isCancel(chosen) ? cancelAndExit() : chosen;
+  } finally {
+    MULTISELECT_INSTRUCTIONS.splice(
+      MULTISELECT_INSTRUCTIONS.indexOf(toggleAllInstruction),
+      1
+    );
+  }
 }
 
 /** Word a candidate's state as the hint shown beside it in the checklist. */
