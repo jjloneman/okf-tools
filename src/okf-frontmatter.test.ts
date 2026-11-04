@@ -585,6 +585,39 @@ describe("verifyRecord", () => {
 });
 
 describe("readRecordSummary", () => {
+  test.each([
+    { by: "claude-code/2.1.316", description: "a CLI version" },
+    { by: "claude-code/claude-opus-5-5", description: "a model id" },
+  ])(
+    "reads generated.at whatever generated.by names, such as $description",
+    ({ by }) => {
+      // Given - a draft whose generator is named either way
+      const text = record([
+        "type: Decision",
+        "status: draft",
+        `generated: { by: ${by}, at: 2026-10-01T15:00:00Z }`,
+      ]);
+
+      // When - reading its summary
+      const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+      // Then - the timestamp, with the actor's form not mattering
+      expect(summary?.generatedAt).toBe("2026-10-01T15:00:00Z");
+    }
+  );
+
+  test("keeps a title whole when a line separator stops the comment split", () => {
+    // Given - an unquoted title holding U+2028, which `.` doesn't match
+    const title = "Before\u2028after";
+    const text = record(["type: Decision", `title: ${title}`]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - the raw value, separator included
+    expect(summary?.title).toBe(title);
+  });
+
   test("reads the fields the checklist shows", () => {
     // Given - a verified record
     const text = record([
