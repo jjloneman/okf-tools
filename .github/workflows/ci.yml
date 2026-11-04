@@ -1,0 +1,87 @@
+name: ☁️ CI
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+# A PR that gets a second push has no use for the first push's verdict, so
+# supersede it. A `main` push is a record of that commit, never cancelled.
+concurrency:
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+
+# Nothing by default; each job grants only what it uses.
+permissions: {}
+
+jobs:
+  lint:
+    name: 🧹 Lint & format
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+      # Uncached, unlike `pnpm lint`: typed linting makes a file's verdict
+      # depend on the types it imports, which a content-keyed cache can't see.
+      - run: pnpm exec eslint .
+
+      # After ESLint, so the richer error surfaces first when both fail.
+      - run: pnpm format:check
+
+  package:
+    name: 📦 Package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm lint:package
+
+  test:
+    name: 🧪 Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The `engines.node` floor, and the newest Node, which also measures
+        # coverage.
+        node: [22, 26]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node-version: ${{ matrix.node }}
+
+      # The tests commit in scratch repos, which need an identity.
+      - run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+
+      - if: ${{ matrix.node != 26 }}
+        run: pnpm test
+      - if: ${{ matrix.node == 26 }}
+        run: pnpm test:coverage
+
+  typecheck:
+    name: 🔷 Typecheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: pnpm typecheck

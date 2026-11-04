@@ -1,0 +1,49 @@
+name: 🚀 Release
+
+on:
+  push:
+    branches: [main]
+
+# Queue rather than cancel: a cancelled run could be the one on the version
+# PR's merge commit, which is the run that publishes.
+concurrency:
+  cancel-in-progress: false
+  group: ${{ github.workflow }}
+
+# Nothing by default; each job grants only what it uses.
+permissions: {}
+
+jobs:
+  release:
+    name: 🦋 Version PR or publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Trusted publishing: npm trades this OIDC token for a one-off publish
+      # token, and the same identity signs the provenance statement.
+      id-token: write
+      pull-requests: write
+    steps:
+      # changesets/action pushes the version branch, so the checkout keeps its
+      # credentials.
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/setup
+
+      # With pending changesets, opens or updates the rolling version PR; with
+      # none (that PR was just merged), builds and publishes whatever version
+      # npm doesn't have yet, and tags it.
+      - id: changesets
+        uses: changesets/action@v2.1.2
+        with:
+          commit: "chore(release): 🚀 version packages"
+          publish: pnpm release
+          title: "chore(release): 🚀 version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # changesets/action has no assignee or label option, so add them here.
+      - if: ${{ steps.changesets.outputs.pullRequestNumber != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
+        run: gh pr edit "$PR_NUMBER" --add-assignee jjloneman --add-label "🚀 release" --repo "$GITHUB_REPOSITORY"
