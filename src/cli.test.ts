@@ -12,11 +12,12 @@ import {
 } from "#test/repo";
 
 import { run } from "./cli.ts";
+import { EXIT_CODES } from "./exit-codes.ts";
 import { runInteractive } from "./interactive.ts";
 
 // The prompts are covered in interactive.test.ts; here only the dispatch is.
-vi.mock("./interactive.ts", () => ({
-  runInteractive: vi.fn(() => Promise.resolve(0)),
+vi.mock(import("./interactive.ts"), () => ({
+  runInteractive: vi.fn(() => Promise.resolve(EXIT_CODES.ok)),
 }));
 
 const CONFIG = JSON.stringify({

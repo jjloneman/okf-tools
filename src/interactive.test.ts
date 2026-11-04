@@ -32,12 +32,12 @@ import { runInteractive } from "./interactive.ts";
 const { CANCEL } = vi.hoisted(() => ({ CANCEL: Symbol("cancel") as never }));
 
 // The prompts answer from the test, and `isCancel` recognizes its symbol.
-vi.mock("@clack/prompts", () => ({
+vi.mock(import("@clack/prompts"), async (importOriginal) => ({
   cancel: vi.fn(),
   confirm: vi.fn(),
   intro: vi.fn(),
-  isCancel: (value: unknown) => value === CANCEL,
-  log: { info: vi.fn(), warn: vi.fn() },
+  isCancel: (value: unknown): value is typeof CANCEL => value === CANCEL,
+  log: { ...(await importOriginal()).log, info: vi.fn(), warn: vi.fn() },
   multiselect: vi.fn(),
   MULTISELECT_INSTRUCTIONS: ["Enter: confirm"],
   note: vi.fn(),

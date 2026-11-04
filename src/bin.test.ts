@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { run } from "./cli.ts";
+import { EXIT_CODES } from "./exit-codes.ts";
 
-vi.mock("./cli.ts", () => ({ run: vi.fn(() => Promise.resolve(2)) }));
+vi.mock(import("./cli.ts"), () => ({
+  run: vi.fn(() => Promise.resolve(EXIT_CODES.nothingToVerify)),
+}));
 
 afterEach(() => {
   process.exitCode = undefined;

@@ -7,7 +7,7 @@ const { failure } = vi.hoisted(() => ({
 }));
 
 // Stands in for git failing in ways no real test machine shows.
-vi.mock("node:child_process", () => ({
+vi.mock(import("node:child_process"), () => ({
   execFileSync: () => {
     throw failure.error;
   },
