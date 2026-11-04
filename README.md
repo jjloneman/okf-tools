@@ -2,6 +2,16 @@
 
 Tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (OKF) bundles. Today that's one command, `okf-verify`, which signs records off.
 
+## 📑 Contents
+
+- [🎯 Why](#-why)
+- [📦 Install](#-install)
+- [🚀 Usage](#-usage)
+- [🧭 Agents](#-agents)
+- [📚 Library](#-library)
+- [🛠️ Development](#️-development)
+- [📄 License](#-license)
+
 ## 🎯 Why
 
 An agent can draft OKF records, but whether a record is settled is the owner's call. OKF v0.2 reads a record with no `status` as `stable`, so a repo that wants drafts kept apart writes `status: draft` on everything an agent produces, and the owner moves a record to `stable` when they've reviewed it.
