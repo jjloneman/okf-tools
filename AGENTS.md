@@ -36,7 +36,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - **Results, not exceptions**: a step that can fail returns `{ isOk: true, … } | { isOk: false, reason }`, and only `run` turns a reason into output and an exit code.
 - **Function parameters**: one positional parameter is fine; with two or more, take a single object with sorted keys.
 - **Named functions are `function` declarations**; arrows are for callbacks and closures.
-- **Lexicographic ordering** of everything perfectionist's `recommended-alphabetical` preset sorts; module constants are `SCREAMING_SNAKE_CASE`; boolean names read as questions (`isYes`, `shouldCommit`).
+- **Lexicographic ordering** of everything perfectionist's `recommended-alphabetical` preset sorts; module constants are `SCREAMING_SNAKE_CASE`; boolean names read as questions, opening with an auxiliary verb (`are`, `can`, `did`, `does`, `has`, `have`, `is`, `should`, `was`, `were`, `will`): `isYes`, `shouldCommit`, `areAllVerified`.
 - **Every output line starts with `[okf-verify]`**, outside the prompts; a git call sets `stdio` explicitly, so its stderr never prints over the prompts.
 - **Dates go through luxon.**
 - **Comments say only _why_.** A comment of three lines or more is a block comment: a lead sentence, then `-` bullets.

@@ -115,7 +115,20 @@ const CONFIG: Linter.Config[] = defineConfig(
         "error",
         {
           format: ["PascalCase"],
-          prefix: ["can", "has", "is", "should"],
+          // Auxiliary verbs that open a yes/no question, singular and plural.
+          prefix: [
+            "are",
+            "can",
+            "did",
+            "does",
+            "has",
+            "have",
+            "is",
+            "should",
+            "was",
+            "were",
+            "will",
+          ],
           selector: ["parameter", "variable"],
           types: ["boolean"],
         },

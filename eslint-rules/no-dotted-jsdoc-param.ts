@@ -1,6 +1,13 @@
 import type { Rule } from "eslint";
 
 /*
+ * `getAllComments` hands back the comment's *value* — its delimiters stripped —
+ * so a match on the first line sits two characters right of where the comment
+ * itself starts.
+ */
+const BLOCK_DELIMITER_WIDTH = "/*".length;
+
+/*
  * Matches one TSDoc line whose `@param` names a key of an object param.
  *
  * - The dot is the whole rule. A non-dotted `@param value - …` documents a
@@ -21,13 +28,6 @@ import type { Rule } from "eslint";
  */
 const DOTTED_PARAM =
   /^(?<linePrefix>\s*\*?\s*)@param\s+(?:\{[^}]*\}\s*)?\[?(?<objectName>[A-Za-z_$][\w$]*)\.[\w$.]+/;
-
-/*
- * `getAllComments` hands back the comment's *value* — its delimiters stripped —
- * so a match on the first line sits two characters right of where the comment
- * itself starts.
- */
-const BLOCK_DELIMITER_WIDTH = "/*".length;
 
 /**
  * Reports a TSDoc `@param` whose name is dotted, e.g. `@param options.fallback`.
