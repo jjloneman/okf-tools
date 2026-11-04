@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# Whole-project typecheck before pushing.
+#
+# - Single-file typechecking is unsound — a shared-type edit breaks *dependents*
+#   that a per-file check never revisits — so it runs here, once per push, not
+#   per commit.
+pnpm typecheck

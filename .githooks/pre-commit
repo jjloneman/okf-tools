@@ -1,0 +1,94 @@
+#!/bin/sh
+
+# Auto-fix + re-stage the files being committed.
+#
+# - Fast on purpose: typecheck runs at pre-push (whole-project), build runs in
+#   CI.
+#
+# - No extension list here on purpose: each tool decides what it owns from its
+#   own config (eslint's flat-config `files`/`ignores`, prettier's parser map +
+#   .prettierignore), so this hook can't drift from `pnpm lint` / `pnpm format`.
+#   We just hand it every staged file and let it self-filter.
+#
+# - Caveat: a file the tools rewrite that was staged with only *some* hunks gets
+#   its unstaged hunks swept in too (no per-hunk stashing without lint-staged) —
+#   rare here since commits are made deliberately, not partially.
+
+# The set of files being committed (AMCR = added/copied/modified/renamed,
+# skipping deletions).
+#
+# - `core.quotePath=false` keeps a non-ASCII path (`café.ts`) unquoted, so it
+#   matches the file on disk and gets re-staged below.
+staged_files=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)
+
+# Nothing staged → no work to do (also avoids handing xargs an empty list).
+[ -z "$staged_files" ] && exit 0
+
+# Blob hash of each staged file *before* the tools run.
+#
+# - Comparing against the after-hash tells us which files a tool actually
+#   rewrote — as opposed to files that merely carry unstaged hunks (which differ
+#   from the index all along and must not be swept into the commit).
+hashes_before=$(
+  # Walk each staged file.
+  echo "$staged_files" | while IFS= read -r file; do
+    # Emit "<hash> <path>" for every file that exists on disk.
+    [ -f "$file" ] && printf '%s %s\n' "$(git hash-object -- "$file")" "$file"
+  done
+)
+
+# Auto-fix lint violations in-place.
+#
+# - Fed NUL-delimited (`git diff -z` piped to `xargs -0`) rather than by word,
+#   so a path with a space (or other shell metacharacter) survives intact
+#   instead of being split into two nonexistent args and silently skipped.
+#
+# - `--no-error-on-unmatched-pattern` keeps a fully-skipped set from failing the
+#   run.
+#
+# - `--no-warn-ignored` silences the "File ignored" notice for staged files
+#   outside eslint's config (e.g. .md, .css)
+#
+# - A non-fixable error aborts the commit.
+git diff --cached --name-only --diff-filter=ACMR -z \
+  | xargs -0 pnpm exec eslint --fix --no-error-on-unmatched-pattern --no-warn-ignored || exit 1
+
+# Reformat files in-place.
+#
+# - Same NUL-delimited feed as the eslint pass, so space-bearing paths are safe.
+#
+# - `--ignore-unknown` skips any staged file prettier has no parser for (and
+#   honors .prettierignore) rather than erroring the run.
+git diff --cached --name-only --diff-filter=ACMR -z \
+  | xargs -0 pnpm exec prettier --ignore-unknown --write || exit 1
+
+# Re-stage only files a tool rewrote (before-hash != after-hash) so the fixes
+# land in this commit.
+#
+# - A file the tools left untouched keeps whatever the user staged, unstaged
+#   hunks and all — we can't compare against the index here, since a partially
+#   staged file already differs from it before any tool runs.
+echo "$staged_files" | while IFS= read -r file; do
+  # Skip anything a tool may have deleted (or that vanished mid-run).
+  [ -f "$file" ] || continue
+
+  # Look up this file's pre-run hash from the snapshot (empty if it had none).
+  hash_before=$(
+    # Scan each "<hash> <path>" line from the snapshot.
+    echo "$hashes_before" | while IFS=' ' read -r hash path; do
+      # On the line for this file, emit its hash and stop scanning.
+      [ "$path" = "$file" ] && {
+        printf '%s' "$hash"
+        break
+      }
+    done
+  )
+
+  # Hash the file as it stands now, after eslint/prettier have run.
+  hash_after=$(git hash-object -- "$file")
+
+  # Changed hash ⇒ a tool rewrote it ⇒ re-stage so the fix is in the commit.
+  [ "$hash_before" != "$hash_after" ] && git add -- "$file"
+done
+
+exit 0

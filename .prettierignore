@@ -1,0 +1,4 @@
+# Generated files that git still tracks. Prettier 3 already reads .gitignore,
+# so gitignored paths need no entry here.
+CHANGELOG.md
+pnpm-lock.yaml

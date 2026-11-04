@@ -1,0 +1,72 @@
+{
+  "compilerOptions": {
+    /*
+     * Relative imports may name a `.ts` file.
+     *
+     * - `pnpm okf:verify` runs `src/bin.ts` directly under Node's type
+     *   stripping, which resolves only the real file name; tsdown rewrites
+     *   the imports when it builds.
+     */
+    "allowImportingTsExtensions": true,
+
+    // Required by `isolatedDeclarations`, even though nothing is emitted here.
+    "declaration": true,
+
+    // Optional properties reject an explicit `undefined` unless the type
+    // includes it.
+    "exactOptionalPropertyTypes": true,
+
+    // Every export carries types a declaration emitter can read without the
+    // checker, so the published `.d.ts` never depends on inference.
+    "isolatedDeclarations": true,
+
+    "lib": ["ES2022"],
+    "module": "ESNext",
+
+    // Resolve imports the way a bundler does, including `package.json` `exports`.
+    "moduleResolution": "bundler",
+
+    // Typecheck only; tsdown emits the JS and `.d.ts`.
+    "noEmit": true,
+
+    // Index access (`array[i]`, `record[key]`) includes `undefined` in its type.
+    "noUncheckedIndexedAccess": true,
+
+    // Skip checking `.d.ts` files in `node_modules`; they're not ours to fix.
+    "skipLibCheck": true,
+
+    "strict": true,
+    "target": "ES2022",
+
+    /*
+     * TypeScript 6 defaults `types` to none, so Node's are opted in by name.
+     *
+     * - `@types/node` is pinned to the `engines.node` floor (22), so the
+     *   typecheck rejects an API a supported Node doesn't have.
+     */
+    "types": ["node"],
+
+    // `import type` is required for type-only imports, and imports are emitted
+    // exactly as written.
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    /*
+     * The repo's own config files, by glob so a new one is covered the day it
+     * is written.
+     *
+     * - They live in this root because an editor and ESLint's project service
+     *   both resolve a file by walking up to the nearest config named exactly
+     *   `tsconfig.json`.
+     */
+    "*.config.ts",
+
+    // Local ESLint rules, imported by eslint.config.ts.
+    "eslint-rules",
+
+    "src",
+
+    // Test helpers shared across the suites.
+    "test"
+  ]
+}
