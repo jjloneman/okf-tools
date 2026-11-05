@@ -1,0 +1,22 @@
+# Supply-chain floor: refuse to install any version younger than 7 days, giving
+# the registry time to yank a compromised release before it reaches our
+# lockfile.
+#
+# - Overrides pnpm's built-in 1-day default.
+#
+# - Value is in minutes.
+minimumReleaseAge: 10080
+
+# eslint-plugin-tsdoc pins `@typescript-eslint/utils` to `~8.56.0`, whose peer
+# range stops at TypeScript `<6.0.0`.
+#
+# - Lifting it to the typescript-eslint the repo already runs is safe within
+#   the 8.x major, and dedupes the two copies.
+#
+# - Drop this once the plugin widens its range.
+overrides:
+  eslint-plugin-tsdoc>@typescript-eslint/utils: 8.70.0
+
+# Write exact versions on `pnpm add`, so the lockfile is the only thing that
+# moves a dependency.
+saveExact: true

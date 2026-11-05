@@ -1,0 +1,97 @@
+{
+  "name": "@jjloneman/okf-tools",
+  "version": "0.0.0",
+  "description": "✅ Sign off Open Knowledge Format records: mark them stable with a verified entry, interactively or from an agent.",
+  "keywords": [
+    "frontmatter",
+    "knowledge",
+    "okf",
+    "open-knowledge-format",
+    "verify"
+  ],
+  "homepage": "https://github.com/jjloneman/okf-tools#readme",
+  "bugs": {
+    "url": "https://github.com/jjloneman/okf-tools/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jjloneman/okf-tools.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "JJ Loneman",
+    "url": "https://github.com/jjloneman"
+  },
+  "type": "module",
+  "imports": {
+    "#test/*": "./test/*.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "okf-verify": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "changeset": "changeset",
+    "check": "pnpm lint:fix && pnpm format && pnpm typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --cache --cache-strategy content",
+    "lint:fix": "eslint . --fix",
+    "lint:package": "pnpm build && publint && attw --pack --profile esm-only",
+    "okf:verify": "node src/bin.ts",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "prune-branches": "git fetch --prune && git-removed-branches --force --prune",
+    "release": "pnpm build && changeset publish",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.8.1",
+    "luxon": "3.7.2"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@changesets/cli": "3.0.3",
+    "@changesets/config": "4.0.1",
+    "@eslint/js": "10.0.1",
+    "@types/luxon": "3.7.6",
+    "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "5.0.4",
+    "eslint": "10.12.0",
+    "eslint-plugin-jsonc": "3.4.2",
+    "eslint-plugin-perfectionist": "5.12.1",
+    "eslint-plugin-tsdoc": "0.5.4",
+    "eslint-plugin-yml": "3.9.0",
+    "git-removed-branches": "2.3.1",
+    "jiti": "2.7.0",
+    "prettier": "3.9.10",
+    "prettier-plugin-packagejson": "3.0.2",
+    "prettier-plugin-sh": "0.20.2",
+    "publint": "0.3.25",
+    "tsdown": "0.23.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.4"
+  },
+  "packageManager": "pnpm@12.5.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

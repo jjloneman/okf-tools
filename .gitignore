@@ -1,0 +1,10 @@
+*.tgz
+.claude/settings.local.json
+.claude/worktrees/
+.DS_Store
+.eslintcache
+.tsbuildinfo/
+.vscode/settings.json
+coverage/
+dist/
+node_modules/

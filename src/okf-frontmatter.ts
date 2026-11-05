@@ -7,6 +7,7 @@
  * - Nothing here touches the file system or the clock; the caller passes the
  *   timestamp in.
  */
+import { lineAt } from "./lines.ts";
 
 /** The lifecycle statuses OKF defines for a record. */
 export const RECORD_STATUSES = {
@@ -346,7 +347,7 @@ type ReadKeyValueParams = {
    *
    * @example "status: draft"
    */
-  line: string | undefined;
+  line: string;
 } & KeyParams;
 
 /** What `upsertVerified` needs: the lines to edit, who signs, and when. */
@@ -446,7 +447,9 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
 
   if (readStatus(lines) === RECORD_STATUSES.draft) {
     const statusIndex = findKeyIndex({ key: FRONTMATTER_KEYS.status, lines });
-    const { comment } = splitTrailingComment(lines[statusIndex] ?? "");
+    const { comment } = splitTrailingComment(
+      lineAt({ index: statusIndex, lines })
+    );
 
     lines[statusIndex] =
       `${FRONTMATTER_KEYS.status}: ${RECORD_STATUSES.stable}${comment}`;
@@ -500,7 +503,7 @@ function findEntryItems(params: LinesParams & RangeParams): LineRange[] {
 
   const inlineValue = readKeyValue({
     key: FRONTMATTER_KEYS.verified,
-    line: lines[range.startIndex],
+    line: lineAt({ index: range.startIndex, lines }),
   });
 
   if (inlineValue !== "") {
@@ -510,7 +513,10 @@ function findEntryItems(params: LinesParams & RangeParams): LineRange[] {
   for (let index = range.startIndex + 1; index <= range.endIndex; index += 1) {
     const lastItem = items.at(-1);
 
-    if (LIST_ITEM_LINE.test(lines[index] ?? "") || lastItem === undefined) {
+    if (
+      LIST_ITEM_LINE.test(lineAt({ index, lines })) ||
+      lastItem === undefined
+    ) {
       items.push({ endIndex: index, startIndex: index });
     } else {
       lastItem.endIndex = index;
@@ -542,7 +548,7 @@ function findKeyRange(params: FindKeyRangeParams): LineRange | undefined {
 
   let endIndex = startIndex;
 
-  while (isContinuation.test(lines[endIndex + 1] ?? "")) {
+  while (isContinuation.test(lineAt({ index: endIndex + 1, lines }))) {
     endIndex += 1;
   }
 
@@ -580,7 +586,8 @@ function findOwnEntry(params: FindOwnEntryParams): OwnEntry | undefined {
 
     if (inlineOffset !== -1) {
       return {
-        at: inlineEntry.exec(itemLines[inlineOffset] ?? "")?.groups?.at,
+        at: inlineEntry.exec(lineAt({ index: inlineOffset, lines: itemLines }))
+          ?.groups?.at,
         index: item.startIndex + inlineOffset,
         isBlock: false,
       };
@@ -598,7 +605,7 @@ function findOwnEntry(params: FindOwnEntryParams): OwnEntry | undefined {
     }
 
     return {
-      at: blockAt.exec(itemLines[offset] ?? "")?.groups?.at,
+      at: blockAt.exec(lineAt({ index: offset, lines: itemLines }))?.groups?.at,
       index: item.startIndex + offset,
       isBlock: true,
     };
@@ -648,7 +655,7 @@ function readGeneratedAt(lines: string[]): RecordSummary["generatedAt"] {
 function readKeyValue(params: ReadKeyValueParams): string {
   const { key, line } = params;
 
-  return (line ?? "").slice(`${key}:`.length).trim();
+  return line.slice(`${key}:`.length).trim();
 }
 
 /** Read a one-line scalar value, without its quotes or a trailing comment. */
@@ -753,7 +760,7 @@ function upsertVerified(params: UpsertVerifiedParams): string | undefined {
   if (own !== undefined) {
     const timestampPrefix = own.isBlock ? AT_KEY : ownEntryPrefix(verifiedBy);
 
-    lines[own.index] = (lines[own.index] ?? "").replace(
+    lines[own.index] = lineAt({ index: own.index, lines }).replace(
       new RegExp(`(?<=${timestampPrefix})${TIMESTAMP}`),
       at
     );
@@ -764,7 +771,7 @@ function upsertVerified(params: UpsertVerifiedParams): string | undefined {
   const { comment, value: inlineValue } = splitTrailingComment(
     readKeyValue({
       key: FRONTMATTER_KEYS.verified,
-      line: lines[range.startIndex],
+      line: lineAt({ index: range.startIndex, lines }),
     })
   );
 

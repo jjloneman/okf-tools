@@ -1,0 +1,23 @@
+name: 🧰 Set up Node and install
+description: Installs pnpm, Node, and the frozen-lockfile dependency tree — the prelude every CI job that runs a pnpm script shares.
+
+inputs:
+  node-version:
+    default: "26"
+    description: The Node major to install; the test matrix overrides it.
+
+runs:
+  using: composite
+  steps:
+    # `cache: true` restores the pnpm store; the `pnpm install` below still has
+    # to link node_modules out of it, which no store cache can remove.
+    - uses: pnpm/action-setup@v6.1.0
+      with:
+        cache: true
+
+    - uses: actions/setup-node@v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - shell: bash
+      run: pnpm install --frozen-lockfile

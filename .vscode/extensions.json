@@ -1,0 +1,20 @@
+{
+  // VS Code offers to install these when the repo is opened; each one serves a
+  // tool or file type the repo already uses. Sorted by extension ID.
+  "recommendations": [
+    // ESLint - inline errors and fix-on-save from eslint.config.ts
+    "dbaeumer.vscode-eslint",
+
+    // Prettier - format-on-save with prettier.config.ts and its plugins
+    "esbenp.prettier-vscode",
+
+    // GitHub Actions - validates and completes the workflow files
+    "github.vscode-github-actions",
+
+    // YAML - schema validation for the workflows
+    "redhat.vscode-yaml",
+
+    // Vitest - run and debug tests from the gutter
+    "vitest.explorer"
+  ]
+}
