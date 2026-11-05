@@ -17,15 +17,17 @@ Tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowled
 
 ## 🎯 Why
 
-An agent can draft OKF records, but whether a record is settled is the owner's call. OKF v0.2 reads a record with no `status` as `stable`, so a repo that wants drafts kept apart writes `status: draft` on everything an agent produces, and the owner moves a record to `stable` when they've reviewed it.
+An agent can draft OKF records, but whether a record is settled is the owner's call.
+
+- **OKF v0.2 reads a record with no `status` as `stable`**, so a repo that keeps drafts apart writes `status: draft` on everything an agent produces.
+- **The owner moves a record to `stable`** once they've reviewed it.
 
 `okf-verify` makes that sign-off one step:
 
 - it sets `status: draft` to `stable` (any other status is left alone);
 - it adds or renews the signer's `verified` entry with the current UTC time;
-- it commits just those files, never pushing and never skipping hooks.
-
-Edits are targeted line replacements, never a YAML round-trip, so nothing else in a record is reformatted.
+- it commits just those files, never pushing and never skipping hooks;
+- it edits by targeted line replacements, never a YAML round-trip, so nothing else in a record is reformatted.
 
 ## 📦 Install
 
@@ -93,7 +95,12 @@ pnpm okf:verify --yes --changed
 
 ## 🧭 Agents
 
-Much OKF authoring now happens in a chat with a coding agent, so the non-interactive mode exists for it: the owner edits a record with the agent until it meets their bar, then asks the agent to verify it.
+Much OKF authoring now happens in a chat with a coding agent, and the non-interactive mode exists for that:
+
+- the owner edits a record with the agent until it meets their bar;
+- then asks the agent to verify it, which it does with `--yes`.
+
+What the agent should do:
 
 - **Don't verify a record unless the person asks you to.** Drafting, editing, and regenerating a record never imply a sign-off.
 - **Name the files** the person approved, rather than passing `--changed`, unless they asked for every changed record.
