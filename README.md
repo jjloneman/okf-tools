@@ -2,11 +2,14 @@
 
 Tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) (OKF) bundles. Today that's one command, `okf-verify`, which signs records off.
 
-## 📑 Contents
+## 📖 Table of contents
 
 - [🎯 Why](#-why)
 - [📦 Install](#-install)
 - [🚀 Usage](#-usage)
+  - [🖐️ Interactive](#️-interactive)
+  - [🤖 Non-interactive](#-non-interactive)
+  - [🏳️ Flags](#️-flags)
 - [🧭 Agents](#-agents)
 - [📚 Library](#-library)
 - [🛠️ Development](#️-development)
