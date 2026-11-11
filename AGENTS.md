@@ -23,6 +23,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - `repo.ts` — every git and file-system call, relative to the repo root.
   - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`; `lines.ts` is its total line reader.
   - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts` and `run-context.ts` are shared types.
+- `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
 - `test/repo.ts` — scratch git repos and fabricated records for the tests, imported as `#test/repo`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
 - `.github/workflows/` — `ci.yml` and `release.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
@@ -62,12 +63,12 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - **Branches**: `feature/`, `bugfix/`, or `release/`, then `gh-<n>-` for the issue, then a kebab-case slug (`feature/gh-1-extract-okf-verify`).
 - **Issues and PRs** are assigned to `jjloneman` and labeled with a type (`✨ feature`, `🐞 bug`, `📦 dependencies`); spell the emoji-prefixed labels exactly.
 - **PRs are squash-merged**, so the PR title becomes the commit on `main`.
-- **`main` is protected** by [.github/rulesets/main.json](.github/rulesets/main.json): changes land through a squash-merged PR, unresolved review threads block the merge, and there are no force pushes or deletion. After editing the file, reapply it with `gh api --method PUT repos/jjloneman/okf-tools/rulesets/<id> --input .github/rulesets/main.json`.
+- **`main` is protected** by [.github/rulesets/main.json](.github/rulesets/main.json): changes land through a squash-merged PR, unresolved review threads block the merge, every CI job must pass, and there are no force pushes or deletion. After editing the file, reapply it with `gh api --method PUT repos/jjloneman/okf-tools/rulesets/<id> --input .github/rulesets/main.json`.
 - **AI-written text on GitHub opens with a disclaimer banner**: `> **🤖 Disclaimer**: This description was generated with AI. (**Model**: _<model name and version>_)`, with "comment" in place of "description" for a comment.
 
 ## 🧪 Testing
 
-- `pnpm test` runs the suite; `pnpm test:coverage` adds the gate: **100%** statements, branches, functions, and lines across `src/`.
+- `pnpm test` runs the suite; `pnpm test:coverage` adds the gate: **100%** statements, branches, functions, and lines across `src/` and `scripts/`.
 - A branch nothing can reach is dead code to delete, not a line to exempt; no coverage-ignore comments.
 - Tests that need git run it for real, in a scratch repo from `#test/repo`; only a machine state no test machine has (no git binary) is mocked.
 - The prompts are tested with `@clack/prompts` mocked; everything after the prompts runs for real.
@@ -83,8 +84,11 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 ## 🤖 CI
 
 - `ci.yml` runs on every PR and push to `main`: lint and format check, typecheck, tests on Node 22 and 26 (coverage on 26), and `pnpm lint:package`.
+- On a PR it also runs `pnpm changeset status --since=origin/main`, which fails when the PR adds no changeset.
+  - It skips the version PR (`changeset-release/main`), which only consumes changesets.
 - `release.yml` runs on every push to `main` (see below).
 - Every action is pinned to an exact `vX.Y.Z`, and every job declares its own `permissions`.
+- **Every job is a required check** in [.github/rulesets/main.json](.github/rulesets/main.json), by its display name. Renaming a job or changing the test matrix means updating `required_status_checks` there and reapplying the ruleset, or every PR waits on a check that never reports.
 
 ## 🕒 7-day dependency moratorium
 
@@ -99,10 +103,17 @@ No npm dependency may enter the lockfile until it has been published for **at le
 
 Releases use [changesets](https://github.com/changesets/changesets), and the package follows SemVer, pre-stable (0.x).
 
-- **A PR that changes what ships adds a changeset** (`pnpm changeset`): the bump and the line it adds to `CHANGELOG.md`.
-  - In 0.x, a breaking change is a `minor` and anything else a `patch`.
-  - A PR that only touches tooling, tests, or docs adds none, and so never publishes.
+- **Every PR adds a changeset**, and CI fails one that doesn't.
+  - A PR that changes what ships runs `pnpm changeset`: the bump and the summary it adds to `CHANGELOG.md`. In 0.x, a breaking change is a `minor` and anything else a `patch`.
+  - A PR that only touches tooling, tests, or docs runs `pnpm changeset --empty`, which records no release, so it never publishes.
+- **Changelog lines are built by [scripts/changelog.ts](scripts/changelog.ts)**, named by `changelog` in `.changeset/config.json`.
+  - Each line takes the gitmoji and scope from the subject of the commit that added the changeset, which after a squash merge is the PR title: `- ✨ **okf-verify:** <summary> (<short hash>)`.
+  - When that commit can't be read, such as a hash from before a squash, the line is the bare summary.
+  - changesets `import()`s the file itself under Node's type stripping, so it uses only erasable syntax (`erasableSyntaxOnly` enforces it) and `.ts` import specifiers.
+  - That needs Node 22.18 or later, which `devEngines` in `package.json` enforces for every `pnpm` script. `engines` stays at `>=22`, since the published package runs on any Node 22.
+  - A breaking change (`feat(cli)!: …`) gets a `**Breaking:**` tag after the scope.
 - **`release.yml`** keeps a rolling `chore(release): 🚀 version packages` PR open while changesets are pending.
+  - Its CI run is started by `github-actions[bot]`, so it waits for approval: approve it on the PR before merging, since `main` requires every check.
   - Squash-merging it bumps `package.json` and writes `CHANGELOG.md`.
   - The run on that merge publishes the new version to npm and tags it.
 - **Publishing uses npm trusted publishing** (OIDC), so no npm token exists; provenance is signed by the same identity.

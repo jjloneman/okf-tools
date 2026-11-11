@@ -15,6 +15,30 @@ concurrency:
 permissions: {}
 
 jobs:
+  changeset:
+    name: 🦋 Changeset
+    # Every PR except the version PR that changesets/action opens.
+    #
+    # - The version PR only consumes changesets, so it never adds one.
+    #
+    # - It's matched by branch and by repo, so a fork's branch of the same name
+    #   is still checked.
+    if: ${{ github.event_name == 'pull_request' && !(github.head_ref == 'changeset-release/main' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # The full history, so `origin/main` exists to diff against.
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+      # Fails when the PR adds no changeset; one that releases nothing adds
+      # `pnpm changeset --empty`.
+      - run: pnpm changeset status --since=origin/main
+
   lint:
     name: 🧹 Lint & format
     runs-on: ubuntu-latest

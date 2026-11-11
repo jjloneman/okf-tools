@@ -12,8 +12,8 @@ const CONFIG: ViteUserConfig = defineConfig({
      *   given a `file` writes the per-file table to `coverage/`.
      */
     coverage: {
-      exclude: ["src/**/*.test.ts"],
-      include: ["src/**/*.ts"],
+      exclude: ["{scripts,src}/**/*.test.ts"],
+      include: ["{scripts,src}/**/*.ts"],
       provider: "v8",
       reporter: [
         "html",
@@ -25,7 +25,7 @@ const CONFIG: ViteUserConfig = defineConfig({
       thresholds: { 100: true },
     },
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["{scripts,src}/**/*.test.ts"],
   },
 });
 

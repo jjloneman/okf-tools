@@ -124,14 +124,15 @@ import {
 
 ## 🛠️ Development
 
-| Script               | Does                                             |
-| -------------------- | ------------------------------------------------ |
-| `pnpm check`         | Lint with fixes, format, then typecheck.         |
-| `pnpm test`          | Run the tests.                                   |
-| `pnpm test:coverage` | Run them with the 100% coverage gate.            |
-| `pnpm lint:package`  | Build, then run publint and Are the Types Wrong. |
-| `pnpm okf:verify`    | Run the CLI from source.                         |
-| `pnpm changeset`     | Add a changeset for the next release.            |
+| Script                   | Does                                                    |
+| ------------------------ | ------------------------------------------------------- |
+| `pnpm check`             | Lint with fixes, format, then typecheck.                |
+| `pnpm test`              | Run the tests.                                          |
+| `pnpm test:coverage`     | Run them with the 100% coverage gate.                   |
+| `pnpm lint:package`      | Build, then run publint and Are the Types Wrong.        |
+| `pnpm okf:verify`        | Run the CLI from source.                                |
+| `pnpm changeset`         | Add a changeset for the next release.                   |
+| `pnpm changeset --empty` | Add an empty changeset, for a PR that releases nothing. |
 
 See [AGENTS.md](AGENTS.md) for the conventions.
 

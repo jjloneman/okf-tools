@@ -90,6 +90,13 @@
   "engines": {
     "node": ">=22"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "onFail": "error",
+      "version": ">=22.18"
+    }
+  },
   "publishConfig": {
     "access": "public",
     "provenance": true

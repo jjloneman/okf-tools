@@ -12,6 +12,10 @@
     // Required by `isolatedDeclarations`, even though nothing is emitted here.
     "declaration": true,
 
+    // Node's type stripping runs `src/bin.ts` and `scripts/changelog.ts`
+    // directly, and it rejects syntax that emits code, such as an `enum`.
+    "erasableSyntaxOnly": true,
+
     // Optional properties reject an explicit `undefined` unless the type
     // includes it.
     "exactOptionalPropertyTypes": true,
@@ -63,6 +67,9 @@
 
     // Local ESLint rules, imported by eslint.config.ts.
     "eslint-rules",
+
+    // The changesets changelog formatter, outside the published package.
+    "scripts",
 
     "src",
 
