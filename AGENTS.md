@@ -24,6 +24,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`; `lines.ts` is its total line reader.
   - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts` and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
+- `docs/decisions/` — the repo's own OKF bundle of design decisions (see [Design decisions](#-design-decisions)).
 - `test/repo.ts` — scratch git repos and fabricated records for the tests, imported as `#test/repo`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
 - `.github/workflows/` — `ci.yml` and `release.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
@@ -120,6 +121,19 @@ Releases use [changesets](https://github.com/changesets/changesets), and the pac
   - The first version was published by hand, since trusted publishing can only be set up for a package that already exists.
 - **Never hand-run a version bump or `git tag`**; the version PR owns both.
 - `CHANGELOG.md` is in `.prettierignore`, since changesets writes it.
+
+## 📚 Design decisions
+
+Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) v0.2 bundle that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
+
+- One Markdown file per decision, listed in [docs/decisions/index.md](docs/decisions/index.md), with tags from its vocabulary.
+- **Base a record on the code and the closed threads**, not on memory: re-read the code before stating a flag, an exit code, or a fallback order, and date-stamp facts that can drift ("as of 2026-11-11").
+- **An agent writes a record as `status: draft`** and records itself in `generated`, as `<producer>/<version>` (`claude-code/<claude --version>` or `claude-code/<model-id>`); it never adds a `verified` entry on its own.
+- **An agent verifies only when the owner asks**, with `pnpm okf:verify --yes <paths>`, naming the files rather than passing `--changed` unless the owner asked for every changed record.
+- **Check a record's `verified` before changing the behavior it describes:**
+  - any `verified` entry means someone signed it off (usually `human:jjloneman`, the owner) — change the behavior only with the owner's agreement;
+  - no `verified` means it is an unreviewed draft;
+  - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again.
 
 ## 🛑 Deleting things
 
