@@ -100,5 +100,11 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "okf": {
+    "bundles": [
+      "docs/decisions"
+    ],
+    "verifiedBy": "human:jjloneman"
   }
 }
