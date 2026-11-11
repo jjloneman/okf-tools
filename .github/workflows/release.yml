@@ -35,15 +35,15 @@ jobs:
       - id: changesets
         uses: changesets/action@v2.1.2
         with:
-          commit: "chore(release): 🚀 version packages"
-          publish: pnpm release
-          title: "chore(release): 🚀 version packages"
+          commit-message: "chore(release): 🚀 version packages"
+          pr-title: "chore(release): 🚀 version packages"
+          publish-script: pnpm release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # changesets/action has no assignee or label option, so add them here.
-      - if: ${{ steps.changesets.outputs.pullRequestNumber != '' }}
+      - if: ${{ steps.changesets.outputs.pr-number != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pr-number }}
         run: gh pr edit "$PR_NUMBER" --add-assignee jjloneman --add-label "🚀 release" --repo "$GITHUB_REPOSITORY"
