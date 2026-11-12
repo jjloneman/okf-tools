@@ -4,7 +4,7 @@ title: How okf-verify writes and commits records
 description: All or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: stable
-generated: { by: claude-code/2.1.322, at: 2026-11-12T06:41:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T06:41:00Z }
 verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 

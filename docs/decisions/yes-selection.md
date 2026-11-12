@@ -4,7 +4,7 @@ title: What `--yes` verifies, and how it exits
 description: "`--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified, and exits `0` worked, `1` failed, `2` nothing to verify."
 tags: [agents, cli]
 status: stable
-generated: { by: claude-code/2.1.322, at: 2026-11-12T04:21:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T04:21:00Z }
 verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 
