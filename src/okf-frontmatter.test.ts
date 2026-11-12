@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
+import { parseDocument } from "yaml";
 
 import {
+  checkMeaning,
   findFrontmatterProblem,
   getRecordState,
   readRecordSummary,
@@ -461,7 +463,7 @@ describe("verifyRecord", () => {
     });
   });
 
-  test("rejects a multi-line flow sequence without the owner's entry", () => {
+  test("appends to a multi-line flow sequence without the owner's entry", () => {
     // Given - a flow sequence spread over several lines, missing the owner
     const text = record([
       ...DRAFT_LINES,
@@ -473,10 +475,17 @@ describe("verifyRecord", () => {
     // When - verifying it
     const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
-    // Then - it is rejected rather than left with a dangling bracket
+    // Then - the owner's entry follows the last item, the layout kept
     expect(result).toStrictEqual({
-      isOk: false,
-      reason: "`verified` is a flow sequence spread over several lines",
+      isOk: true,
+      text: record([
+        ...DRAFT_LINES.slice(0, 2),
+        "status: stable",
+        DRAFT_LINES[3] ?? "",
+        "verified: [",
+        `    { by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} },`,
+        "  ]",
+      ]),
     });
   });
 
@@ -590,7 +599,7 @@ describe("verifyRecord", () => {
   });
 
   test.each([`status: "draft"`, `status: 'draft'`])(
-    "promotes a quoted draft: %s",
+    "promotes a quoted draft and keeps its quotes: %s",
     (statusLine) => {
       // Given - a draft status written with quotes
       const text = record([...DRAFT_LINES.slice(0, 2), statusLine]);
@@ -598,10 +607,12 @@ describe("verifyRecord", () => {
       // When - verifying it
       const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
-      // Then - the status becomes stable
+      // Then - the status becomes stable, in the same quotes
       expect(result).toMatchObject({
         isOk: true,
-        text: expect.stringContaining("status: stable\n") as string,
+        text: expect.stringContaining(
+          `${statusLine.replace("draft", "stable")}\n`
+        ) as string,
       });
     }
   );
@@ -893,7 +904,7 @@ describe("verifyRecord", () => {
     }
   );
 
-  test("refuses an edit that would leave invalid YAML", () => {
+  test("wraps another person's multi-line entry in a flow sequence", () => {
     // Given - another person's inline entry spread over two lines
     const text = record([
       "status: stable",
@@ -901,7 +912,25 @@ describe("verifyRecord", () => {
       "  at: 2026-09-01T00:00:00Z }",
     ]);
 
-    // When - verifying it, which the line-based append can't do safely
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - their entry's lines untouched, inside a list with the owner's
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "status: stable",
+        "verified: [{ by: human:someone,",
+        `  at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} }]`,
+      ]),
+    });
+  });
+
+  test("refuses an edit that would leave invalid YAML", () => {
+    // Given - another person's value as a block scalar, which can't be wrapped
+    const text = record(["status: stable", "verified: |", "  someone"]);
+
+    // When - verifying it
     const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
     // Then - a refusal, not a broken record
@@ -909,6 +938,323 @@ describe("verifyRecord", () => {
       isOk: false,
       reason: "the edit would leave the frontmatter invalid YAML",
     });
+  });
+
+  test("promotes an anchored status, and its alias with it", () => {
+    // Given - a draft status anchored and repeated by an alias
+    const text = record(["status: &s draft", "phase: *s"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the anchor kept, so the alias reads stable too
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "status: &s stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "phase: *s",
+      ]),
+    });
+  });
+
+  test("fills an anchored empty verified field, and its alias with it", () => {
+    // Given - an empty verified field anchored and repeated by an alias
+    const text = record(["status: stable", "verified: &v ~", "copy: *v"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the anchor kept on the entry, as the meaning check expects
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "status: stable",
+        `verified: &v { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "copy: *v",
+      ]),
+    });
+  });
+
+  test("refuses frontmatter with too many aliases to check", () => {
+    // Given - aliases nested past the parser's limit
+    const tens = (item: string): string =>
+      `[${Array.from({ length: 10 }, () => item).join(", ")}]`;
+
+    const text = record([
+      `a: &a ${tens("x")}`,
+      `b: &b ${tens("*a")}`,
+      `c: ${tens("*b")}`,
+    ]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - a refusal rather than a thrown error
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: "the frontmatter has too many aliases to check the edit",
+    });
+  });
+
+  test.each([
+    {
+      description: "a |+ last field's blank line",
+      lines: ["title: |+", "  hi", ""],
+    },
+    {
+      description: "a blank line before the closing fence",
+      lines: ["type: x", ""],
+    },
+  ])("adds verified after the last field, past $description", ({ lines }) => {
+    // Given - no generated or status, and a blank last frontmatter line
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the field follows the last one, and the blank line stays last
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        ...lines.slice(0, -1),
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "",
+      ]),
+    });
+  });
+
+  test("keeps a |+ scalar's trailing blank lines with it", () => {
+    // Given - a generated block whose last value keeps its trailing blank line
+    const lines = ["status: stable", "generated:", "  note: |+", "    y", ""];
+    const text = record([...lines, "title: T"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the new field follows the blank line, so the note is unchanged
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        ...lines,
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "title: T",
+      ]),
+    });
+  });
+
+  test.each([
+    {
+      description: "a comma and a key",
+      expected: '"human:a, at: 1999"',
+      verifiedBy: "human:a, at: 1999",
+    },
+    {
+      description: "a comment marker",
+      expected: '"human:a #x"',
+      verifiedBy: "human:a #x",
+    },
+  ])(
+    "quotes a signer whose name holds $description",
+    ({ expected, verifiedBy }) => {
+      // Given - a record with no verified field
+      const text = record(["status: stable"]);
+
+      // When - a signer whose name holds YAML syntax verifies it
+      const result = verifyRecord({ at: AT, text, verifiedBy });
+
+      // Then - the name quoted, and read back as the signer
+      expect(result).toStrictEqual({
+        isOk: true,
+        text: record([
+          "status: stable",
+          `verified: { by: ${expected}, at: ${AT} }`,
+        ]),
+      });
+      expect(
+        readRecordSummary({
+          text: result.isOk ? result.text : "",
+          verifiedBy,
+        })?.verifiedAt
+      ).toBe(AT);
+    }
+  );
+
+  test.each([
+    {
+      description: "draft on the line after status:",
+      expected: ["status:", "  stable"],
+      lines: ["status:", "  draft"],
+    },
+    {
+      description: "a quoted status key",
+      expected: ['"status": stable'],
+      lines: ['"status": draft'],
+    },
+    {
+      description: "an anchored status",
+      expected: ["status: &s stable"],
+      lines: ["status: &s draft"],
+    },
+    {
+      description: "a tagged status",
+      expected: ["status: !!str stable"],
+      lines: ["status: !!str draft"],
+    },
+    {
+      description: "a folded block status, as a plain value",
+      expected: ["status: stable"],
+      lines: ["status: >-", "  draft"],
+    },
+  ])("promotes $description in place", ({ expected, lines }) => {
+    // Given - a draft status in a layout a line-based edit misses
+    const text = record([...lines, "title: T"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - only the value changed, and the entry added after status
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        ...expected,
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "title: T",
+      ]),
+    });
+  });
+
+  test.each([
+    {
+      description: "an empty verified field",
+      expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
+      lines: ["verified:"],
+    },
+    {
+      description: "an empty verified field with a comment",
+      expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT} } # none yet`],
+      lines: ["verified: # none yet"],
+    },
+    {
+      description: "another person's entry with a comment",
+      expected: [
+        "verified: # theirs",
+        "  - { by: human:someone }",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ["verified: { by: human:someone } # theirs"],
+    },
+    {
+      description: "a single value in quotes",
+      expected: [
+        "verified:",
+        '  - "null"',
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ['verified: "null"'],
+    },
+    {
+      description: "a flow sequence holding a single-pair mapping",
+      expected: [`verified: [a: b, { by: ${VERIFIED_BY}, at: ${AT} }]`],
+      lines: ["verified: [a: b]"],
+    },
+    {
+      description: "a flow sequence with spaces inside",
+      expected: [`verified: [{ by: ${VERIFIED_BY}, at: ${AT} } ]`],
+      lines: ["verified: [ ]"],
+    },
+  ])("adds the owner's entry to $description", ({ expected, lines }) => {
+    // Given - a verified field without the owner's entry
+    const text = record(["status: stable", ...lines, "title: T"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the entry written in place, the rest kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record(["status: stable", ...expected, "title: T"]),
+    });
+  });
+
+  test.each([
+    {
+      description: "a frontmatter of only a comment",
+      expected: [
+        "# nothing yet",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ["# nothing yet"],
+    },
+    {
+      description: "an empty frontmatter",
+      expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
+      lines: [],
+    },
+    {
+      description: "an indented mapping with neither status nor generated",
+      expected: ["  type: T", `  verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
+      lines: ["  type: T"],
+    },
+    {
+      description: "an indented mapping",
+      expected: [
+        "  status: stable",
+        `  verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ["  status: draft"],
+    },
+  ])("adds a verified field to $description", ({ expected, lines }) => {
+    // Given - a frontmatter with no verified field
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the field added where it fits
+    expect(result).toStrictEqual({ isOk: true, text: record(expected) });
+  });
+
+  test.each([
+    {
+      description: "a flow mapping",
+      lines: ["{ status: draft }"],
+      reason: "the frontmatter isn't a block mapping",
+    },
+    {
+      description: "a single value",
+      lines: ["just text"],
+      reason: "the frontmatter isn't a block mapping",
+    },
+    {
+      description: "another person's entry with an anchor",
+      lines: ["status: stable", "verified: &theirs { by: human:someone }"],
+      reason: "`verified` has an anchor or a tag",
+    },
+    {
+      description: "another person's value with a tag",
+      lines: ["status: stable", "verified: !!str someone"],
+      reason: "`verified` has an anchor or a tag",
+    },
+    {
+      description: "a status written as an alias",
+      lines: ["type: &d draft", "status: *d"],
+      reason: "`status` is an alias",
+    },
+    {
+      description: "an explicit verified key with no value",
+      lines: ["status: stable", "? verified"],
+      reason: "`verified` has no value to add to",
+    },
+  ])("refuses $description", ({ lines, reason }) => {
+    // Given - frontmatter whose layout has no safe place for the entry
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - a refusal naming why
+    expect(result).toStrictEqual({ isOk: false, reason });
   });
 
   test("replaces a verified field that's NULL with the owner's entry", () => {
@@ -993,6 +1339,34 @@ describe("verifyRecord", () => {
       isOk: true,
       text: text.replace("2026-09-28T09:00:00Z", () => "x$&y"),
     });
+  });
+});
+
+describe("checkMeaning", () => {
+  test.each([
+    {
+      description: "the draft left as it was",
+      edited: `status: draft\nverified: { by: ${VERIFIED_BY}, at: ${AT} }\ntitle: T`,
+    },
+    {
+      description: "another field changed",
+      edited: `status: stable\nverified: { by: ${VERIFIED_BY}, at: ${AT} }\ntitle: U`,
+    },
+  ])("names a result with $description", ({ edited }) => {
+    // Given - a draft, and an edited version that means something else
+    const doc = parseDocument("status: draft\ntitle: T", {
+      schema: "failsafe",
+    });
+
+    const editedDoc = parseDocument(edited, { schema: "failsafe" });
+
+    // When - checking the edit's meaning
+    const problem = checkMeaning({ ...VERIFY_OPTIONS, doc, editedDoc });
+
+    // Then - the difference named
+    expect(problem).toBe(
+      "the edit would change more than the status and the sign-off"
+    );
   });
 });
 
