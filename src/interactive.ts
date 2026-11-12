@@ -51,7 +51,15 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
     );
   }
 
-  const all = loadCandidates({ bundleDirs, repoRoot, verifiedBy });
+  const { candidates: all, problems } = loadCandidates({
+    bundleDirs,
+    repoRoot,
+    verifiedBy,
+  });
+
+  for (const reason of problems) {
+    log.warn(`Skipping ${reason}`);
+  }
 
   if (all.length === 0) {
     cancel("No records found.");

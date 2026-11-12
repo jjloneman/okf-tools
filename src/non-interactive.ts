@@ -188,16 +188,19 @@ function loadChanged(context: RunContext): LoadResult {
       .sort()
   );
 
-  return {
-    candidates: loadCandidatesAt({
-      bundleDirs,
-      filePaths,
-      repoRoot,
-      verifiedBy,
-    }),
-    isOk: true,
-    statusPaths,
-  };
+  const { candidates, problems } = loadCandidatesAt({
+    bundleDirs,
+    filePaths,
+    repoRoot,
+    verifiedBy,
+  });
+
+  // A changed record left out unseen would read as signed off, so it fails.
+  if (problems.length > 0) {
+    return { isOk: false, reason: problems.join("\n") };
+  }
+
+  return { candidates, isOk: true, statusPaths };
 }
 
 /** Load the records named on the command line. */
@@ -222,13 +225,13 @@ function loadNamed(params: {
   const candidates: Candidate[] = [];
 
   for (const filePath of resolved.value) {
-    const candidate = loadCandidate({ filePath, repoRoot, verifiedBy });
+    const record = loadCandidate({ filePath, repoRoot, verifiedBy });
 
-    if (candidate === undefined) {
-      return { isOk: false, reason: `${filePath} has no frontmatter block.` };
+    if (record.kind !== "record") {
+      return { isOk: false, reason: record.reason };
     }
 
-    candidates.push(candidate);
+    candidates.push(record.candidate);
   }
 
   return { candidates, isOk: true };
