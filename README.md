@@ -27,7 +27,8 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 - it sets `status: draft` to `stable` (any other status is left alone);
 - it adds or renews the signer's `verified` entry with the current UTC time;
 - it commits just those files, never pushing and never skipping hooks;
-- it edits by targeted line replacements, never a YAML round-trip, so nothing else in a record is reformatted.
+- it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
+- it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end.
 
 ## 📦 Install
 
