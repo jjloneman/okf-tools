@@ -8,7 +8,7 @@ sources:
     resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
     title: Open Knowledge Format specification
 status: draft
-generated: { by: claude-code/2.1.322, at: 2026-11-11T23:36:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
 ---
 
 # Who verifies a record

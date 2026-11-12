@@ -8,7 +8,7 @@ sources:
     resource: https://pnpm.io/settings#minimumreleaseage
     title: pnpm settings, minimumReleaseAge
 status: draft
-generated: { by: claude-code/2.1.322, at: 2026-11-11T23:36:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
 ---
 
 # How okf-tools is distributed

@@ -11,7 +11,7 @@ sources:
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
 status: draft
-generated: { by: claude-code/2.1.322, at: 2026-11-11T23:36:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
 ---
 
 # Which actors can sign a record
