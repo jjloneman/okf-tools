@@ -5,7 +5,7 @@ description: All or nothing; each record is re-read just before writing and the 
 tags: [git, safety]
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T06:41:00Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+verified: { by: human:jjloneman, at: 2026-11-12T07:03:21Z }
 ---
 
 # How okf-verify writes and commits records

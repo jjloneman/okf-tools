@@ -5,7 +5,7 @@ description: "`--yes` needs an explicit selection, `--changed` or record paths, 
 tags: [agents, cli]
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T04:21:00Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+verified: { by: human:jjloneman, at: 2026-11-12T07:03:21Z }
 ---
 
 # What `--yes` verifies, and how it exits
