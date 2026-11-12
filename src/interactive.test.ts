@@ -8,6 +8,8 @@ import {
   outro,
   select,
 } from "@clack/prompts";
+import { chmodSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { TestRepo } from "#test/repo";
@@ -207,6 +209,25 @@ describe("runInteractive", () => {
     expect(log.warn).toHaveBeenCalledWith(
       expect.stringContaining("Can't diff against the base branch")
     );
+  });
+
+  test("warns about an unreadable record, and lists the rest", async () => {
+    // Given - one record with no read permission
+    chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
+
+    // When - running and accepting every prompt
+    const code = await runInteractive(context());
+
+    // Then - a warning naming it, and it left out of the checklist
+    expect(code).toBe(0);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^Skipping docs\/decisions\/a\.md can't be read: /u)
+    );
+    expect(
+      vi
+        .mocked(multiselect)
+        .mock.calls[0]?.[0].options.map(({ label }) => label)
+    ).toStrictEqual(["B — b.md", "C — c.md"]);
   });
 
   test("fails when the bundles hold no records", async () => {

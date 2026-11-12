@@ -4,8 +4,8 @@ title: How okf-verify writes and commits records
 description: All or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T06:41:00Z }
+verified: { by: human:jjloneman, at: 2026-11-12T07:03:21Z }
 ---
 
 # How okf-verify writes and commits records
@@ -16,7 +16,9 @@ Between listing records and committing them, the interactive mode waits on a per
 
 As of 2026-11-11, from `src/apply.ts` and `src/repo.ts`:
 
-- **Targeted line edits, never a YAML round-trip:** `status: draft` becomes `stable` (any other status is left alone), and the signer's `verified` entry is added or renewed. Nothing else in the record is reformatted.
+- **Targeted edits, never a YAML round-trip:** `status: draft` becomes `stable` (any other status is left alone), and the signer's `verified` entry is added or renewed. Nothing else in the record is reformatted.
+  - As of 2026-11-12, fields are read with the `yaml` package's failsafe schema, and an edit replaces only the characters it changes, at the positions the parser reports.
+  - Frontmatter that isn't valid YAML is refused, since where its fields end can't be known.
 - **All or nothing before writing:** if any chosen record refuses the edit, nothing is written.
 - **Re-read before writing:** each record is read again just before the write; if one changed on disk since it was listed, such as an edit saved while the prompt was open, nothing is written.
 - **Re-stamped at confirmation:** the edits are rebuilt with the current UTC time at write time, so `verified.at` is when the person confirmed, not when the checklist opened.
@@ -32,6 +34,7 @@ As of 2026-11-11, from `src/apply.ts` and `src/repo.ts`:
 - A record that's half-verified, or verified with text the person never saw, is worse than one left as a draft; each guard keeps the result to "all verified as reviewed" or "nothing changed".
 - Hooks are the repo's own checks, so a sign-off goes through them like any other commit; pushing stays the person's step.
 - These guards came from two `/code-review` passes and PR review on PR #2.
+- Reading with hand-written patterns mis-read valid YAML: reordered keys, escaped quotes, `at:` inside other values, nested lists, comments (issue #8). A parser reads every form YAML allows; it's used to find positions, not to re-serialize, so the no-reformatting rule holds.
 
 ## Consequences
 

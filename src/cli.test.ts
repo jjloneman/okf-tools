@@ -187,6 +187,24 @@ describe("run, interactively", () => {
       verifiedBy: "human:jjloneman",
     });
   });
+
+  test("reports an unexpected error instead of throwing", async () => {
+    // Given - both bundles, and prompts that throw
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write("docs/references/b.md", draftRecord("B"));
+    vi.mocked(runInteractive).mockRejectedValueOnce(new Error("prompts broke"));
+
+    // When - running in a terminal
+    const code = await run({
+      args: [],
+      cwd: repo.root,
+      isInteractive: true,
+    });
+
+    // Then - the error, as a failure
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("prompts broke");
+  });
 });
 
 describe("run --yes", () => {
@@ -224,6 +242,39 @@ describe("run --yes", () => {
       "[okf-verify] skipped docs/decisions/b.md: already verified, unchanged"
     );
     expect(infos.at(-1)).toMatch(/^\[okf-verify\] committed [0-9a-f]+$/u);
+  });
+
+  test("--changed fails on a changed record of invalid YAML", async () => {
+    // Given - two changed records, one with a duplicated key
+    repo.write("docs/decisions/a.md", `${draftRecord("A")}\nMore.\n`);
+    repo.write("docs/references/c.md", "---\ntype: A\ntype: B\n---\n");
+
+    // When - verifying the changed ones
+    const code = await runIn(["--yes", "--changed", "--no-commit"]);
+
+    // Then - a failure naming it, and nothing verified
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "docs/references/c.md: frontmatter isn't valid YAML"
+    );
+    expect(repo.read("docs/decisions/a.md")).toContain("status: draft");
+  });
+
+  test("--changed fails on a changed record that can't be read", async () => {
+    // Given - two changed records, one with no read permission
+    repo.write("docs/decisions/a.md", `${draftRecord("A")}\nMore.\n`);
+    repo.write("docs/references/c.md", `${draftRecord("C")}\nMore.\n`);
+    chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
+
+    // When - verifying the changed ones
+    const code = await runIn(["--yes", "--changed", "--no-commit"]);
+
+    // Then - a failure naming it, and nothing verified
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toMatch(
+      /docs\/decisions\/a\.md can't be read: /u
+    );
+    expect(repo.read("docs/references/c.md")).toContain("status: draft");
   });
 
   test("--changed falls back to uncommitted changes without a base branch", async () => {
@@ -358,15 +409,17 @@ describe("run --yes", () => {
     expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
   });
 
-  test("reports an unexpected error instead of throwing", async () => {
+  test("refuses a named record that can't be read", async () => {
     // Given - a record that can't be read
     chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
 
     // When - verifying it
     const code = await runIn(["--yes", "docs/decisions/a.md"]);
 
-    // Then - the error, as a failure
+    // Then - the reason, as a failure
     expect(code).toBe(1);
-    expect(errors.join("\n")).toContain("EACCES");
+    expect(errors.join("\n")).toMatch(
+      /docs\/decisions\/a\.md can't be read: .*EACCES/u
+    );
   });
 });

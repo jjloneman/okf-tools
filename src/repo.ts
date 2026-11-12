@@ -19,7 +19,11 @@ import path from "node:path";
 
 import type { Candidate, RecordEdit } from "./records.ts";
 
-import { getRecordState, readRecordSummary } from "./okf-frontmatter.ts";
+import {
+  findFrontmatterProblem,
+  getRecordState,
+  readRecordSummary,
+} from "./okf-frontmatter.ts";
 import { describeError } from "./output.ts";
 
 /** The changed files under the bundles, and whether the branch diff worked. */
@@ -106,6 +110,58 @@ export type GitFailure = {
    * @example "eslint found 1 problem"
    */
   stdout: string | undefined;
+};
+
+/** A path read as a record: the record, or why it isn't one. */
+export type LoadedRecord =
+  | {
+      /**
+       * The record, judged against the signer's sign-off.
+       *
+       * @example `{ filePath: "docs/decisions/a.md", state: "changed", … }`
+       */
+      candidate: Candidate;
+
+      /**
+       * What the path turned out to be; a record here.
+       *
+       * @example "record"
+       */
+      kind: "record";
+    }
+  | {
+      /**
+       * What the path turned out to be: a file whose frontmatter isn't valid
+       * YAML, one with no frontmatter block, or one that can't be read.
+       *
+       * @example "unreadable"
+       */
+      kind: "invalid" | "notRecord" | "unreadable";
+
+      /**
+       * Why it isn't a record, naming the path.
+       *
+       * @example "docs/decisions/a.md can't be read: EACCES: permission denied"
+       */
+      reason: string;
+    };
+
+/** The records read from a set of paths, and the ones that couldn't be read. */
+export type LoadedRecords = {
+  /**
+   * The records, in the order their paths were given.
+   *
+   * @example `[{ filePath: "docs/decisions/a.md", state: "unverified", … }]`
+   */
+  candidates: Candidate[];
+
+  /**
+   * Why each record that couldn't be read, or isn't valid YAML, was left out,
+   * naming its path.
+   *
+   * @example ["docs/decisions/b.md can't be read: EACCES: permission denied"]
+   */
+  problems: string[];
 };
 
 /** A value, or why there isn't one. */
@@ -286,20 +342,45 @@ export function listDirtyPaths(params: {
 /**
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
  *
- * @returns the candidate, or `undefined` when it has no frontmatter block.
+ * @returns the candidate, or why it isn't one: it can't be read, its
+ * frontmatter isn't valid YAML, or it has none.
  */
 export function loadCandidate(params: {
   filePath: string;
   repoRoot: string;
   verifiedBy: string;
-}): Candidate | undefined {
+}): LoadedRecord {
   const { filePath, repoRoot, verifiedBy } = params;
-  const text = readRecordText({ filePath, repoRoot });
+  let text: string;
+
+  try {
+    text = readRecordText({ filePath, repoRoot });
+  } catch (error) {
+    return {
+      kind: "unreadable",
+      reason: `${filePath} can't be read: ${describeError(error)}`,
+    };
+  }
+
+  const problem = findFrontmatterProblem(text);
+
+  if (problem !== undefined) {
+    return { kind: "invalid", reason: `${filePath}: ${problem}` };
+  }
+
   const summary = readRecordSummary({ text, verifiedBy });
 
   return summary === undefined
-    ? undefined
-    : { filePath, state: getRecordState(summary), summary, text };
+    ? { kind: "notRecord", reason: `${filePath} has no frontmatter block.` }
+    : {
+        candidate: {
+          filePath,
+          state: getRecordState(summary),
+          summary,
+          text,
+        },
+        kind: "record",
+      };
 }
 
 /**
@@ -308,12 +389,15 @@ export function loadCandidate(params: {
  *
  * - Only files count: `index.md`, a folder named `*.md`, and files without
  *   frontmatter aren't records, so they're left out.
+ *
+ * - A record that can't be read, or isn't valid YAML, is left out too, but
+ *   reported, so the caller can say so rather than skip it unseen.
  */
 export function loadCandidates(params: {
   bundleDirs: readonly string[];
   repoRoot: string;
   verifiedBy: string;
-}): Candidate[] {
+}): LoadedRecords {
   const { bundleDirs, repoRoot } = params;
 
   const filePaths = bundleDirs.flatMap((bundleDir) =>
@@ -330,19 +414,34 @@ export function loadCandidates(params: {
  *
  * - Keeps only `.md` files directly inside a bundle, other than `index.md`,
  *   that have a frontmatter block; anything else is skipped.
+ *
+ * - A record that can't be read, or isn't valid YAML, is reported in
+ *   `problems` instead.
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];
   filePaths: readonly string[];
   repoRoot: string;
   verifiedBy: string;
-}): Candidate[] {
+}): LoadedRecords {
   const { bundleDirs, filePaths, repoRoot, verifiedBy } = params;
+  const loaded: LoadedRecords = { candidates: [], problems: [] };
 
-  return filePaths
-    .filter((filePath) => isRecordPath({ bundleDirs, filePath, repoRoot }))
-    .map((filePath) => loadCandidate({ filePath, repoRoot, verifiedBy }))
-    .filter((candidate) => candidate !== undefined);
+  for (const filePath of filePaths) {
+    if (!isRecordPath({ bundleDirs, filePath, repoRoot })) {
+      continue;
+    }
+
+    const record = loadCandidate({ filePath, repoRoot, verifiedBy });
+
+    if (record.kind === "record") {
+      loaded.candidates.push(record.candidate);
+    } else if (record.kind !== "notRecord") {
+      loaded.problems.push(record.reason);
+    }
+  }
+
+  return loaded;
 }
 
 /**

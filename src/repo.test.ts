@@ -4,13 +4,19 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import type { TestRepo } from "#test/repo";
 
-import { createTestRepo, draftRecord, verifiedRecord } from "#test/repo";
+import {
+  createTestRepo,
+  draftRecord,
+  record,
+  verifiedRecord,
+} from "#test/repo";
 
 import {
   commitFiles,
   findRepoRoot,
   listChangedPaths,
   listDirtyPaths,
+  loadCandidate,
   loadCandidates,
   loadCandidatesAt,
   readBaseRef,
@@ -259,7 +265,80 @@ describe("listChangedPaths", () => {
   });
 });
 
+describe("loadCandidate", () => {
+  test("explains a record that can't be read", () => {
+    // Given - a record with no read permission
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
+
+    // When - loading it
+    const loaded = loadCandidate({
+      filePath: "docs/decisions/a.md",
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - a reason naming the file and the error
+    expect(loaded).toStrictEqual({
+      kind: "unreadable",
+      reason: expect.stringMatching(
+        /^docs\/decisions\/a\.md can't be read: .*EACCES/u
+      ) as string,
+    });
+  });
+});
+
+describe("loadCandidates, given invalid YAML", () => {
+  test("reports a record whose frontmatter isn't valid YAML", () => {
+    // Given - a record with a duplicated key, and a good one
+    repo.write(
+      "docs/decisions/a.md",
+      record(["type: Decision", "type: Again"])
+    );
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+
+    // When - loading the bundle
+    const { candidates, problems } = loadCandidates({
+      bundleDirs: ["docs/decisions"],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - the good record listed, and the other reported
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/b.md",
+    ]);
+    expect(problems).toStrictEqual([
+      expect.stringMatching(
+        /^docs\/decisions\/a\.md: frontmatter isn't valid YAML: /u
+      ),
+    ]);
+  });
+});
+
 describe("loadCandidates", () => {
+  test("reports a record that can't be read instead of listing it", () => {
+    // Given - two records, the first with no read permission
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+    chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
+
+    // When - loading the bundle
+    const { candidates, problems } = loadCandidates({
+      bundleDirs: ["docs/decisions"],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - the readable record listed, and the other reported
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/b.md",
+    ]);
+    expect(problems).toStrictEqual([
+      expect.stringMatching(/^docs\/decisions\/a\.md can't be read: /u),
+    ]);
+  });
+
   test("reads each bundle's records in order, skipping non-records", () => {
     // Given - two bundles with records, an index, a non-record, and a non-Markdown file
     repo.write("docs/decisions/b.md", draftRecord("B"));
@@ -274,7 +353,7 @@ describe("loadCandidates", () => {
     repo.write("docs/references/d.md", draftRecord("D"));
 
     // When - loading both bundles
-    const candidates = loadCandidates({
+    const { candidates, problems } = loadCandidates({
       bundleDirs: ["docs/decisions", "docs/references"],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -288,6 +367,7 @@ describe("loadCandidates", () => {
       ["docs/decisions/b.md", "unverified"],
       ["docs/references/d.md", "unverified"],
     ]);
+    expect(problems).toStrictEqual([]);
   });
 });
 
@@ -300,7 +380,7 @@ describe("loadCandidatesAt", () => {
     repo.write("other/c.md", draftRecord("C"));
 
     // When - loading them, deleted path included
-    const candidates = loadCandidatesAt({
+    const { candidates } = loadCandidatesAt({
       bundleDirs: ["docs/decisions"],
       filePaths: [
         "docs/decisions/b.md",
