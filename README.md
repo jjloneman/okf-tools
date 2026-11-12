@@ -134,6 +134,8 @@ import {
 | `pnpm changeset`         | Add a changeset for the next release.                   |
 | `pnpm changeset --empty` | Add an empty changeset, for a PR that releases nothing. |
 
+This repo dogfoods the tool: its design decisions are an OKF bundle in [docs/decisions/](docs/decisions/index.md), signed off with `pnpm okf:verify`.
+
 See [AGENTS.md](AGENTS.md) for the conventions.
 
 ## 📄 License
