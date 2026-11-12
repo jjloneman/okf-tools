@@ -110,39 +110,6 @@ export type VerificationPlan = {
   message: string;
 };
 
-/** A plan, or what to say about the records that refused it. */
-export type VerificationPlanResult =
-  | {
-      /**
-       * Whether every record can be edited; `false` here.
-       *
-       * @example false
-       */
-      isOk: false;
-
-      /**
-       * What to tell the person: no files changed, and why.
-       *
-       * @example `"No files changed.\ndocs/decisions/a.md: no frontmatter block"`
-       */
-      message: string;
-    }
-  | {
-      /**
-       * Whether every record can be edited; `true` here.
-       *
-       * @example true
-       */
-      isOk: true;
-
-      /**
-       * The plan.
-       *
-       * @example `{ candidates: [], dirtyPaths: [], filePaths: [], message: "docs(okf): …" }`
-       */
-      plan: VerificationPlan;
-    };
-
 /**
  * Write the plan's edits, then commit them unless the run says not to.
  *
@@ -173,12 +140,20 @@ export function applyVerification(params: {
     };
   }
 
-  // The plan checked these same texts, so every record accepts the edit.
-  const { edits } = prepareEdits({
+  // Listing checked these same texts, so this only guards against the two
+  // checks ever disagreeing: all or nothing, as before.
+  const { edits, failures } = prepareEdits({
     at: currentTimestamp(),
     candidates,
     verifiedBy,
   });
+
+  if (failures.length > 0) {
+    return {
+      kind: "notWritten",
+      message: `No files changed.\n${failures.join("\n")}`,
+    };
+  }
 
   const written = writeRecords({ edits, repoRoot });
 
@@ -208,31 +183,19 @@ export function describeDirtyPaths(dirtyPaths: readonly string[]): string {
 /**
  * Work out what verifying the chosen records will do, without writing.
  *
- * - All or nothing: one record that refuses the edit means no plan.
+ * - Listing already left out any record the edits refuse, and
+ *   `applyVerification` checks again before writing.
  *
  * - `statusPaths` is what `git status` already reported this run, when the
  *   caller has it, so the dirty check needn't ask again.
  */
 export function planVerification(params: {
-  context: Pick<RunContext, "repoRoot" | "shouldCommit" | "verifiedBy">;
+  context: Pick<RunContext, "repoRoot" | "shouldCommit">;
   selected: readonly Candidate[];
   statusPaths?: ReadonlySet<string>;
-}): VerificationPlanResult {
+}): VerificationPlan {
   const { context, selected, statusPaths } = params;
-  const { repoRoot, shouldCommit, verifiedBy } = context;
-
-  const { failures } = prepareEdits({
-    at: currentTimestamp(),
-    candidates: selected,
-    verifiedBy,
-  });
-
-  if (failures.length > 0) {
-    return {
-      isOk: false,
-      message: `No files changed.\n${failures.join("\n")}`,
-    };
-  }
+  const { repoRoot, shouldCommit } = context;
 
   const filePaths = selected.map(({ filePath }) => filePath);
 
@@ -242,12 +205,9 @@ export function planVerification(params: {
       : filePaths.filter((filePath) => statusPaths.has(filePath));
 
   return {
-    isOk: true,
-    plan: {
-      candidates: selected,
-      dirtyPaths: shouldCommit ? dirtyPaths : [],
-      filePaths,
-      message: buildCommitMessage(selected),
-    },
+    candidates: selected,
+    dirtyPaths: shouldCommit ? dirtyPaths : [],
+    filePaths,
+    message: buildCommitMessage(selected),
   };
 }

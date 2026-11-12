@@ -110,19 +110,11 @@ function applySelection(params: {
 }): ExitCode {
   const { context, selected, statusPaths } = params;
 
-  const planned = planVerification({
+  const plan = planVerification({
     context,
     selected,
     ...(statusPaths === undefined ? {} : { statusPaths }),
   });
-
-  if (!planned.isOk) {
-    printError(planned.message);
-
-    return EXIT_CODES.failure;
-  }
-
-  const { plan } = planned;
 
   if (plan.dirtyPaths.length > 0) {
     printInfo(describeDirtyPaths(plan.dirtyPaths));

@@ -20,6 +20,7 @@ import path from "node:path";
 import type { Candidate, RecordEdit } from "./records.ts";
 
 import {
+  findEditProblem,
   findFrontmatterProblem,
   getRecordState,
   readRecordSummary,
@@ -343,7 +344,8 @@ export function listDirtyPaths(params: {
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
  *
  * @returns the candidate, or why it isn't one: it can't be read, its
- * frontmatter isn't valid YAML, or it has none.
+ * frontmatter isn't valid YAML or is in a layout the edits refuse, or it has
+ * none.
  */
 export function loadCandidate(params: {
   filePath: string;
@@ -370,8 +372,19 @@ export function loadCandidate(params: {
 
   const summary = readRecordSummary({ text, verifiedBy });
 
-  return summary === undefined
-    ? { kind: "notRecord", reason: `${filePath} has no frontmatter block.` }
+  if (summary === undefined) {
+    return {
+      kind: "notRecord",
+      reason: `${filePath} has no frontmatter block.`,
+    };
+  }
+
+  // A layout the edits refuse is reported now, since choosing it would stop
+  // the records chosen with it from being written too.
+  const editProblem = findEditProblem({ text, verifiedBy });
+
+  return editProblem !== undefined
+    ? { kind: "invalid", reason: `${filePath}: ${editProblem}` }
     : {
         candidate: {
           filePath,
