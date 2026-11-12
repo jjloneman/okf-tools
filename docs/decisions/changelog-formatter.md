@@ -10,8 +10,9 @@ sources:
   - id: node-type-stripping
     resource: https://nodejs.org/api/typescript.html
     title: Node.js, modules and TypeScript
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
+verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 
 # How changelog lines are built
