@@ -21,7 +21,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - `interactive.ts` and `non-interactive.ts` — the two modes.
   - `records.ts` — pure record logic: the candidate type, the commit message, the edits.
   - `repo.ts` — every git and file-system call, relative to the repo root.
-  - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, and edits replace only the characters they change, at the positions the parser reports; `lines.ts` is its total line reader.
+  - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, and edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text. A last check (`checkMeaning`) refuses any result that doesn't parse to the original plus the intended changes.
   - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts` and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
 - `docs/decisions/` — the repo's own OKF bundle of design decisions (see [Design decisions](#-design-decisions)).
