@@ -21,7 +21,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - `interactive.ts` and `non-interactive.ts` — the two modes.
   - `records.ts` — pure record logic: the candidate type, the commit message, the edits.
   - `repo.ts` — every git and file-system call, relative to the repo root.
-  - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, and edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text. A last check (`checkMeaning`) refuses any result that doesn't parse to the original plus the intended changes.
+  - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, aliases resolved. An allowlist (`readEditableLayout`) refuses any `status` or `verified` layout outside the README's list, then edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text; the frontmatter is sliced out by position, so line endings are never rewritten. Before any edit, a frontmatter whose meaning is ambiguous (a lone CR, an unresolved alias, two keys that mean the same) is refused, and a last check (`checkMeaning`) refuses any result that isn't valid YAML or doesn't parse to the original plus the intended changes. `findEditProblem` runs the same refusals when records are listed, so `repo.ts` reports a refused record before anyone chooses it.
   - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts` and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
 - `docs/decisions/` — the repo's own OKF bundle of design decisions (see [Design decisions](#-design-decisions)).
@@ -71,6 +71,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 - `pnpm test` runs the suite; `pnpm test:coverage` adds the gate: **100%** statements, branches, functions, and lines across `src/` and `scripts/`.
 - A branch nothing can reach is dead code to delete, not a line to exempt; no coverage-ignore comments.
+- `src/okf-frontmatter.property.test.ts` property-tests the edits with `fast-check` over generated layouts, with a fixed seed and run count. A failure prints its `seed` and `path`; put both in `RUN_OPTIONS` to replay it. To hunt for new failures, run it locally with a higher `numRuns` and no `seed`, and add each counterexample as an example test with its fix.
 - Tests that need git run it for real, in a scratch repo from `#test/repo`; only a machine state no test machine has (no git binary) is mocked.
 - The prompts are tested with `@clack/prompts` mocked; everything after the prompts runs for real.
 - **Test data is fabricated.** Never copy a real repo's records into a test.
