@@ -176,7 +176,7 @@ function loadChanged(context: RunContext): LoadResult {
       .sort()
   );
 
-  const { candidates, problems } = loadCandidatesAt({
+  const { candidates, skipped } = loadCandidatesAt({
     bundleDirs,
     filePaths,
     repoRoot,
@@ -184,8 +184,11 @@ function loadChanged(context: RunContext): LoadResult {
   });
 
   // A changed record left out unseen would read as signed off, so it fails.
-  if (problems.length > 0) {
-    return { isOk: false, reason: problems.join("\n") };
+  if (skipped.length > 0) {
+    return {
+      isOk: false,
+      reason: skipped.map(({ reason }) => reason).join("\n"),
+    };
   }
 
   return { candidates, isOk: true, statusPaths };

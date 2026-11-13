@@ -57,7 +57,7 @@ export type LoadedRecord =
       reason: string;
     };
 
-/** The records read from a set of paths, and the ones that couldn't be read. */
+/** The records read from a set of paths, and the ones left out. */
 export type LoadedRecords = {
   /**
    * The records, in the order their paths were given.
@@ -67,12 +67,29 @@ export type LoadedRecords = {
   candidates: Candidate[];
 
   /**
-   * Why each record that couldn't be read, or isn't valid YAML, was left out,
-   * naming its path.
+   * The records left out because they can't be read, aren't valid YAML, or
+   * have a layout the edits refuse.
    *
-   * @example ["docs/decisions/b.md can't be read: EACCES: permission denied"]
+   * @example `[{ filePath: "docs/decisions/b.md", reason: "…" }]`
    */
-  problems: string[];
+  skipped: SkippedRecord[];
+};
+
+/** A record left out of the list, and why. */
+export type SkippedRecord = {
+  /**
+   * The record's path from the repo root.
+   *
+   * @example "docs/decisions/b.md"
+   */
+  filePath: string;
+
+  /**
+   * Why it was left out, naming the path.
+   *
+   * @example "docs/decisions/b.md can't be read: EACCES: permission denied"
+   */
+  reason: string;
 };
 
 /** The file every bundle may hold that isn't a record. */
@@ -141,8 +158,9 @@ export function loadCandidate(params: {
  * - Only files count: `index.md`, a folder named `*.md`, and files without
  *   frontmatter aren't records, so they're left out.
  *
- * - A record that can't be read, or isn't valid YAML, is left out too, but
- *   reported, so the caller can say so rather than skip it unseen.
+ * - A record that can't be read, isn't valid YAML, or has a layout the edits
+ *   refuse is left out too, but reported, so the caller can say so rather
+ *   than skip it unseen.
  */
 export function loadCandidates(params: {
   bundleDirs: readonly string[];
@@ -166,8 +184,8 @@ export function loadCandidates(params: {
  * - Keeps only `.md` files directly inside a bundle, other than `index.md`,
  *   that have a frontmatter block; anything else is skipped.
  *
- * - A record that can't be read, or isn't valid YAML, is reported in
- *   `problems` instead.
+ * - A record that can't be read, isn't valid YAML, or has a layout the edits
+ *   refuse is reported in `skipped` instead.
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];
@@ -176,7 +194,7 @@ export function loadCandidatesAt(params: {
   verifiedBy: string;
 }): LoadedRecords {
   const { bundleDirs, filePaths, repoRoot, verifiedBy } = params;
-  const loaded: LoadedRecords = { candidates: [], problems: [] };
+  const loaded: LoadedRecords = { candidates: [], skipped: [] };
 
   for (const filePath of filePaths) {
     if (!isRecordPath({ bundleDirs, filePath, repoRoot })) {
@@ -188,7 +206,7 @@ export function loadCandidatesAt(params: {
     if (record.kind === "record") {
       loaded.candidates.push(record.candidate);
     } else if (record.kind !== "notRecord") {
-      loaded.problems.push(record.reason);
+      loaded.skipped.push({ filePath, reason: record.reason });
     }
   }
 
