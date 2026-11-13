@@ -66,6 +66,10 @@ export type TestRepo = {
   write: (filePath: string, text: string) => void;
 };
 
+/** Why the edits refuse `refusedRecord()`, after its path. */
+export const REFUSAL_REASON =
+  "`verified` is a nested mapping, not a list; edit the record by hand";
+
 /** Who signs records off in the tests. */
 export const VERIFIED_BY = "human:jjloneman";
 
@@ -139,6 +143,19 @@ export function draftRecord(title: string): string {
 /** Build a fabricated record from its frontmatter lines. */
 export function record(frontmatter: readonly string[]): string {
   return `---\n${frontmatter.join("\n")}\n---\n${BODY}`;
+}
+
+/**
+ * A fabricated draft of the given type whose `verified` is a nested mapping,
+ * which the edits refuse.
+ */
+export function refusedRecord(type: string): string {
+  return record([
+    `type: ${type}`,
+    "status: draft",
+    "verified:",
+    "  by: human:someone",
+  ]);
 }
 
 /**
