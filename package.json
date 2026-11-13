@@ -38,7 +38,8 @@
     "okf-verify": "./dist/bin.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsdown",
