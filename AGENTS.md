@@ -36,7 +36,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
 - `.github/workflows/` — `ci.yml` and `release.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
 - `eslint-rules/` — the local `no-dotted-jsdoc-param` rule, loaded by `eslint.config.ts`.
-- `dist/` — build output (gitignored), the only directory published.
+- `dist/` — build output (gitignored), the only directory published; `CHANGELOG.md` is published beside it.
 
 ## 🎨 Code style
 
@@ -129,6 +129,7 @@ Releases use [changesets](https://github.com/changesets/changesets), and the pac
   - The first version was published by hand, since trusted publishing can only be set up for a package that already exists.
 - **Never hand-run a version bump or `git tag`**; the version PR owns both.
 - `CHANGELOG.md` is in `.prettierignore`, since changesets writes it.
+- **`files` in `package.json` lists `CHANGELOG.md` beside `dist`**, since npm no longer packs a changelog on its own; check `npm pack --dry-run` lists it.
 
 ## 📚 Design decisions
 
