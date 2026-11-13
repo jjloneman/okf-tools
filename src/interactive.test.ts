@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   draftRecord,
   record,
+  REFUSAL_REASON,
+  refusedRecord,
   useTestRepo,
   VERIFIED_BY,
   verifiedRecord,
@@ -237,6 +239,107 @@ describe("runInteractive", () => {
     expect(cancel).toHaveBeenCalledWith("No records found.");
   });
 
+  test.each([
+    {
+      description: "the only record",
+      expected: "The only record was skipped; fix it and run again.",
+      names: ["c.md"],
+    },
+    {
+      description: "both records",
+      expected: "All 2 records were skipped; fix them and run again.",
+      names: ["c.md", "d.md"],
+    },
+  ])(
+    "fails, saying so, when $description is skipped",
+    async ({ expected, names }) => {
+      // Given - a bundle whose records the edits all refuse
+      for (const name of names) {
+        repo.write(`docs/refused/${name}`, refusedRecord("Reference"));
+      }
+
+      // When - running on it
+      const code = await runInteractive(
+        context({ bundleDirs: ["docs/refused"] })
+      );
+
+      // Then - a failure after the warnings, not "No records found."
+      expect(code).toBe(1);
+      expect(log.warn).toHaveBeenCalledWith(
+        `Skipping docs/refused/c.md: ${REFUSAL_REASON}`
+      );
+      expect(cancel).toHaveBeenCalledWith(expected);
+      expect(log.warn).toHaveBeenCalledTimes(names.length);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(
+        Math.max(...vi.mocked(log.warn).mock.invocationCallOrder)
+      ).toBeLessThan(Math.min(...vi.mocked(cancel).mock.invocationCallOrder));
+    }
+  );
+
+  test("says the skipped records need fixing when the rest are verified", async () => {
+    // Given - a bundle holding a verified record and one the edits refuse
+    repo.write(
+      "docs/mixed/b.md",
+      verifiedRecord({ by: VERIFIED_BY, title: "B" })
+    );
+    repo.write("docs/mixed/c.md", refusedRecord("Reference"));
+
+    // When - running on it
+    const code = await runInteractive(context({ bundleDirs: ["docs/mixed"] }));
+
+    // Then - nothing to pick, and the skipped record pointed out
+    expect(code).toBe(0);
+    expect(log.warn).toHaveBeenCalledWith(
+      `Skipping docs/mixed/c.md: ${REFUSAL_REASON}`
+    );
+    expect(outro).toHaveBeenCalledWith(
+      "Every listed record is already verified; fix the skipped ones above."
+    );
+    expect(multiselect).not.toHaveBeenCalled();
+  });
+
+  test("points out a skipped record outside the changed scope", async () => {
+    // Given - a refused record already on main, and a verified one changed
+    repo.git("checkout", "--quiet", "main");
+    repo.write("docs/references/z.md", refusedRecord("Reference"));
+    repo.commitAll("add a refused record");
+    repo.git("checkout", "--quiet", "feature");
+    repo.git("merge", "--quiet", "main");
+    repo.write(
+      "docs/decisions/d.md",
+      verifiedRecord({ by: VERIFIED_BY, title: "D" })
+    );
+    vi.mocked(select).mockResolvedValue("changed");
+
+    // When - running and picking the changed records
+    const code = await runInteractive(context());
+
+    // Then - the run ends cleanly, still pointing at the skipped record
+    expect(code).toBe(0);
+    expect(log.warn).toHaveBeenCalledWith(
+      `Skipping docs/references/z.md: ${REFUSAL_REASON}`
+    );
+    expect(outro).toHaveBeenCalledWith(
+      "Every listed record is already verified; fix the skipped ones above."
+    );
+  });
+
+  test("says when every record changed on the branch was skipped", async () => {
+    // Given - the branch's only change is a record the edits refuse
+    repo.write("docs/decisions/z.md", refusedRecord("Decision"));
+
+    // When - running and accepting every prompt
+    const code = await runInteractive(context());
+
+    // Then - every record shown, saying why, and the drafts verified
+    expect(code).toBe(0);
+    expect(log.info).toHaveBeenCalledWith(
+      "Each changed record was skipped; showing every record."
+    );
+    expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
+  });
+
   test("ends when every listed record is verified", async () => {
     // Given - a bundle holding only a verified record
     repo.git("rm", "--quiet", "docs/decisions/a.md");
@@ -376,15 +479,7 @@ describe("runInteractive", () => {
 
   test("warns about a record the edits refuse, and verifies the rest", async () => {
     // Given - a draft whose verified key is a nested mapping
-    repo.write(
-      "docs/references/c.md",
-      record([
-        "type: Reference",
-        "status: draft",
-        "verified:",
-        "  by: human:someone",
-      ])
-    );
+    repo.write("docs/references/c.md", refusedRecord("Reference"));
 
     // When - running and accepting every prompt
     const code = await runInteractive(context());
@@ -392,7 +487,7 @@ describe("runInteractive", () => {
     // Then - a warning naming it before the checklist, and the rest verified
     expect(code).toBe(0);
     expect(log.warn).toHaveBeenCalledWith(
-      "Skipping docs/references/c.md: `verified` is a nested mapping, not a list; edit the record by hand"
+      `Skipping docs/references/c.md: ${REFUSAL_REASON}`
     );
     expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
   });

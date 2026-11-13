@@ -54,7 +54,7 @@ describe("loadCandidates, given invalid YAML", () => {
     repo.write("docs/decisions/b.md", draftRecord("B"));
 
     // When - loading the bundle
-    const { candidates, problems } = loadCandidates({
+    const { candidates, skipped } = loadCandidates({
       bundleDirs: ["docs/decisions"],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -64,11 +64,12 @@ describe("loadCandidates, given invalid YAML", () => {
     expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
       "docs/decisions/b.md",
     ]);
-    expect(problems).toStrictEqual([
-      expect.stringMatching(
-        /^docs\/decisions\/a\.md: frontmatter isn't valid YAML: /u
-      ),
+    expect(skipped.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/a.md",
     ]);
+    expect(skipped[0]?.reason).toMatch(
+      /^docs\/decisions\/a\.md: frontmatter isn't valid YAML: /u
+    );
   });
 });
 
@@ -82,7 +83,7 @@ describe("loadCandidates, given a layout the edits refuse", () => {
     repo.write("docs/decisions/b.md", draftRecord("B"));
 
     // When - loading the bundle
-    const { candidates, problems } = loadCandidates({
+    const { candidates, skipped } = loadCandidates({
       bundleDirs: ["docs/decisions"],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -92,8 +93,12 @@ describe("loadCandidates, given a layout the edits refuse", () => {
     expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
       "docs/decisions/b.md",
     ]);
-    expect(problems).toStrictEqual([
-      "docs/decisions/a.md: `verified` holds a single value, not an entry or a list; edit the record by hand",
+    expect(skipped).toStrictEqual([
+      {
+        filePath: "docs/decisions/a.md",
+        reason:
+          "docs/decisions/a.md: `verified` holds a single value, not an entry or a list; edit the record by hand",
+      },
     ]);
   });
 });
@@ -106,7 +111,7 @@ describe("loadCandidates", () => {
     chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
 
     // When - loading the bundle
-    const { candidates, problems } = loadCandidates({
+    const { candidates, skipped } = loadCandidates({
       bundleDirs: ["docs/decisions"],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -116,9 +121,12 @@ describe("loadCandidates", () => {
     expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
       "docs/decisions/b.md",
     ]);
-    expect(problems).toStrictEqual([
-      expect.stringMatching(/^docs\/decisions\/a\.md can't be read: /u),
+    expect(skipped.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/a.md",
     ]);
+    expect(skipped[0]?.reason).toMatch(
+      /^docs\/decisions\/a\.md can't be read: /u
+    );
   });
 
   test("reads each bundle's records in order, skipping non-records", () => {
@@ -135,7 +143,7 @@ describe("loadCandidates", () => {
     repo.write("docs/references/d.md", draftRecord("D"));
 
     // When - loading both bundles
-    const { candidates, problems } = loadCandidates({
+    const { candidates, skipped } = loadCandidates({
       bundleDirs: ["docs/decisions", "docs/references"],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -149,7 +157,7 @@ describe("loadCandidates", () => {
       ["docs/decisions/b.md", "unverified"],
       ["docs/references/d.md", "unverified"],
     ]);
-    expect(problems).toStrictEqual([]);
+    expect(skipped).toStrictEqual([]);
   });
 });
 

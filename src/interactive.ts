@@ -52,31 +52,40 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
     );
   }
 
-  const { candidates: all, problems } = loadCandidates({
+  const { candidates: all, skipped } = loadCandidates({
     bundleDirs,
     repoRoot,
     verifiedBy,
   });
+  const hasSkipped = skipped.length > 0;
 
-  for (const reason of problems) {
+  for (const { reason } of skipped) {
     log.warn(`Skipping ${reason}`);
   }
 
   if (all.length === 0) {
-    cancel("No records found.");
+    cancel(describeAllSkipped(skipped.length));
 
     return EXIT_CODES.failure;
   }
 
   const changed = all.filter(({ filePath }) => paths.has(filePath));
-  const shown = await chooseScope({ all, changed });
+  const shown = await chooseScope({
+    all,
+    changed,
+    hasSkippedChanges: skipped.some(({ filePath }) => paths.has(filePath)),
+  });
 
   if (shown === undefined) {
     return cancelRun();
   }
 
   if (!shown.some(needsSignOff)) {
-    outro("Every listed record is already verified.");
+    outro(
+      hasSkipped
+        ? "Every listed record is already verified; fix the skipped ones above."
+        : "Every listed record is already verified."
+    );
 
     return EXIT_CODES.ok;
   }
@@ -173,11 +182,16 @@ async function chooseRecords(
 async function chooseScope(params: {
   all: readonly Candidate[];
   changed: readonly Candidate[];
+  hasSkippedChanges: boolean;
 }): Promise<readonly Candidate[] | undefined> {
-  const { all, changed } = params;
+  const { all, changed, hasSkippedChanges } = params;
 
   if (changed.length === 0) {
-    log.info("No records changed on this branch; showing every record.");
+    log.info(
+      hasSkippedChanges
+        ? "Each changed record was skipped; showing every record."
+        : "No records changed on this branch; showing every record."
+    );
 
     return all;
   }
@@ -199,6 +213,21 @@ async function chooseScope(params: {
   }
 
   return scope === "all" ? all : changed;
+}
+
+/**
+ * Say why there's nothing to list, given how many records were skipped.
+ *
+ * - With none skipped, the bundles hold no records at all.
+ */
+function describeAllSkipped(skippedCount: number): string {
+  if (skippedCount === 0) {
+    return "No records found.";
+  }
+
+  return skippedCount === 1
+    ? "The only record was skipped; fix it and run again."
+    : `All ${skippedCount} records were skipped; fix them and run again.`;
 }
 
 /** Close the prompts with what applying the plan did. */

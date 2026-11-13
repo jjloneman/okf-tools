@@ -7,7 +7,8 @@ import type { TestRepo } from "#test/repo";
 import {
   createTestRepo,
   draftRecord,
-  record,
+  REFUSAL_REASON,
+  refusedRecord,
   verifiedRecord,
 } from "#test/repo";
 
@@ -355,13 +356,7 @@ describe("run --yes", () => {
 
   test("fails without touching anything when a named record refuses the edit", async () => {
     // Given - a record whose verified key is a nested mapping, which the editor refuses
-    const refusing = record([
-      "type: Decision",
-      "status: draft",
-      "verified:",
-      "  by: human:someone",
-    ]);
-    repo.write("docs/decisions/e.md", refusing);
+    repo.write("docs/decisions/e.md", refusedRecord("Decision"));
 
     // When - naming it with a good one
     const code = await runIn([
@@ -373,7 +368,7 @@ describe("run --yes", () => {
     // Then - the refusal named before any write, and no file changed
     expect(code).toBe(1);
     expect(errors.join("\n")).toContain(
-      "docs/decisions/e.md: `verified` is a nested mapping, not a list; edit the record by hand"
+      `docs/decisions/e.md: ${REFUSAL_REASON}`
     );
     expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
   });
