@@ -19,12 +19,12 @@ import path from "node:path";
 
 import type { Candidate, RecordEdit } from "./records.ts";
 
+import { findEditProblem } from "./frontmatter/edit.ts";
 import {
-  findEditProblem,
   findFrontmatterProblem,
   getRecordState,
   readRecordSummary,
-} from "./okf-frontmatter.ts";
+} from "./frontmatter/read.ts";
 import { describeError } from "./output.ts";
 
 /** The changed files under the bundles, and whether the branch diff worked. */

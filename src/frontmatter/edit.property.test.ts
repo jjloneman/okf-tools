@@ -14,7 +14,8 @@ import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { parseDocument } from "yaml";
 
-import { readRecordSummary, verifyRecord } from "./okf-frontmatter.ts";
+import { verifyRecord } from "./edit.ts";
+import { readRecordSummary } from "./read.ts";
 
 /** One `verified` entry, any of whose keys may be missing. */
 type EntryModel = {
