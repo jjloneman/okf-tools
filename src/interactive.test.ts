@@ -12,12 +12,11 @@ import { chmodSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { TestRepo } from "#test/repo";
-
 import {
-  createTestRepo,
   draftRecord,
   record,
+  useTestRepo,
+  VERIFIED_BY,
   verifiedRecord,
 } from "#test/repo";
 
@@ -47,12 +46,9 @@ vi.mock(import("@clack/prompts"), async (importOriginal) => ({
   select: vi.fn(),
 }));
 
-const VERIFIED_BY = "human:jjloneman";
-
-let repo: TestRepo;
+const { repo } = useTestRepo();
 
 beforeEach(() => {
-  repo = createTestRepo();
   repo.write("docs/decisions/a.md", draftRecord("A"));
   repo.write(
     "docs/decisions/b.md",
@@ -74,7 +70,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  repo.remove();
   vi.clearAllMocks();
 });
 

@@ -19,6 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { afterEach, beforeEach } from "vitest";
 
 /** A pre-commit hook that prints `output` and fails, after running `script`. */
 export type FailingHook = {
@@ -64,6 +65,9 @@ export type TestRepo = {
   /** Write a file, relative to the repo root, creating its directories. */
   write: (filePath: string, text: string) => void;
 };
+
+/** Who signs records off in the tests. */
+export const VERIFIED_BY = "human:jjloneman";
 
 /** The body every fabricated record shares. */
 const BODY = "\n# Title\n\nBody text.\n";
@@ -135,6 +139,59 @@ export function draftRecord(title: string): string {
 /** Build a fabricated record from its frontmatter lines. */
 export function record(frontmatter: readonly string[]): string {
   return `---\n${frontmatter.join("\n")}\n---\n${BODY}`;
+}
+
+/**
+ * Give each test in the calling file a fresh scratch repo, removed after it.
+ *
+ * - Call it at the top level of a test file as `const { repo } = useTestRepo()`;
+ *   that repo forwards each call to the current test's, so tests keep writing
+ *   `repo.write(…)`.
+ *
+ * - Its own `beforeEach` runs before any the file registers later, so those
+ *   can already fill the repo.
+ */
+export function useTestRepo(): { repo: TestRepo } {
+  let current: TestRepo | undefined;
+
+  beforeEach(() => {
+    current = createTestRepo();
+  });
+
+  afterEach(() => {
+    current?.remove();
+    current = undefined;
+  });
+
+  const readCurrent = (): TestRepo => {
+    if (current === undefined) {
+      throw new Error("useTestRepo's repo exists only while a test runs.");
+    }
+
+    return current;
+  };
+
+  const repo: TestRepo = {
+    commitAll: (message) => {
+      readCurrent().commitAll(message);
+    },
+    git: (...args) => readCurrent().git(...args),
+    installFailingHook: (hook) => {
+      readCurrent().installFailingHook(hook);
+    },
+    read: (filePath) => readCurrent().read(filePath),
+    remove: () => {
+      readCurrent().remove();
+    },
+    get root() {
+      return readCurrent().root;
+    },
+    write: (filePath, text) => {
+      readCurrent().write(filePath, text);
+    },
+  };
+
+  return { repo };
 }
 
 /** A fabricated record signed off by `by` after it was generated. */

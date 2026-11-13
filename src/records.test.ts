@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 
+import { VERIFIED_BY } from "#test/repo";
+
 import type { Candidate } from "./records.ts";
 
 import {
@@ -11,7 +13,6 @@ import {
 } from "./records.ts";
 
 const AT = "2026-10-02T13:30:00Z";
-const VERIFIED_BY = "human:jjloneman";
 
 /** A fabricated candidate, with its summary fields overridable. */
 function candidate(params: {

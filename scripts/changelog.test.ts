@@ -1,11 +1,9 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
-import type { TestRepo } from "#test/repo";
-
-import { createTestRepo } from "#test/repo";
+import { useTestRepo } from "#test/repo";
 
 import {
   buildReleaseLine,
@@ -19,15 +17,7 @@ import {
 
 const HASH = "b4fc42d0d5a0e1f2c3b4a5968778695a4b3c2d1e";
 
-let repo: TestRepo;
-
-beforeEach(() => {
-  repo = createTestRepo();
-});
-
-afterEach(() => {
-  repo.remove();
-});
+const { repo } = useTestRepo();
 
 describe("buildReleaseLine", () => {
   test("reads the subject of the commit that added the changeset", () => {
