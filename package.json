@@ -35,7 +35,7 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
-    "okf-verify": "./dist/bin.js"
+    "okf-verify": "dist/bin.js"
   },
   "files": [
     "dist",
