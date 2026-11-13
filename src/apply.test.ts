@@ -1,23 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 
-import type { TestRepo } from "#test/repo";
-
-import { createTestRepo, draftRecord, record } from "#test/repo";
+import { draftRecord, record, useTestRepo, VERIFIED_BY } from "#test/repo";
 
 import { applyVerification } from "./apply.ts";
-import { getRecordState, readRecordSummary } from "./okf-frontmatter.ts";
+import { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
 
-const VERIFIED_BY = "human:jjloneman";
-
-let repo: TestRepo;
-
-beforeEach(() => {
-  repo = createTestRepo();
-});
-
-afterEach(() => {
-  repo.remove();
-});
+const { repo } = useTestRepo();
 
 describe("applyVerification", () => {
   test("writes nothing when a record refuses the edit at write time", () => {

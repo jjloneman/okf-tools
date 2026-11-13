@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { findRepoRoot } from "./repo.ts";
+import { findRepoRoot } from "./git.ts";
 
 const { failure } = vi.hoisted(() => ({
   failure: { error: new Error("unset") },

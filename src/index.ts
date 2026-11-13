@@ -6,18 +6,17 @@ export type { RunParams } from "./cli.ts";
 export { run } from "./cli.ts";
 export type { ExitCode } from "./exit-codes.ts";
 export { EXIT_CODES } from "./exit-codes.ts";
+export type { RecordVerification } from "./frontmatter/edit.ts";
+export { verifyRecord } from "./frontmatter/edit.ts";
 export type {
   ReadRecordSummaryParams,
   RecordState,
-  RecordStatus,
   RecordSummary,
-  RecordVerification,
+} from "./frontmatter/read.ts";
+export { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
+export type {
+  RecordStatus,
   Timestamp,
   VerifyRecordParams,
-} from "./okf-frontmatter.ts";
-export {
-  getRecordState,
-  readRecordSummary,
-  RECORD_STATUSES,
-  verifyRecord,
-} from "./okf-frontmatter.ts";
+} from "./frontmatter/types.ts";
+export { RECORD_STATUSES } from "./frontmatter/types.ts";

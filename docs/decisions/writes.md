@@ -4,8 +4,8 @@ title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T18:48:00Z }
-verified: { by: human:jjloneman, at: 2026-11-13T01:31:45Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-13T02:28:00Z }
+verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
 # How okf-verify writes and commits records
@@ -14,7 +14,7 @@ Between listing records and committing them, the interactive mode waits on a per
 
 ## Decision
 
-As of 2026-11-11, from `src/apply.ts` and `src/repo.ts`:
+As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `src/repo.ts`:
 
 - **Targeted edits, never a YAML round-trip:** `status: draft` becomes `stable` (any other status is left alone), and the signer's `verified` entry is added or renewed. Nothing else in the record is reformatted.
   - As of 2026-11-12, fields are read with the `yaml` package's failsafe schema, and an edit replaces only the characters it changes, at the positions the parser reports.

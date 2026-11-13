@@ -24,8 +24,9 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
+import { listChangedPaths } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
-import { listChangedPaths, loadCandidates } from "./repo.ts";
+import { loadCandidates } from "./repo.ts";
 
 /** The checklist's legend entry for clack's toggle-all key. */
 const TOGGLE_ALL_INSTRUCTION = `${styleText("dim", "A:")} toggle all`;

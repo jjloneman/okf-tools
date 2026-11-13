@@ -7,11 +7,12 @@ import type { RunContext } from "./run-context.ts";
 
 import { readOkfConfig, resolveSettings } from "./config.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
+import { findRepoRoot } from "./git.ts";
 import { runInteractive } from "./interactive.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import { parseCliArgs, USAGE } from "./options.ts";
 import { describeError, printError, printInfo } from "./output.ts";
-import { findRepoRoot, resolveBundleDirs } from "./repo.ts";
+import { resolveBundleDirs } from "./repo.ts";
 
 /** What a run of the CLI is given by the process that starts it. */
 export type RunParams = {

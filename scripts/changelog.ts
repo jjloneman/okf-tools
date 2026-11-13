@@ -13,8 +13,8 @@
  */
 import path from "node:path";
 
+import { runGit } from "../src/git.ts";
 import { describeError } from "../src/output.ts";
-import { runGit } from "../src/repo.ts";
 
 /** A changeset as changesets passes it to the formatter. */
 export type ChangesetWithCommit = {

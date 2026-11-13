@@ -1,9 +1,9 @@
 import { DateTime } from "luxon";
 import path from "node:path";
 
-import type { RecordState, RecordSummary } from "./okf-frontmatter.ts";
+import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
 
-import { verifyRecord } from "./okf-frontmatter.ts";
+import { verifyRecord } from "./frontmatter/edit.ts";
 
 /** A record in a bundle that could be verified. */
 export type Candidate = {
