@@ -4,7 +4,7 @@ title: What a record counts as changed against
 description: The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 tags: [git]
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-13T02:28:00Z }
 verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 
@@ -14,7 +14,7 @@ The interactive checklist opens on the records changed on the branch, and `--yes
 
 ## Decision
 
-As of 2026-11-11, from `readBaseRef` and `listChangedPaths` in `src/repo.ts`:
+As of 2026-11-11, from `readBaseRef` and `listChangedPaths` in `src/git.ts`:
 
 - **The base ref, first match wins:**
   1. `origin/HEAD`, the remote's default branch;

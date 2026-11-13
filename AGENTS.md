@@ -20,12 +20,19 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - `config.ts` — reads the `okf` block of `package.json` and merges the flags over it.
   - `interactive.ts` and `non-interactive.ts` — the two modes.
   - `records.ts` — pure record logic: the candidate type, the commit message, the edits.
-  - `repo.ts` — every git and file-system call, relative to the repo root.
-  - `okf-frontmatter.ts` — pure functions that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, aliases resolved. An allowlist (`readEditableLayout`) refuses any `status` or `verified` layout outside the README's list, then edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text; the frontmatter is sliced out by position, so line endings are never rewritten. Before any edit, a frontmatter whose meaning is ambiguous (a lone CR, an unresolved alias, two keys that mean the same) is refused, and a last check (`checkMeaning`) refuses any result that isn't valid YAML or doesn't parse to the original plus the intended changes. `findEditProblem` runs the same refusals when records are listed, so `repo.ts` reports a refused record before anyone chooses it.
-  - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts` and `run-context.ts` are shared types.
+  - `git.ts` — every git call, relative to the repo root.
+  - `repo.ts` — the file-system work on records: resolving bundles and paths, loading candidates, reading and writing records.
+  - `frontmatter/` — pure functions that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, aliases resolved, and slices the frontmatter out by position, so line endings are never rewritten.
+    - `types.ts` — the public types and constants (`RecordStatus`, `Timestamp`, `VerifyRecordParams`, `RECORD_STATUSES`). It imports nothing, so the published declarations never import the `yaml` package's types.
+    - `shared.ts` — the types, constants, and helpers the others share: parsing, splitting, positions, and the small node readers. It imports only from `types.ts`.
+    - `read.ts` — `readRecordSummary`, `getRecordState`, and `findFrontmatterProblem`; reading accepts any valid YAML.
+    - `meaning.ts` — before any edit, `findAmbiguity` refuses a frontmatter whose meaning is ambiguous (an unresolved alias, two keys that mean the same); after it, `checkMeaning` refuses any result that isn't valid YAML or doesn't parse to the original plus the intended changes.
+    - `layout.ts` — the allowlist (`readEditableLayout`), which refuses any `status` or `verified` layout outside the README's list.
+    - `edit.ts` — `verifyRecord`: edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text. A lone CR is refused here. `findEditProblem` runs the same refusals when records are listed, so `repo.ts` reports a refused record before anyone chooses it.
+  - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts`, `outcome.ts`, and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
 - `docs/decisions/` — the repo's own OKF bundle of design decisions (see [Design decisions](#-design-decisions)).
-- `test/repo.ts` — scratch git repos and fabricated records for the tests, imported as `#test/repo`.
+- `test/repo.ts` — scratch git repos, fabricated records, and the shared `VERIFIED_BY` for the tests, imported as `#test/repo`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
 - `.github/workflows/` — `ci.yml` and `release.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
 - `eslint-rules/` — the local `no-dotted-jsdoc-param` rule, loaded by `eslint.config.ts`.
@@ -71,8 +78,8 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 - `pnpm test` runs the suite; `pnpm test:coverage` adds the gate: **100%** statements, branches, functions, and lines across `src/` and `scripts/`.
 - A branch nothing can reach is dead code to delete, not a line to exempt; no coverage-ignore comments.
-- `src/okf-frontmatter.property.test.ts` property-tests the edits with `fast-check` over generated layouts, with a fixed seed and run count. A failure prints its `seed` and `path`; put both in `RUN_OPTIONS` to replay it. To hunt for new failures, run it locally with a higher `numRuns` and no `seed`, and add each counterexample as an example test with its fix.
-- Tests that need git run it for real, in a scratch repo from `#test/repo`; only a machine state no test machine has (no git binary) is mocked.
+- `src/frontmatter/edit.property.test.ts` property-tests the edits with `fast-check` over generated layouts, with a fixed seed and run count. A failure prints its `seed` and `path`; put both in `RUN_OPTIONS` to replay it. To hunt for new failures, run it locally with a higher `numRuns` and no `seed`, and add each counterexample as an example test with its fix.
+- Tests that need git run it for real, in a scratch repo from `#test/repo`: `const { repo } = useTestRepo()` at the top of the file gives each test a fresh one; only a machine state no test machine has (no git binary) is mocked.
 - The prompts are tested with `@clack/prompts` mocked; everything after the prompts runs for real.
 - **Test data is fabricated.** Never copy a real repo's records into a test.
 - Shape: `describe("<unit>")` → `test("<scenario>")`, with `// Given` / `// When` / `// Then` comments, each followed by a hyphen and what that phase holds; table tests name rows with `$description`.
