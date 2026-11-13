@@ -1,6 +1,6 @@
 {
   "name": "@jjloneman/okf-tools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "✅ Sign off Open Knowledge Format records: mark them stable with a verified entry, interactively or from an agent.",
   "keywords": [
     "frontmatter",

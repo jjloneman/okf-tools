@@ -1,5 +1,11 @@
 # @jjloneman/okf-tools
 
+## 0.1.1
+
+### Patch Changes
+
+- 🔧 **okf-verify:** Say how many records were skipped, instead of "No records found.", when every record is skipped; point at the skipped records when the rest are already verified; and say when each changed record was skipped, instead of "No records changed on this branch". (9f30d4a)
+
 ## 0.1.0
 
 ### Minor Changes
