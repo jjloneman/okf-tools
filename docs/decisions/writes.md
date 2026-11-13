@@ -5,7 +5,7 @@ description: Edits only an allowlist of layouts; all or nothing; each record is 
 tags: [git, safety]
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T18:48:00Z }
-verified: { by: human:jjloneman, at: 2026-11-12T18:08:49Z }
+verified: { by: human:jjloneman, at: 2026-11-13T01:31:45Z }
 ---
 
 # How okf-verify writes and commits records
