@@ -86,15 +86,8 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
     return cancelRun();
   }
 
-  const planned = planVerification({ context, selected, statusPaths });
-
-  if (!planned.isOk) {
-    cancel(planned.message);
-
-    return EXIT_CODES.failure;
-  }
-
-  const { dirtyPaths, filePaths, message } = planned.plan;
+  const plan = planVerification({ context, selected, statusPaths });
+  const { dirtyPaths, filePaths, message } = plan;
 
   note(
     shouldCommit
@@ -119,7 +112,7 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
 
   return reportOutcome({
     count: filePaths.length,
-    outcome: applyVerification({ context, plan: planned.plan }),
+    outcome: applyVerification({ context, plan }),
   });
 }
 

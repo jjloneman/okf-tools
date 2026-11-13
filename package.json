@@ -76,6 +76,7 @@
     "eslint-plugin-perfectionist": "5.12.1",
     "eslint-plugin-tsdoc": "0.5.4",
     "eslint-plugin-yml": "3.9.0",
+    "fast-check": "4.10.2",
     "git-removed-branches": "2.3.1",
     "jiti": "2.7.0",
     "prettier": "3.9.10",

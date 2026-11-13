@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { parseDocument } from "yaml";
 
 import {
@@ -14,6 +14,7 @@ const OLD_AT = "2026-09-28T09:00:00Z";
 const BODY = "\n# Title\n\nBody text.\n";
 const VERIFIED_BY = "human:jjloneman";
 const VERIFY_OPTIONS = { at: AT, verifiedBy: VERIFIED_BY };
+const HAND_EDIT_HINT = "edit the record by hand";
 
 function record(frontmatter: string[]): string {
   return `---\n${frontmatter.join("\n")}\n---\n${BODY}`;
@@ -365,25 +366,6 @@ describe("verifyRecord", () => {
     });
   });
 
-  test("rejects a verified field that is a nested mapping without the owner", () => {
-    // Given - a verified field written as one nested mapping
-    const text = record([
-      ...DRAFT_LINES,
-      "verified:",
-      "  by: human:someone",
-      "  at: 2026-09-01T00:00:00Z",
-    ]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - it is rejected rather than rewritten into invalid YAML
-    expect(result).toStrictEqual({
-      isOk: false,
-      reason: "`verified` is a nested mapping, not a list",
-    });
-  });
-
   test("still marks a draft that carries a trailing comment", () => {
     // Given - a status line with a trailing YAML comment
     const text = record([
@@ -438,54 +420,6 @@ describe("verifyRecord", () => {
       text: expect.stringContaining(
         `\n- { by: human:someone, at: 2026-09-01T00:00:00Z }\n- { by: ${VERIFIED_BY}, at: ${AT} }\n`
       ) as string,
-    });
-  });
-
-  test("renews the owner's entry inside a multi-line flow sequence", () => {
-    // Given - a flow sequence spread over several lines
-    const text = record([
-      ...DRAFT_LINES,
-      "verified: [",
-      "    { by: human:someone, at: 2026-09-01T00:00:00Z },",
-      `    { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z },`,
-      "  ]",
-    ]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - the owner's line is renewed in place
-    expect(result).toStrictEqual({
-      isOk: true,
-      text: text
-        .replace("2026-09-28T09:00:00Z", AT)
-        .replace("status: draft", "status: stable"),
-    });
-  });
-
-  test("appends to a multi-line flow sequence without the owner's entry", () => {
-    // Given - a flow sequence spread over several lines, missing the owner
-    const text = record([
-      ...DRAFT_LINES,
-      "verified: [",
-      "    { by: human:someone, at: 2026-09-01T00:00:00Z },",
-      "  ]",
-    ]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - the owner's entry follows the last item, the layout kept
-    expect(result).toStrictEqual({
-      isOk: true,
-      text: record([
-        ...DRAFT_LINES.slice(0, 2),
-        "status: stable",
-        DRAFT_LINES[3] ?? "",
-        "verified: [",
-        `    { by: human:someone, at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} },`,
-        "  ]",
-      ]),
     });
   });
 
@@ -753,35 +687,11 @@ describe("verifyRecord", () => {
     });
   });
 
-  test("renews an inline entry spread over two lines in place", () => {
-    // Given - the owner's flow mapping split across lines
-    const text = record([
-      "status: stable",
-      "verified:",
-      `  - { by: ${VERIFIED_BY},`,
-      "      at: 2026-09-28T09:00:00Z }",
-    ]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - the timestamp renewed, the line split kept
-    expect(result).toStrictEqual({
-      isOk: true,
-      text: text.replace("2026-09-28T09:00:00Z", AT),
-    });
-  });
-
   test.each([
     {
       description: "frontmatter that isn't valid YAML",
       lines: ["title: Colon: inside", "status: draft"],
       reason: /^frontmatter isn't valid YAML: /u,
-    },
-    {
-      description: "an at that holds a list",
-      lines: ["status: stable", `verified: { by: ${VERIFIED_BY}, at: [x] }`],
-      reason: /^the signer's `at` isn't a single value$/u,
     },
   ])("refuses $description", ({ lines, reason }) => {
     // Given - a record the tool can't edit safely
@@ -801,20 +711,6 @@ describe("verifyRecord", () => {
     {
       description: "a nested list",
       lines: [`verified: { by: ${VERIFIED_BY}, at: ${OLD_AT}, notes: [x] }`],
-    },
-    {
-      description: "a comment between its keys",
-      lines: [
-        `verified: { by: ${VERIFIED_BY}, # me`,
-        "  at: 2026-09-28T09:00:00Z }",
-      ],
-    },
-    {
-      description: "an earlier entry holding a list",
-      lines: [
-        "verified: [{ by: human:someone, tags: [a] },",
-        `  { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }]`,
-      ],
     },
   ])("renews the owner's entry beside $description in place", ({ lines }) => {
     // Given - the owner's entry among YAML the old reader tripped on
@@ -873,11 +769,6 @@ describe("verifyRecord", () => {
 
   test.each([
     {
-      description: "a trailing comment",
-      expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT} # who`, "  }"],
-      lines: [`verified: { by: ${VERIFIED_BY} # who`, "  }"],
-    },
-    {
       description: "a trailing comma",
       expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT}, }`],
       lines: [`verified: { by: ${VERIFIED_BY}, }`],
@@ -904,78 +795,6 @@ describe("verifyRecord", () => {
     }
   );
 
-  test("wraps another person's multi-line entry in a flow sequence", () => {
-    // Given - another person's inline entry spread over two lines
-    const text = record([
-      "status: stable",
-      "verified: { by: human:someone,",
-      "  at: 2026-09-01T00:00:00Z }",
-    ]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - their entry's lines untouched, inside a list with the owner's
-    expect(result).toStrictEqual({
-      isOk: true,
-      text: record([
-        "status: stable",
-        "verified: [{ by: human:someone,",
-        `  at: 2026-09-01T00:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} }]`,
-      ]),
-    });
-  });
-
-  test("refuses an edit that would leave invalid YAML", () => {
-    // Given - another person's value as a block scalar, which can't be wrapped
-    const text = record(["status: stable", "verified: |", "  someone"]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - a refusal, not a broken record
-    expect(result).toStrictEqual({
-      isOk: false,
-      reason: "the edit would leave the frontmatter invalid YAML",
-    });
-  });
-
-  test("promotes an anchored status, and its alias with it", () => {
-    // Given - a draft status anchored and repeated by an alias
-    const text = record(["status: &s draft", "phase: *s"]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - the anchor kept, so the alias reads stable too
-    expect(result).toStrictEqual({
-      isOk: true,
-      text: record([
-        "status: &s stable",
-        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
-        "phase: *s",
-      ]),
-    });
-  });
-
-  test("fills an anchored empty verified field, and its alias with it", () => {
-    // Given - an empty verified field anchored and repeated by an alias
-    const text = record(["status: stable", "verified: &v ~", "copy: *v"]);
-
-    // When - verifying it
-    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
-
-    // Then - the anchor kept on the entry, as the meaning check expects
-    expect(result).toStrictEqual({
-      isOk: true,
-      text: record([
-        "status: stable",
-        `verified: &v { by: ${VERIFIED_BY}, at: ${AT} }`,
-        "copy: *v",
-      ]),
-    });
-  });
-
   test("refuses frontmatter with too many aliases to check", () => {
     // Given - aliases nested past the parser's limit
     const tens = (item: string): string =>
@@ -993,15 +812,26 @@ describe("verifyRecord", () => {
     // Then - a refusal rather than a thrown error
     expect(result).toStrictEqual({
       isOk: false,
-      reason: "the frontmatter has too many aliases to check the edit",
+      reason: `the frontmatter has too many aliases to check the edit; ${HAND_EDIT_HINT}`,
+    });
+  });
+
+  test("adds verified after a |+ last field, keeping its blank line with it", () => {
+    // Given - a |+ last field, which keeps the blank line as part of its value
+    const lines = ["title: |+", "  hi", ""];
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the field follows the blank line, so the title's value is kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([...lines, `verified: { by: ${VERIFIED_BY}, at: ${AT} }`]),
     });
   });
 
   test.each([
-    {
-      description: "a |+ last field's blank line",
-      lines: ["title: |+", "  hi", ""],
-    },
     {
       description: "a blank line before the closing fence",
       lines: ["type: x", ""],
@@ -1086,26 +916,6 @@ describe("verifyRecord", () => {
       expected: ["status:", "  stable"],
       lines: ["status:", "  draft"],
     },
-    {
-      description: "a quoted status key",
-      expected: ['"status": stable'],
-      lines: ['"status": draft'],
-    },
-    {
-      description: "an anchored status",
-      expected: ["status: &s stable"],
-      lines: ["status: &s draft"],
-    },
-    {
-      description: "a tagged status",
-      expected: ["status: !!str stable"],
-      lines: ["status: !!str draft"],
-    },
-    {
-      description: "a folded block status, as a plain value",
-      expected: ["status: stable"],
-      lines: ["status: >-", "  draft"],
-    },
   ])("promotes $description in place", ({ expected, lines }) => {
     // Given - a draft status in a layout a line-based edit misses
     const text = record([...lines, "title: T"]);
@@ -1145,22 +955,13 @@ describe("verifyRecord", () => {
       lines: ["verified: { by: human:someone } # theirs"],
     },
     {
-      description: "a single value in quotes",
-      expected: [
-        "verified:",
-        '  - "null"',
-        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
-      ],
-      lines: ['verified: "null"'],
-    },
-    {
       description: "a flow sequence holding a single-pair mapping",
       expected: [`verified: [a: b, { by: ${VERIFIED_BY}, at: ${AT} }]`],
       lines: ["verified: [a: b]"],
     },
     {
       description: "a flow sequence with spaces inside",
-      expected: [`verified: [{ by: ${VERIFIED_BY}, at: ${AT} } ]`],
+      expected: [`verified: [ { by: ${VERIFIED_BY}, at: ${AT} } ]`],
       lines: ["verified: [ ]"],
     },
   ])("adds the owner's entry to $description", ({ expected, lines }) => {
@@ -1187,9 +988,9 @@ describe("verifyRecord", () => {
       lines: ["# nothing yet"],
     },
     {
-      description: "an empty frontmatter",
-      expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
-      lines: [],
+      description: "a frontmatter of one blank line",
+      expected: ["", `verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
+      lines: [""],
     },
     {
       description: "an indented mapping with neither status nor generated",
@@ -1222,19 +1023,9 @@ describe("verifyRecord", () => {
       reason: "the frontmatter isn't a block mapping",
     },
     {
-      description: "a single value",
+      description: "a frontmatter of a single value",
       lines: ["just text"],
       reason: "the frontmatter isn't a block mapping",
-    },
-    {
-      description: "another person's entry with an anchor",
-      lines: ["status: stable", "verified: &theirs { by: human:someone }"],
-      reason: "`verified` has an anchor or a tag",
-    },
-    {
-      description: "another person's value with a tag",
-      lines: ["status: stable", "verified: !!str someone"],
-      reason: "`verified` has an anchor or a tag",
     },
     {
       description: "a status written as an alias",
@@ -1242,19 +1033,160 @@ describe("verifyRecord", () => {
       reason: "`status` is an alias",
     },
     {
+      description: "a quoted status key",
+      lines: ['"status": draft'],
+      reason: "`status` isn't a plain key at the start of its line",
+    },
+    {
+      description: "an anchored status",
+      lines: ["status: &s draft", "phase: *s"],
+      reason: "`status` has an anchor or a tag",
+    },
+    {
+      description: "a tagged status",
+      lines: ["status: !!str draft"],
+      reason: "`status` has an anchor or a tag",
+    },
+    {
+      description: "a folded block status",
+      lines: ["status: >-", "  draft"],
+      reason: "`status` spans several lines",
+    },
+    {
       description: "an explicit verified key with no value",
       lines: ["status: stable", "? verified"],
-      reason: "`verified` has no value to add to",
+      reason: "`verified` isn't a plain key at the start of its line",
     },
-  ])("refuses $description", ({ lines, reason }) => {
-    // Given - frontmatter whose layout has no safe place for the entry
+    {
+      description: "an explicit verified key with a value",
+      lines: ["status: stable", "? verified", ": ~"],
+      reason: "`verified` isn't a plain key at the start of its line",
+    },
+    {
+      description: "a verified field written as an alias",
+      lines: ["type: &v ~", "verified: *v"],
+      reason: "`verified` is an alias",
+    },
+    {
+      description: "an anchored empty verified field",
+      lines: ["verified: &v ~", "copy: *v"],
+      reason: "`verified` has an anchor or a tag",
+    },
+    {
+      description: "another person's entry with an anchor",
+      lines: ["verified: &theirs { by: human:someone }"],
+      reason: "`verified` has an anchor or a tag",
+    },
+    {
+      description: "another person's value with a tag",
+      lines: ["verified: !!str someone"],
+      reason: "`verified` has an anchor or a tag",
+    },
+    {
+      description: "an anchored list",
+      lines: ["verified: &l []"],
+      reason: "`verified` has an anchor or a tag",
+    },
+    {
+      description: "a verified field holding a single value",
+      lines: ["verified: someone"],
+      reason: "`verified` holds a single value, not an entry or a list",
+    },
+    {
+      description: "a single value in quotes",
+      lines: ['verified: "null"'],
+      reason: "`verified` holds a single value, not an entry or a list",
+    },
+    {
+      description: "a block scalar",
+      lines: ["verified: |", "  someone"],
+      reason: "`verified` holds a single value, not an entry or a list",
+    },
+    {
+      description: "a nested mapping without the owner",
+      lines: ["verified:", "  by: human:someone", "  at: 2026-09-01T00:00:00Z"],
+      reason: "`verified` is a nested mapping, not a list",
+    },
+    {
+      description: "an entry spread over two lines",
+      lines: [`verified: { by: ${VERIFIED_BY},`, `  at: ${OLD_AT} }`],
+      reason: "`verified` spans several lines",
+    },
+    {
+      description: "a flow sequence spread over several lines",
+      lines: [
+        "verified: [",
+        `    { by: ${VERIFIED_BY}, at: ${OLD_AT} },`,
+        "  ]",
+      ],
+      reason: "`verified` spans several lines",
+    },
+    {
+      description: "a list item spread over two lines",
+      lines: [
+        "verified:",
+        `  - { by: ${VERIFIED_BY},`,
+        `      at: ${OLD_AT} }`,
+      ],
+      reason: "a `verified` item spans several lines",
+    },
+    {
+      description: "a list item written as an alias",
+      lines: ["theirs: &e { by: human:someone }", "verified: [*e]"],
+      reason: "a `verified` item is an alias",
+    },
+    {
+      description: "an anchored list item",
+      lines: ["verified:", "  - &e { by: human:someone }", "copy: *e"],
+      reason: "a `verified` item has an anchor or a tag",
+    },
+    {
+      description: "a list item that is a single value",
+      lines: ["verified: [someone]"],
+      reason: "a `verified` item isn't a mapping",
+    },
+    {
+      description: "a nested list",
+      lines: ["verified: [[a]]"],
+      reason: "a `verified` item isn't a mapping",
+    },
+    {
+      description: "a by written as an alias",
+      lines: [`me: &m ${VERIFIED_BY}`, `verified: { by: *m, at: ${OLD_AT} }`],
+      reason: "`verified`'s `by` is an alias",
+    },
+    {
+      description: "an at that holds a list",
+      lines: [`verified: { by: ${VERIFIED_BY}, at: [x] }`],
+      reason: "`verified`'s `at` isn't a single value",
+    },
+    {
+      description: "an anchored at",
+      lines: [`verified: { by: ${VERIFIED_BY}, at: &t ${OLD_AT} }`],
+      reason: "`verified`'s `at` has an anchor or a tag",
+    },
+    {
+      description: "an at with no value",
+      lines: [`verified: { by: ${VERIFIED_BY}, at }`],
+      reason: "`verified`'s `at` has no value",
+    },
+    {
+      description: "a block scalar at",
+      lines: ["verified:", `  - by: ${VERIFIED_BY}`, "    at: |", "      x"],
+      reason: "a `verified` item's `at` spans several lines",
+    },
+  ])("refuses an unsupported layout: $description", ({ lines, reason }) => {
+    // Given - frontmatter outside the layouts the edits support
     const text = record(lines);
 
     // When - verifying it
     const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
-    // Then - a refusal naming why
-    expect(result).toStrictEqual({ isOk: false, reason });
+    // Then - a refusal naming the field, and asking for a hand edit
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `${reason}; ${HAND_EDIT_HINT}`,
+    });
   });
 
   test("replaces a verified field that's NULL with the owner's entry", () => {
@@ -1340,6 +1272,498 @@ describe("verifyRecord", () => {
       text: text.replace("2026-09-28T09:00:00Z", () => "x$&y"),
     });
   });
+  test.each([
+    { description: "LF", lineBreak: "\n" },
+    { description: "CRLF", lineBreak: "\r\n" },
+  ])(
+    "adds a verified field to an empty $description frontmatter",
+    ({ lineBreak }) => {
+      // Given - fences with nothing between them
+      const text = `---${lineBreak}---${lineBreak}# Title${lineBreak}`;
+
+      // When - verifying it
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+      // Then - the field on its own line, with the file's line break
+      expect(result).toStrictEqual({
+        isOk: true,
+        text: [
+          "---",
+          `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+          "---",
+          "# Title",
+          "",
+        ].join(lineBreak),
+      });
+    }
+  );
+
+  test.each([
+    {
+      description: "a list item",
+      expected: [
+        "  verified:",
+        "  - at:",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "  # a comment",
+        "  status: x",
+      ],
+      lines: ["  verified:", "  - at:", "  # a comment", "  status: x"],
+    },
+    {
+      description: "a field after generated",
+      expected: [
+        "  generated:",
+        "    at:",
+        `  verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "  # a comment",
+        "  title: x",
+      ],
+      lines: ["  generated:", "    at:", "  # a comment", "  title: x"],
+    },
+    {
+      description: "an at",
+      expected: [
+        "  verified:",
+        `    by: ${VERIFIED_BY}`,
+        "    note:",
+        `    at: ${AT}`,
+        "  title: x",
+      ],
+      lines: [
+        "  verified:",
+        `    by: ${VERIFIED_BY}`,
+        "    note:",
+        "  title: x",
+      ],
+    },
+  ])(
+    "adds $description before the next field when the last value is empty",
+    ({ expected, lines }) => {
+      // Given - an indented block whose last value is empty, so the parser's
+      // range for the block runs on to the next field
+      const text = record(lines);
+
+      // When - verifying it
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+      // Then - the insert lands after the empty value, not after the next field
+      expect(result).toStrictEqual({ isOk: true, text: record(expected) });
+    }
+  );
+
+  test.each([
+    { description: "an explicit key with no value", lines: ["? status"] },
+    { description: "a mapping", lines: ["status: { phase: draft }"] },
+    { description: "a list", lines: ["status: [draft]"] },
+    { description: "an anchor", lines: ["status: &s stable", "copy: *s"] },
+    { description: "a tag", lines: ["status: !!str stable"] },
+    { description: "an alias", lines: ["kind: &k stable", "status: *k"] },
+  ])(
+    "leaves a status that isn't a draft alone, even with $description",
+    ({ lines }) => {
+      // Given - a status the edits won't promote, in a layout they don't edit
+      const text = record([...lines, "title: T"]);
+
+      // When - verifying it
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+      // Then - only the sign-off added after status, the status as written
+      const after = lines.findIndex((line) => line.includes("status")) + 1;
+
+      expect(result).toStrictEqual({
+        isOk: true,
+        text: record([
+          ...lines.slice(0, after),
+          `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+          ...lines.slice(after),
+          "title: T",
+        ]),
+      });
+    }
+  );
+
+  test.each([
+    {
+      description: "a tag",
+      entry: "{ by: human:someone, at: !!str 2026-09-01T00:00:00Z }",
+    },
+    {
+      description: "an anchor",
+      entry: "{ by: human:someone, at: &t 2026-09-01T00:00:00Z }",
+    },
+    { description: "no value", entry: "{ by: human:someone, at }" },
+  ])("appends after another person's at with $description", ({ entry }) => {
+    // Given - another person's entry whose at the edits would refuse to write
+    const text = record(["status: stable", `verified: [${entry}]`]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - their entry kept as written, the signer's appended
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "status: stable",
+        `verified: [${entry}, { by: ${VERIFIED_BY}, at: ${AT} }]`,
+      ]),
+    });
+  });
+
+  test("adds verified after an explicit generated key with no value", () => {
+    // Given - a folded first field, then ? generated with no value
+    const lines = ["description: >-", "  folded", "? generated", "type: x"];
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the field after generated's key, not inside the folded value
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        ...lines.slice(0, 3),
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "type: x",
+      ]),
+    });
+  });
+
+  test.each([
+    { description: "a line feed", verifiedBy: "human:a\nb" },
+    { description: "a carriage return", verifiedBy: "human:a\rb" },
+  ])("refuses a signer whose name holds $description", ({ verifiedBy }) => {
+    // Given - a draft record
+    const text = record(["status: draft"]);
+
+    // When - a signer whose name spans lines verifies it
+    const result = verifyRecord({ at: AT, text, verifiedBy });
+
+    // Then - refused, since the entry would span lines too
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: "the signer's name holds a line break",
+    });
+  });
+
+  test("keeps a byte order mark before the opening fence", () => {
+    // Given - a record that opens with a byte order mark
+    const text = `\uFEFF${record(["status: draft"])}`;
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - edited, the mark kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: `\uFEFF${record([
+        "status: stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ])}`,
+    });
+  });
+
+  test("checks a key that is a collection without a warning", () => {
+    // Given - a collection used as a key, which plain objects can't hold
+    const warn = vi.spyOn(process, "emitWarning");
+    const text = record(["? [generated]", ": x", "status: draft"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - edited, and nothing printed past the tool's own output
+    expect(result).toMatchObject({ isOk: true });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test.each([
+    {
+      description: "an anchored first field",
+      expected: ["&k title: x", `verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
+      lines: ["&k title: x"],
+    },
+    {
+      description: "a tagged first field",
+      expected: [
+        "!!str title: x",
+        "status: stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ["!!str title: x", "status: draft"],
+    },
+    {
+      description: "an anchored first key in the signer's list item",
+      expected: [
+        "verified:",
+        "  - &k note: x",
+        `    by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
+      ],
+      lines: ["verified:", "  - &k note: x", `    by: ${VERIFIED_BY}`],
+    },
+    {
+      description: "a tagged first key in the signer's entry",
+      expected: [
+        "verified:",
+        "  !!str note: x",
+        `  by: ${VERIFIED_BY}`,
+        `  at: ${AT}`,
+      ],
+      lines: ["verified:", "  !!str note: x", `  by: ${VERIFIED_BY}`],
+    },
+  ])("indents a new line past $description", ({ expected, lines }) => {
+    // Given - a mapping whose first key carries an anchor or a tag
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the new line indented like the mapping's keys, not past the mark
+    expect(result).toStrictEqual({ isOk: true, text: record(expected) });
+  });
+
+  test("refuses a carriage return that doesn't end a line", () => {
+    // Given - a flow entry split by a lone CR, a line break in YAML 1.2
+    const text = record([
+      `verified: [{ by: ${VERIFIED_BY},\r at: ${OLD_AT} }]`,
+    ]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - refused, since tools read the CR differently
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `the frontmatter holds a carriage return that doesn't end a line; ${HAND_EDIT_HINT}`,
+    });
+  });
+
+  test("refuses an alias whose anchor isn't set before it", () => {
+    // Given - an alias naming no anchor, which no reader can resolve
+    const text = record(["status: draft", "copy: *nope"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - refused, naming the alias
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `the alias \`*nope\` names no anchor set before it; ${HAND_EDIT_HINT}`,
+    });
+  });
+
+  test("refuses two collection keys that mean the same", () => {
+    // Given - two equal collection keys, whose values a check can't tell apart
+    const text = record(["? [a]", ": 1", "? [a]", ": 2", "status: draft"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - refused, rather than checked ambiguously
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `the frontmatter has two keys that mean the same; ${HAND_EDIT_HINT}`,
+    });
+  });
+
+  test("checks a collection shared through an alias once", () => {
+    // Given - a list anchored once and repeated by an alias
+    const text = record(["tags: &t [a, b]", "copy: *t", "status: draft"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - edited, the shared list left as it was
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "tags: &t [a, b]",
+        "copy: *t",
+        "status: stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ]),
+    });
+  });
+
+  test.each([
+    {
+      description: "an alias key repeating another",
+      lines: ["&k a: 1", "*k : 2", "status: draft"],
+    },
+    {
+      description: "two spellings of a null key",
+      lines: ["? ~", ": a", "? null", ": b", "status: draft"],
+    },
+  ])("refuses $description as two keys that mean the same", ({ lines }) => {
+    // Given - two keys the parser accepts but YAML reads as one
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - refused before any edit
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `the frontmatter has two keys that mean the same; ${HAND_EDIT_HINT}`,
+    });
+  });
+
+  test("refuses keys whose aliases resolve past the parser's limit", () => {
+    // Given - a key that is an alias bomb
+    const tens = (item: string): string =>
+      `[${Array.from({ length: 10 }, () => item).join(", ")}]`;
+
+    const text = record([
+      `a: &a ${tens("x")}`,
+      `b: &b ${tens("*a")}`,
+      `c: &c ${tens("*b")}`,
+      "? *c",
+      ": 1",
+    ]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - refused rather than thrown
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `the frontmatter has too many aliases to check the edit; ${HAND_EDIT_HINT}`,
+    });
+  });
+
+  test.each([
+    { by: "null", description: "null" },
+    { by: "~", description: "a tilde" },
+  ])("adds an entry rather than renew a $description by", ({ by }) => {
+    // Given - an entry whose by is null, for a signer named like that null
+    const text = record([
+      "status: stable",
+      `verified: { by: ${by}, at: ${OLD_AT} }`,
+    ]);
+
+    // When - that signer verifies it
+    const result = verifyRecord({ at: AT, text, verifiedBy: by });
+
+    // Then - a new, quoted entry, since a null by names nobody
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "status: stable",
+        "verified:",
+        `  - { by: ${by}, at: ${OLD_AT} }`,
+        `  - { by: "${by}", at: ${AT} }`,
+      ]),
+    });
+  });
+
+  test("keeps a byte order mark after the opening fence", () => {
+    // Given - a byte order mark at the start of the frontmatter
+    const text = record(["\uFEFFstatus: draft"]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - edited, the mark kept where it was
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "\uFEFFstatus: stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ]),
+    });
+  });
+
+  test("keeps mixed line endings as they were", () => {
+    // Given - a record whose lines end in CRLF and LF, mixed
+    const text = "---\r\nstatus: draft\nverified: ~\r\n---\nbody\r\n";
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - only the values changed, every line ending kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: `---\r\nstatus: stable\nverified: { by: ${VERIFIED_BY}, at: ${AT} }\r\n---\nbody\r\n`,
+    });
+  });
+
+  test.each([
+    {
+      description: "a new field",
+      expected: [
+        "status: stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "type: x",
+      ],
+      lines: ["status: draft", "type: x"],
+    },
+    {
+      description: "a new list item",
+      expected: [
+        "verified:",
+        "  - { by: human:someone }",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "type: x",
+      ],
+      lines: ["verified:", "  - { by: human:someone }", "type: x"],
+    },
+    {
+      description: "a new at",
+      expected: ["verified:", `  by: ${VERIFIED_BY}`, `  at: ${AT}`, "type: x"],
+      lines: ["verified:", `  by: ${VERIFIED_BY}`, "type: x"],
+    },
+    {
+      description: "a list made from another person's entry",
+      expected: [
+        "verified:",
+        "  - { by: human:someone }",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "type: x",
+      ],
+      lines: ["verified: { by: human:someone }", "type: x"],
+    },
+  ])("ends $description with CRLF in a CRLF record", ({ expected, lines }) => {
+    // Given - a record with CRLF line breaks
+    const crlf = (frontmatter: string[]): string =>
+      record(frontmatter).replaceAll("\n", "\r\n");
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text: crlf(lines) });
+
+    // Then - every new line ends in CRLF too
+    expect(result).toStrictEqual({ isOk: true, text: crlf(expected) });
+  });
+
+  test.each([
+    {
+      description: "a fence with trailing spaces",
+      text: "--- \nstatus: draft\n---\n",
+    },
+  ])("finds no frontmatter after $description", ({ text }) => {
+    // When - verifying a record whose first line isn't exactly a fence
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - no frontmatter found, rather than a guess
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: "no frontmatter block",
+    });
+  });
+
+  test("closes the frontmatter at a CRLF fence in an LF record", () => {
+    // Given - LF lines, but a closing fence that ends in CRLF
+    const text = "---\nstatus: draft\n---\r\nbody\n";
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the fence found, and its line break kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: `---\nstatus: stable\nverified: { by: ${VERIFIED_BY}, at: ${AT} }\n---\r\nbody\n`,
+    });
+  });
 });
 
 describe("checkMeaning", () => {
@@ -1367,6 +1791,35 @@ describe("checkMeaning", () => {
     expect(problem).toBe(
       "the edit would change more than the status and the sign-off"
     );
+  });
+
+  test("tells a null from an empty string", () => {
+    // Given - a null, and an edit that made it the empty string
+    const doc = parseDocument("a:\nstatus: stable", { schema: "failsafe" });
+    const editedDoc = parseDocument(
+      `a: ''\nstatus: stable\nverified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      { schema: "failsafe" }
+    );
+
+    // When - checking the edit's meaning
+    const problem = checkMeaning({ ...VERIFY_OPTIONS, doc, editedDoc });
+
+    // Then - the difference named, though failsafe reads both as ""
+    expect(problem).toBe(
+      "the edit would change more than the status and the sign-off"
+    );
+  });
+
+  test("names a result that isn't valid YAML", () => {
+    // Given - a draft, and an edited version that doesn't parse
+    const doc = parseDocument("status: draft", { schema: "failsafe" });
+    const editedDoc = parseDocument("status: [stable", { schema: "failsafe" });
+
+    // When - checking the edit's meaning
+    const problem = checkMeaning({ ...VERIFY_OPTIONS, doc, editedDoc });
+
+    // Then - the broken YAML named, before any comparison
+    expect(problem).toBe("the edit would leave the frontmatter invalid YAML");
   });
 });
 
@@ -1637,6 +2090,75 @@ describe("readRecordSummary", () => {
     );
   });
 
+  test("reads a quoted null at as the text it is", () => {
+    // Given - the owner's entry whose at is the quoted string "null"
+    const text = record([
+      "status: stable",
+      `verified: { by: ${VERIFIED_BY}, at: "null" }`,
+    ]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - a timestamp of "null", the same rule the edits follow
+    expect(summary?.verifiedAt).toBe("null");
+  });
+
+  test.each([
+    {
+      description: "the signer's by",
+      lines: [`me: &m ${VERIFIED_BY}`, `verified: { by: *m, at: ${AT} }`],
+    },
+    {
+      description: "the signer's at",
+      lines: [`when: &t ${AT}`, `verified: { by: ${VERIFIED_BY}, at: *t }`],
+    },
+    {
+      description: "the signer's entry",
+      lines: [`mine: &e { by: ${VERIFIED_BY}, at: ${AT} }`, "verified: [*e]"],
+    },
+    {
+      description: "the verified field",
+      lines: [`mine: &v { by: ${VERIFIED_BY}, at: ${AT} }`, "verified: *v"],
+    },
+  ])("reads the sign-off through an alias for $description", ({ lines }) => {
+    // Given - the owner's sign-off reached through an alias
+    const text = record(["status: stable", ...lines]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - the sign-off found, as the YAML means it
+    expect(summary?.verifiedAt).toBe(AT);
+  });
+
+  test("reads generated, status, title, and type through aliases", () => {
+    // Given - every read field written as an alias
+    const text = record([
+      "defs:",
+      "  - &g { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
+      "  - &s draft",
+      "  - &t What every export promises",
+      "  - &k Decision",
+      "generated: *g",
+      "status: *s",
+      "title: *t",
+      "type: *k",
+    ]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - each read as what its anchor names
+    expect(summary).toStrictEqual({
+      generatedAt: "2026-10-01T15:00:00Z",
+      status: "draft",
+      title: "What every export promises",
+      type: "Decision",
+      verifiedAt: undefined,
+    });
+  });
+
   test("reads the owner's block-style timestamp, not a nested child's", () => {
     // Given - the owner's block entry whose only at: is under a child key
     const text = record([
@@ -1787,6 +2309,36 @@ describe("getRecordState", () => {
       expected: "verified",
       generatedAt: undefined,
       verifiedAt: "2026-10-02T15:00:00Z",
+    },
+    {
+      description: "generated at an unreadable time",
+      expected: "verified",
+      generatedAt: "null",
+      verifiedAt: "2026-10-02T15:00:00Z",
+    },
+    {
+      description: "generated at a date that doesn't exist",
+      expected: "verified",
+      generatedAt: "2026-11-31T10:00:00Z",
+      verifiedAt: "2026-10-02T15:00:00Z",
+    },
+    {
+      description: "generated later, with a space before the time",
+      expected: "changed",
+      generatedAt: "2026-11-13 00:00:00Z",
+      verifiedAt: "2026-11-12T00:00:00Z",
+    },
+    {
+      description: "verified later, with a space and no zone",
+      expected: "verified",
+      generatedAt: "2026-11-12T00:00:00Z",
+      verifiedAt: "2026-11-13 00:00:00",
+    },
+    {
+      description: "generated later, in ISO basic format",
+      expected: "changed",
+      generatedAt: "20261113T000000Z",
+      verifiedAt: "2026-11-12T00:00:00Z",
     },
   ])("$description is $expected", ({ expected, generatedAt, verifiedAt }) => {
     // When - judging a summary whose timestamps are $description

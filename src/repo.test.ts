@@ -316,6 +316,32 @@ describe("loadCandidates, given invalid YAML", () => {
   });
 });
 
+describe("loadCandidates, given a layout the edits refuse", () => {
+  test("reports the record when listing, not at write time", () => {
+    // Given - a record whose verified holds a single value, and a good one
+    repo.write(
+      "docs/decisions/a.md",
+      record(["type: Decision", "status: draft", "verified: someone"])
+    );
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+
+    // When - loading the bundle
+    const { candidates, problems } = loadCandidates({
+      bundleDirs: ["docs/decisions"],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - the good record listed, and the other reported with its reason
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/b.md",
+    ]);
+    expect(problems).toStrictEqual([
+      "docs/decisions/a.md: `verified` holds a single value, not an entry or a list; edit the record by hand",
+    ]);
+  });
+});
+
 describe("loadCandidates", () => {
   test("reports a record that can't be read instead of listing it", () => {
     // Given - two records, the first with no read permission

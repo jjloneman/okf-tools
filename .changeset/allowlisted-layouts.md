@@ -1,0 +1,5 @@
+---
+"@jjloneman/okf-tools": minor
+---
+
+Edit only the `status` and `verified` layouts `okf-verify` lists as supported, and refuse any other with a reason naming the field and asking for a hand edit: an anchor, alias, or tag on either, a value spread over several lines, a quoted or `?` key, or a `verified` holding a single value. Records keep their line endings and a byte order mark byte for byte, even when LF and CRLF are mixed; a new line is indented past an anchor or tag on a mapping's first key, and lands after a block whose last value is empty rather than after the next field; a quoted `"null"` timestamp reads as text, as the edits treat it; timestamps are compared with luxon, so ISO basic format and a space before the time read, and an impossible date counts as unreadable; an unreadable `generated.at` now counts as no generation time, so the record reads as verified rather than asking for a sign-off that could never clear it; a record the edits would refuse is reported when the records are listed, rather than stopping the others at write time; and a sign-off reached through an alias is read.

@@ -353,7 +353,7 @@ describe("run --yes", () => {
     expect(errors.join("\n")).toContain(expected);
   });
 
-  test("fails without touching anything when a record refuses the edit", async () => {
+  test("fails without touching anything when a named record refuses the edit", async () => {
     // Given - a record whose verified key is a nested mapping, which the editor refuses
     const refusing = record([
       "type: Decision",
@@ -370,9 +370,11 @@ describe("run --yes", () => {
       "docs/decisions/e.md",
     ]);
 
-    // Then - no file changed
+    // Then - the refusal named before any write, and no file changed
     expect(code).toBe(1);
-    expect(errors.join("\n")).toContain("No files changed.");
+    expect(errors.join("\n")).toContain(
+      "docs/decisions/e.md: `verified` is a nested mapping, not a list; edit the record by hand"
+    );
     expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
   });
 

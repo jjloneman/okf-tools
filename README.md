@@ -28,7 +28,16 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 - it adds or renews the signer's `verified` entry with the current UTC time;
 - it commits just those files, never pushing and never skipping hooks;
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
-- it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end.
+- it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end;
+- it edits only the layouts below, and refuses any other with a reason, for a hand edit.
+
+The layouts it edits:
+
+- `status`, when it's `draft`: one value on one line, quoted or not (any other status is left as written, in any form);
+- `verified`: absent; empty or null (`~`, `null`); one `{ by, at }` entry, inline, or a block mapping when it's the signer's; an inline list on one line; or a `-` list;
+- every entry's `by`, and the signer's own `at`: one value on one line, quoted or not, empty (`at:`), or absent (a bare key with no colon, `{ by: x, at }`, is refused).
+
+It refuses an anchor, alias, or tag on any of these, a value spread over several lines, a quoted or `?` key for `status` or `verified`, a `verified` holding a single value, and someone else's entry written as a block mapping when it's the whole `verified` value (in a `-` list it's fine). It also refuses, anywhere in the frontmatter, a carriage return that doesn't end a line, an alias whose anchor isn't set before it, and two keys that mean the same. A record it would refuse is reported when the records are listed, so it never stops the others from being written. Every other field may take any form YAML allows, and comments are fine anywhere.
 
 ## 📦 Install
 

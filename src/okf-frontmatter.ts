@@ -13,15 +13,19 @@
  */
 import type { Document, Node, Pair, Range, Scalar } from "yaml";
 
+import { DateTime } from "luxon";
 import { isDeepStrictEqual } from "node:util";
 import {
   isAlias,
+  isCollection,
   isMap,
   isNode,
+  isPair,
   isScalar,
   isSeq,
   parseDocument,
   stringify,
+  visit,
   YAMLMap,
   YAMLSeq,
 } from "yaml";
@@ -38,6 +42,12 @@ const ENTRY_KEYS = {
   at: "at",
   by: "by",
 } as const;
+
+/** The byte order mark some Windows editors write before the first line. */
+const BYTE_ORDER_MARK = "\uFEFF";
+
+/** A Windows line break, which records may use for some lines or all. */
+const CRLF = "\r\n";
 
 /** The line that opens and closes a frontmatter block. */
 const FENCE = "---";
@@ -56,8 +66,30 @@ const FRONTMATTER_KEYS = {
   verified: "verified",
 } as const;
 
+/** What a refusal of an unsupported layout tells the person to do instead. */
+const HAND_EDIT_HINT = "edit the record by hand";
+
+/** A Unix line break, which also ends each line of a CRLF record. */
+const LF = "\n";
+
 /** How far a list written under `verified` is indented past its key. */
 const LIST_INDENT = "  ";
+
+/**
+ * What a null reads as in the meaning check, so it differs from an empty
+ * string, which the failsafe schema would otherwise make it.
+ */
+const NULL_MEANING = Symbol("null");
+
+/** Why a record whose aliases resolve past the parser's limit is refused. */
+const TOO_MANY_ALIASES =
+  "the frontmatter has too many aliases to check the edit";
+
+/**
+ * The timestamp `findEditProblem` plans with; no refusal depends on it, since
+ * a timestamp is always written the same way.
+ */
+const LISTING_AT = "1970-01-01T00:00:00Z";
 
 /** How YAML spells null, other than leaving a value empty. */
 const NULL_SPELLINGS: ReadonlySet<string> = new Set([
@@ -92,6 +124,12 @@ export type CheckMeaningParams = {
    */
   editedDoc: Frontmatter;
 } & PlanEntryParams;
+
+/** What `findEditProblem` needs: the record, and who would sign it. */
+export type FindEditProblemParams = Pick<
+  VerifyRecordParams,
+  "text" | "verifiedBy"
+>;
 
 /** What `readRecordSummary` needs: the record, and whose sign-off counts. */
 export type ReadRecordSummaryParams = Pick<
@@ -185,7 +223,7 @@ export type RecordVerification =
       text: string;
     };
 
-/** An ISO 8601 timestamp as a record writes it, such as `2026-10-02T13:30:00Z`. */
+/** An ISO 8601 timestamp as a record writes it: `2026-10-02T13:30:00Z`. */
 export type Timestamp = string;
 
 /** What `verifyRecord` needs: the record, who signs it, and when. */
@@ -252,12 +290,61 @@ type ConvertToListParams = {
   keyStart: number;
 
   /**
-   * The `verified` value, which isn't a list.
+   * Someone else's one-line entry, the `verified` value.
    *
    * @example `doc.get("verified", true)`
    */
-  node: Placed<Node>;
+  node: Placed<YAMLMap>;
 } & EntryEditParams;
+
+/** The frontmatter's `status` and `verified`, in a layout the edits support. */
+type EditableLayout = {
+  /**
+   * The top-level mapping, or `undefined` for frontmatter of only comments or
+   * nothing.
+   *
+   * @example `doc.contents`
+   */
+  map: Placed<YAMLMap> | undefined;
+
+  /**
+   * The `status` value, when the record has one.
+   *
+   * @example `doc.get("status", true)`
+   */
+  status: Placed<Scalar> | undefined;
+
+  /**
+   * The `verified` field's layout.
+   *
+   * @example `{ kind: "absent" }`
+   */
+  verified: VerifiedLayout;
+};
+
+/** One `verified` entry in an editable layout, with its `by` and `at`. */
+type Entry = {
+  /**
+   * The entry's `at`, or `undefined` when it has none.
+   *
+   * @example `entry.get("at", true)`
+   */
+  at: Placed<Scalar> | undefined;
+
+  /**
+   * The entry's `by`, or `undefined` when it has none.
+   *
+   * @example `entry.get("by", true)`
+   */
+  by: Placed<Scalar> | undefined;
+
+  /**
+   * The entry's mapping, flow or block.
+   *
+   * @example `doc.get("verified", true)`
+   */
+  node: Placed<YAMLMap>;
+};
 
 /** What an edit that writes the signer's new entry needs. */
 type EntryEditParams = {
@@ -268,6 +355,37 @@ type EntryEditParams = {
    */
   entry: string;
 } & TextParams;
+
+/** A key of a `verified` or `generated` entry. */
+type EntryKey = (typeof ENTRY_KEYS)[keyof typeof ENTRY_KEYS];
+
+/** What a layout check on one node needs: the node, its name, the text. */
+type FieldNodeParams = {
+  /**
+   * The field as a refusal names it.
+   *
+   * @example "`verified`"
+   */
+  field: string;
+
+  /**
+   * The node to check, which may be missing.
+   *
+   * @example `doc.get("status", true)`
+   */
+  node: unknown;
+} & TextParams;
+
+/** What a check on a top-level key needs: the pair, its name, the text. */
+type FieldPairParams = {
+  /**
+   * The pair whose key is checked.
+   *
+   * @example `findPair({ key: "status", map })`
+   */
+  pair: KeyedPair;
+} & Pick<FieldNodeParams, "field"> &
+  TextParams;
 
 /** What `findOwnEntry` needs: the parsed frontmatter, and whose entry. */
 type FindOwnEntryParams = {
@@ -286,7 +404,7 @@ type FindPairParams = {
    *
    * @example "status"
    */
-  key: FrontmatterKey;
+  key: EntryKey | FrontmatterKey;
 
   /**
    * The mapping to search.
@@ -302,26 +420,34 @@ type FormatEntryParams = Pick<VerifyRecordParams, "at" | "verifiedBy">;
 /** A record's frontmatter, parsed with every value as text. */
 type Frontmatter = Document.Parsed;
 
-/** A record's text split around its frontmatter. */
+/** Where a record's frontmatter sits in its text, and the frontmatter. */
 type FrontmatterBlock = {
   /**
-   * The line break the file uses, kept for every line written back.
+   * Where the frontmatter ends: the start of the closing fence's line.
+   *
+   * @example 24
+   */
+  end: number;
+
+  /**
+   * The opening fence's line break, for a line added to empty frontmatter.
    *
    * @example `"\n"`
    */
   lineBreak: string;
 
   /**
-   * Everything after the opening fence, including the closing one.
+   * Where the frontmatter starts: just past the opening fence's line break.
    *
-   * @example ["---", "", "# Title"]
+   * @example 4
    */
-  rest: string[];
+  start: number;
 
   /**
-   * The frontmatter without its `---` fences, its lines joined by line feeds.
+   * The frontmatter without its fences, line breaks as written, ending with
+   * the one before the closing fence unless it's empty.
    *
-   * @example `"type: Decision\nstatus: draft"`
+   * @example `"type: Decision\nstatus: draft\n"`
    */
   text: string;
 };
@@ -329,11 +455,94 @@ type FrontmatterBlock = {
 /** A frontmatter key this module reads or writes. */
 type FrontmatterKey = (typeof FRONTMATTER_KEYS)[keyof typeof FRONTMATTER_KEYS];
 
+/** What `isOneLine` needs: the node, and the text its range points into. */
+type IsOneLineParams = {
+  /**
+   * The parsed node.
+   *
+   * @example `doc.get("verified", true)`
+   */
+  node: Placed<Node>;
+} & TextParams;
+
+/** What `isSignersBy` needs: an entry's `by`, and the signer. */
+type IsSignersByParams = {
+  /**
+   * The entry's `by`, resolved, or anything else, which names nobody.
+   *
+   * @example `entry.get("by", true)`
+   */
+  by: unknown;
+} & Pick<VerifyRecordParams, "verifiedBy">;
+
 /** A mapping's pair whose key is a single value, with where it sits. */
 type KeyedPair = Pair<Placed<Scalar>>;
 
-/** The signer's `verified` entry: a mapping, and where it sits in the text. */
-type OwnEntry = Placed<YAMLMap>;
+/** A checked part of the layout, or why it isn't editable. */
+type LayoutPartResult<T> =
+  | {
+      /**
+       * Whether the part is editable; `false` here.
+       *
+       * @example false
+       */
+      isOk: false;
+
+      /**
+       * Why it isn't.
+       *
+       * @example "`status` is an alias"
+       */
+      reason: string;
+    }
+  | {
+      /**
+       * Whether the part is editable; `true` here.
+       *
+       * @example true
+       */
+      isOk: true;
+
+      /**
+       * The part, typed for the edits.
+       *
+       * @example `{ kind: "absent" }`
+       */
+      value: T;
+    };
+
+/** The editable layout, or why the frontmatter's isn't. */
+type LayoutResult =
+  | {
+      /**
+       * Whether the layout is editable; `false` here.
+       *
+       * @example false
+       */
+      isOk: false;
+
+      /**
+       * Why it isn't.
+       *
+       * @example "`verified` is an alias"
+       */
+      reason: string;
+    }
+  | {
+      /**
+       * Whether the layout is editable; `true` here.
+       *
+       * @example true
+       */
+      isOk: true;
+
+      /**
+       * The layout, typed for the edits.
+       *
+       * @example `{ map, status, verified: { kind: "absent" } }`
+       */
+      layout: EditableLayout;
+    };
 
 /** A parsed node, with where it sits in the text. */
 type Placed<T extends Node> = {
@@ -350,8 +559,23 @@ type Placed<T extends Node> = {
 type PlanEntryParams = Pick<FindOwnEntryParams, "doc"> &
   Pick<VerifyRecordParams, "at" | "verifiedBy">;
 
-/** What `planVerifiedEdit` needs: the parsed frontmatter, who, and when. */
-type PlanVerifiedEditParams = PlanEntryParams & TextParams;
+/** What `planVerifiedEdit` needs: the editable layout, who, and when. */
+type PlanVerifiedEditParams = {
+  /**
+   * The frontmatter's `status` and `verified`, checked editable.
+   *
+   * @example `readEditableLayout({ doc, text }).layout`
+   */
+  layout: EditableLayout;
+
+  /**
+   * The opening fence's line break, for a line added to empty frontmatter.
+   *
+   * @example `"\n"`
+   */
+  lineBreak: string;
+} & Pick<VerifyRecordParams, "at" | "verifiedBy"> &
+  TextParams;
 
 /** What a helper that reads a position in the frontmatter needs. */
 type PositionParams = {
@@ -362,6 +586,96 @@ type PositionParams = {
    */
   index: number;
 } & TextParams;
+
+/** What `readEditableLayout` needs: the parse, its text, and the signer. */
+type ReadEditableLayoutParams = {
+  /**
+   * The frontmatter, parsed.
+   *
+   * @example `parseFrontmatter(text)`
+   */
+  doc: Frontmatter;
+} & Pick<VerifyRecordParams, "verifiedBy"> &
+  TextParams;
+
+/** What `readEntryField` needs: the entry, which key, and what to call it. */
+type ReadEntryFieldParams = {
+  /**
+   * The key to check.
+   *
+   * @example "at"
+   */
+  key: EntryKey;
+
+  /**
+   * The entry's mapping.
+   *
+   * @example `doc.get("verified", true)`
+   */
+  map: YAMLMap;
+} & Pick<FieldNodeParams, "field"> &
+  TextParams;
+
+/** What `readEntry` needs: the entry, what to call it, the text, the signer. */
+type ReadEntryParams = {
+  /**
+   * The entry's mapping, already checked for an anchor, alias, or tag.
+   *
+   * @example `doc.get("verified", true)`
+   */
+  node: Placed<YAMLMap>;
+} & Pick<FieldNodeParams, "field"> &
+  Pick<VerifyRecordParams, "verifiedBy"> &
+  TextParams;
+
+/** What `readField` needs: the document, the mapping, and which key. */
+type ReadFieldParams = {
+  /**
+   * The key to read.
+   *
+   * @example "at"
+   */
+  key: EntryKey | FrontmatterKey;
+
+  /**
+   * The mapping, or an alias of one, or anything else, which reads as nothing.
+   *
+   * @example `doc.contents`
+   */
+  map: unknown;
+} & Pick<ResolveAliasParams, "doc">;
+
+/** What `readKeyMeaning` needs: the key, and the document it's in. */
+type ReadKeyMeaningParams = {
+  /**
+   * The key, which may be an alias or missing.
+   *
+   * @example `pair.key`
+   */
+  key: unknown;
+} & Pick<ResolveAliasParams, "doc">;
+
+/** What a top-level layout reader needs: the parse, its mapping, the signer. */
+type ReadLayoutPartParams = {
+  /**
+   * The top-level mapping.
+   *
+   * @example `doc.contents`
+   */
+  map: YAMLMap;
+} & Pick<ReadEditableLayoutParams, "doc" | "text" | "verifiedBy">;
+
+/** What `readVerifiedList` needs: the list, what to call it, and the signer. */
+type ReadVerifiedListParams = {
+  /**
+   * The `verified` list.
+   *
+   * @example `doc.get("verified", true)`
+   */
+  node: Placed<YAMLSeq>;
+} & Pick<FieldNodeParams, "field"> &
+  Pick<VerifyRecordParams, "verifiedBy"> &
+  TextParams;
 
 /** What `renewOwnEntry` needs: the entry, its text, and the new timestamp. */
 type RenewOwnEntryParams = {
@@ -375,10 +689,27 @@ type RenewOwnEntryParams = {
   /**
    * The signer's entry.
    *
-   * @example `findOwnEntry({ doc, verifiedBy })`
+   * @example `readEntries(layout.verified)[0]`
    */
-  entry: OwnEntry;
+  entry: Entry;
 } & TextParams;
+
+/** What `resolveAlias` needs: the document holding the anchor, the node. */
+type ResolveAliasParams = {
+  /**
+   * The document to look the anchor up in.
+   *
+   * @example `parseFrontmatter("a: &x 1\nb: *x")`
+   */
+  doc: Document;
+
+  /**
+   * The node, which may be an alias.
+   *
+   * @example `doc.get("b", true)`
+   */
+  node: unknown;
+};
 
 /** One change to the frontmatter: a range of characters, and its new text. */
 type TextEdit = {
@@ -447,6 +778,76 @@ type TextParams = {
   text: string;
 };
 
+/** The `verified` field, in one of the layouts the edits support. */
+type VerifiedLayout =
+  | {
+      /**
+       * The layout: a null value, such as `~` or nothing.
+       *
+       * @example "null"
+       */
+      kind: "null";
+
+      /**
+       * The null value.
+       *
+       * @example `doc.get("verified", true)`
+       */
+      node: Placed<Scalar>;
+    }
+  | {
+      /**
+       * The layout: no `verified` field.
+       *
+       * @example "absent"
+       */
+      kind: "absent";
+    }
+  | {
+      /**
+       * The list's entries, in order.
+       *
+       * @example `[{ at, by, node }]`
+       */
+      entries: Entry[];
+
+      /**
+       * The layout: a list, flow on one line or block.
+       *
+       * @example "list"
+       */
+      kind: "list";
+
+      /**
+       * The list.
+       *
+       * @example `doc.get("verified", true)`
+       */
+      node: Placed<YAMLSeq>;
+    }
+  | {
+      /**
+       * The single entry, someone's or the signer's.
+       *
+       * @example `{ at, by, node }`
+       */
+      entry: Entry;
+
+      /**
+       * The `verified` key, so a list made from the entry is indented past it.
+       *
+       * @example `pair.key`
+       */
+      key: Placed<Scalar>;
+
+      /**
+       * The layout: one entry.
+       *
+       * @example "entry"
+       */
+      kind: "entry";
+    };
+
 /** What `writeScalar` needs: the scalar, its text, and the new value. */
 type WriteScalarParams = {
   /**
@@ -468,17 +869,19 @@ type WriteScalarParams = {
  * Check that the edited frontmatter means exactly what the edits intend: the
  * original, with a draft made stable and the signer's entry added or renewed.
  *
- * - The intended meaning is built on a copy of the original with the `yaml`
- *   package's own API, independently of the text edits, so a layout the edits
- *   get wrong is refused even when the result is still valid YAML.
+ * - Exported for its own tests: no edit `verifyRecord` plans today reaches the
+ *   mismatch, so it's checked directly.
  *
- * - Values are changed in place, so an alias of a changed value changes with
- *   it, as it does in the edited text.
- *
- * @returns why the meanings differ, or `undefined` when they match.
+ * @returns why the edit is refused, or `undefined` when it means what's meant.
  */
 export function checkMeaning(params: CheckMeaningParams): string | undefined {
   const { at, doc, editedDoc, verifiedBy } = params;
+
+  // A last check that no edit, whatever the layout, left the YAML broken.
+  if (describeYamlErrors(editedDoc) !== undefined) {
+    return "the edit would leave the frontmatter invalid YAML";
+  }
+
   const intended = doc.clone();
   const status = intended.get(FRONTMATTER_KEYS.status, true);
 
@@ -491,12 +894,29 @@ export function checkMeaning(params: CheckMeaningParams): string | undefined {
   // Resolving aliases throws past the parser's limit, which guards against
   // alias bombs, so such a record is refused rather than ending the run.
   try {
-    return isDeepStrictEqual(editedDoc.toJS(), intended.toJS())
+    return isDeepStrictEqual(
+      readMeaning(editedDoc.clone()),
+      readMeaning(intended)
+    )
       ? undefined
       : "the edit would change more than the status and the sign-off";
   } catch {
-    return "the frontmatter has too many aliases to check the edit";
+    return TOO_MANY_ALIASES;
   }
+}
+
+/**
+ * Say why a record can't be signed off by `verifiedBy` as it stands, so a
+ * listing can report it before anyone chooses it.
+ *
+ * @returns the refusal `verifyRecord` would give, or `undefined` when none.
+ */
+export function findEditProblem(
+  params: FindEditProblemParams
+): string | undefined {
+  const result = verifyRecord({ ...params, at: LISTING_AT });
+
+  return result.isOk ? undefined : result.reason;
 }
 
 /**
@@ -519,7 +939,8 @@ export function findFrontmatterProblem(text: string): string | undefined {
  * - `changed` means it was generated after `verifiedBy` last signed it off, or
  *   that the sign-off's timestamp can't be read.
  *
- * - `verified` means it was signed off and not touched since.
+ * - `verified` means it was signed off and not touched since, or that the
+ *   generation time can't be read, since no sign-off could ever follow it.
  */
 export function getRecordState(summary: RecordSummary): RecordState {
   if (summary.verifiedAt === undefined) {
@@ -530,15 +951,27 @@ export function getRecordState(summary: RecordSummary): RecordState {
     return "verified";
   }
 
-  const generatedTime = Date.parse(summary.generatedAt);
-  const verifiedTime = Date.parse(summary.verifiedAt);
+  const generatedTime = readTime(summary.generatedAt);
 
-  // Written so an unreadable timestamp (`NaN`) reads as "changed".
-  return generatedTime <= verifiedTime ? "verified" : "changed";
+  // An unreadable generation time can't be compared, and treating it as
+  // "changed" would ask for a sign-off no sign-off could satisfy.
+  if (!generatedTime.isValid) {
+    return "verified";
+  }
+
+  const verifiedTime = readTime(summary.verifiedAt);
+
+  // An unreadable sign-off time reads as "changed", so it's signed again.
+  return verifiedTime.isValid &&
+    generatedTime.toMillis() <= verifiedTime.toMillis()
+    ? "verified"
+    : "changed";
 }
 
 /**
  * Read the fields the verify flow shows and decides on.
+ *
+ * - Reads every layout YAML allows, aliases included, unlike the edits.
  *
  * @returns the summary, or `undefined` when the text has no frontmatter block.
  */
@@ -553,16 +986,33 @@ export function readRecordSummary(
   }
 
   const doc = parseFrontmatter(block.text);
+  const { contents } = doc;
   const ownEntry = findOwnEntry({ doc, verifiedBy });
+
+  const generated = readField({
+    doc,
+    key: FRONTMATTER_KEYS.generated,
+    map: contents,
+  });
+
+  const status = readString(
+    readField({ doc, key: FRONTMATTER_KEYS.status, map: contents })
+  );
 
   return {
     generatedAt: readTimestamp(
-      doc.getIn([FRONTMATTER_KEYS.generated, ENTRY_KEYS.at], true)
+      readField({ doc, key: ENTRY_KEYS.at, map: generated })
     ),
-    status: readStatus(doc),
-    title: readString(doc.get(FRONTMATTER_KEYS.title, true)),
-    type: readString(doc.get(FRONTMATTER_KEYS.type, true)),
-    verifiedAt: readTimestamp(ownEntry?.get(ENTRY_KEYS.at, true)),
+    status: status !== undefined && isRecordStatus(status) ? status : undefined,
+    title: readString(
+      readField({ doc, key: FRONTMATTER_KEYS.title, map: contents })
+    ),
+    type: readString(
+      readField({ doc, key: FRONTMATTER_KEYS.type, map: contents })
+    ),
+    verifiedAt: readTimestamp(
+      readField({ doc, key: ENTRY_KEYS.at, map: ownEntry })
+    ),
   };
 }
 
@@ -570,31 +1020,35 @@ export function readRecordSummary(
  * Mark a record verified: `draft` becomes `stable`, and `verifiedBy`'s entry
  * gets `at` as its timestamp.
  *
- * - An existing entry for `verifiedBy` has its `at` updated, in any form YAML
- *   allows, rather than gaining a second entry; one without an `at` gains one.
+ * - An existing entry for `verifiedBy` has its `at` updated rather than
+ *   gaining a second entry; one without an `at` gains one.
  *
- * - Frontmatter that isn't valid YAML, or isn't a block mapping, is refused,
- *   since where its fields end can't be known.
+ * - Only the layouts `readEditableLayout` allows are edited; any other, or
+ *   frontmatter that isn't valid YAML, is refused for a person to edit by hand.
  *
  * - A new entry lands after the `generated` field, or after `status` when there
  *   is no `generated`, or at the end; `generated` may be inline or a nested
  *   block.
  *
- * - A `status` other than `draft` is left alone, and an absent one counts as
- *   `stable`, as OKF defines it, so only the `verified` entry is added.
- *
- * - Every edit is planned against one parse and applied from the end of the
- *   text toward the start, so no edit moves another's position.
+ * - Everything outside the edited characters, line endings included, is kept
+ *   byte for byte.
  */
 export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   const { at, text: recordText, verifiedBy } = params;
+
+  // A name over several lines would be written as a multi-line entry, which
+  // the next sign-off would then refuse.
+  if (/[\n\r]/u.test(verifiedBy)) {
+    return { isOk: false, reason: "the signer's name holds a line break" };
+  }
+
   const block = splitFrontmatter(recordText);
 
   if (block === undefined) {
     return { isOk: false, reason: "no frontmatter block" };
   }
 
-  const { text } = block;
+  const { lineBreak, text } = block;
   const doc = parseFrontmatter(text);
   const inputProblem = describeYamlErrors(doc);
 
@@ -602,26 +1056,43 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
     return { isOk: false, reason: inputProblem };
   }
 
-  const status = doc.get(FRONTMATTER_KEYS.status, true);
-
-  // An alias can't be promoted alone, and its anchor may name other fields.
-  if (isAlias(status)) {
-    return { isOk: false, reason: "`status` is an alias" };
+  // YAML 1.2 ends a line at a lone carriage return, though the parser reads
+  // it as text, so other tools could read the edited record differently.
+  if (/\r(?!\n)/u.test(text)) {
+    return {
+      isOk: false,
+      reason: `the frontmatter holds a carriage return that doesn't end a line; ${HAND_EDIT_HINT}`,
+    };
   }
 
-  const verifiedEdit = planVerifiedEdit({ at, doc, text, verifiedBy });
+  const ambiguity = findAmbiguity(doc);
+
+  if (ambiguity !== undefined) {
+    return { isOk: false, reason: `${ambiguity}; ${HAND_EDIT_HINT}` };
+  }
+
+  const layout = readEditableLayout({ doc, text, verifiedBy });
+
+  if (!layout.isOk) {
+    return { isOk: false, reason: `${layout.reason}; ${HAND_EDIT_HINT}` };
+  }
+
+  const verifiedEdit = planVerifiedEdit({
+    at,
+    layout: layout.layout,
+    lineBreak,
+    text,
+    verifiedBy,
+  });
 
   if (!verifiedEdit.isOk) {
-    return { isOk: false, reason: verifiedEdit.reason };
+    return { isOk: false, reason: `${verifiedEdit.reason}; ${HAND_EDIT_HINT}` };
   }
 
   const edits = [verifiedEdit.edit];
+  const { status } = layout.layout;
 
-  if (
-    isScalar(status) &&
-    isPlaced(status) &&
-    status.value === RECORD_STATUSES.draft
-  ) {
+  if (status !== undefined) {
     edits.push(
       writeScalar({ node: status, text, value: RECORD_STATUSES.stable })
     );
@@ -630,24 +1101,19 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   const edited = applyEdits({ edits, text });
 
   const editedDoc = parseFrontmatter(edited);
-
-  // A last check that no edit, whatever the layout, left the YAML broken.
-  if (describeYamlErrors(editedDoc) !== undefined) {
-    return {
-      isOk: false,
-      reason: "the edit would leave the frontmatter invalid YAML",
-    };
-  }
-
   const meaningProblem = checkMeaning({ at, doc, editedDoc, verifiedBy });
 
   if (meaningProblem !== undefined) {
-    return { isOk: false, reason: meaningProblem };
+    return { isOk: false, reason: `${meaningProblem}; ${HAND_EDIT_HINT}` };
   }
 
   return {
     isOk: true,
-    text: [FENCE, ...edited.split("\n"), ...block.rest].join(block.lineBreak),
+    text: [
+      recordText.slice(0, block.start),
+      edited,
+      recordText.slice(block.end),
+    ].join(""),
   };
 }
 
@@ -676,14 +1142,10 @@ function addIntendedEntry(params: PlanEntryParams): void {
 
   if (isSeq(verified)) {
     verified.add(entry);
-  } else if (verified === undefined) {
-    doc.set(FRONTMATTER_KEYS.verified, entry);
-  } else if (isScalar(verified) && isNullScalar(verified)) {
-    // The edit keeps the null's anchor, so an alias of it reads the entry too.
-    if (verified.anchor !== undefined) {
-      entry.anchor = verified.anchor;
-    }
-
+  } else if (
+    verified === undefined ||
+    (isScalar(verified) && isNullScalar(verified))
+  ) {
     doc.set(FRONTMATTER_KEYS.verified, entry);
   } else {
     const list = new YAMLSeq();
@@ -693,22 +1155,15 @@ function addIntendedEntry(params: PlanEntryParams): void {
   }
 }
 
-/**
- * Add an `at` to the signer's entry, which has none.
- *
- * - In a flow mapping it goes right after the last key or value, so the
- *   spacing, any trailing comma, and any comment stay as written.
- *
- * - In a block mapping it goes on a line of its own after the entry's last,
- *   indented like the entry's first key.
- */
+/** Plan the edit that adds an `at` to the signer's entry, which has none. */
 function addTimestamp(params: RenewOwnEntryParams): TextEdit {
   const { at, entry, text } = params;
+  const { node } = entry;
   const field = `${ENTRY_KEYS.at}: ${at}`;
 
-  if (entry.flow === true) {
+  if (node.flow === true) {
     const insertAt = Math.max(
-      ...entry.items.flatMap(({ key, value }) => [
+      ...node.items.flatMap(({ key, value }) => [
         readNodeEnd(key),
         readNodeEnd(value),
       ])
@@ -717,18 +1172,20 @@ function addTimestamp(params: RenewOwnEntryParams): TextEdit {
     return { end: insertAt, start: insertAt, text: `, ${field}` };
   }
 
-  const insertAt = findLineEnd({ index: entry.range[1], text });
-  const indent = readIndent({ index: entry.range[0], text });
+  const insertAt = findLineEnd({ index: readNodeEnd(node), text });
+  const lineBreak = readLineBreak({ index: insertAt, text });
+  const indent = readIndent({ index: node.range[0], text });
 
-  return { end: insertAt, start: insertAt, text: `\n${indent}${field}` };
+  return {
+    end: insertAt,
+    start: insertAt,
+    text: `${lineBreak}${indent}${field}`,
+  };
 }
 
 /**
- * Add a `verified` field holding the signer's entry, on a line of its own.
- *
- * - It follows `generated`, or `status` when there is no `generated`, so the
- *   provenance fields stay together; with neither, it follows the mapping's
- *   last line, before any blank lines that end the frontmatter.
+ * Plan the edit that adds a `verified` field to a mapping that has none, after
+ * `generated`, else after `status`, else at the end.
  */
 function addVerifiedField(params: AddVerifiedFieldParams): TextEdit {
   const { entry, map, text } = params;
@@ -742,31 +1199,35 @@ function addVerifiedField(params: AddVerifiedFieldParams): TextEdit {
   const insertAt = findLineEnd({
     index:
       anchor === undefined
-        ? map.range[1]
-        : Math.max(anchor.key.range[1], readNodeEnd(anchor.value)),
+        ? readNodeEnd(map)
+        : Math.max(readNodeEnd(anchor.key), readNodeEnd(anchor.value)),
     text,
   });
 
-  return { end: insertAt, start: insertAt, text: `\n${indent}${field}` };
+  const lineBreak = readLineBreak({ index: insertAt, text });
+
+  return {
+    end: insertAt,
+    start: insertAt,
+    text: `${lineBreak}${indent}${field}`,
+  };
 }
 
-/**
- * Add the signer's entry to the end of the `verified` list.
- *
- * - A flow sequence gains it after its last item, wherever that sits, so a
- *   sequence spread over lines keeps its layout; an empty one, after `[`.
- *
- * - A block sequence gains a `- ` item after its last line, indented like its
- *   first item, so the list stays one list.
- */
+/** Plan the edit that appends the signer's entry to the `verified` list. */
 function appendToSequence(params: AppendToSequenceParams): TextEdit {
   const { entry, sequence, text } = params;
 
   if (sequence.flow === true) {
     if (sequence.items.length === 0) {
-      const insertAt = sequence.range[0] + 1;
+      const [open, close] = sequence.range;
+      const inside = text.slice(open + 1, close - 1);
 
-      return { end: insertAt, start: insertAt, text: entry };
+      // Spaces inside `[ ]` are kept on both sides of the entry.
+      return {
+        end: close - 1,
+        start: open + 1,
+        text: inside === "" ? entry : ` ${entry} `,
+      };
     }
 
     const insertAt = Math.max(...sequence.items.map(readNodeEnd));
@@ -774,17 +1235,43 @@ function appendToSequence(params: AppendToSequenceParams): TextEdit {
     return { end: insertAt, start: insertAt, text: `, ${entry}` };
   }
 
-  const insertAt = findLineEnd({ index: sequence.range[1], text });
+  const insertAt = findLineEnd({ index: readNodeEnd(sequence), text });
+  const lineBreak = readLineBreak({ index: insertAt, text });
   const indent = readIndent({ index: sequence.range[0], text });
 
-  return { end: insertAt, start: insertAt, text: `\n${indent}- ${entry}` };
+  return {
+    end: insertAt,
+    start: insertAt,
+    text: `${lineBreak}${indent}- ${entry}`,
+  };
 }
 
 /**
- * Apply edits planned against the same text.
- *
- * - They're applied from the end toward the start, so each one's positions
- *   still point at the characters it was planned against.
+ * Plan the edit that adds a `verified` field to frontmatter with no mapping,
+ * only comments or nothing at all.
+ */
+function appendVerifiedField(
+  params: EntryEditParams & Pick<PlanVerifiedEditParams, "lineBreak">
+): TextEdit {
+  const { entry, text } = params;
+  const lineBreak =
+    text === ""
+      ? params.lineBreak
+      : readLineBreak({
+          index: findLineEnd({ index: text.length, text }),
+          text,
+        });
+
+  return {
+    end: text.length,
+    start: text.length,
+    text: `${FRONTMATTER_KEYS.verified}: ${entry}${lineBreak}`,
+  };
+}
+
+/**
+ * Apply edits planned against one text, from the last to the first, so each
+ * edit's positions still hold when it's applied.
  */
 function applyEdits(params: ApplyEditsParams): string {
   const { edits, text } = params;
@@ -799,38 +1286,31 @@ function applyEdits(params: ApplyEditsParams): string {
 }
 
 /**
- * Turn another person's `verified` value into a list that also holds the
- * signer's entry.
- *
- * - A value on one line becomes the first item of a block list, and any
- *   comment after it stays on the `verified:` line.
- *
- * - A value spread over lines, such as a flow mapping, is wrapped in a flow
- *   sequence instead, since moving it into a block list would mean
- *   re-indenting its lines.
+ * Plan the edit that turns someone else's one-line entry into a block list of
+ * that entry and the signer's, keeping any trailing comment on the key's line.
  */
 function convertToList(params: ConvertToListParams): TextEdit {
   const { entry, keyStart, node, text } = params;
   const [start, end] = node.range;
   const value = text.slice(start, end);
-
-  if (value.includes("\n")) {
-    return { end, start, text: `[${value}, ${entry}]` };
-  }
-
   const keyEnd = readContentEnd({ index: start, text });
   const lineEnd = findLineEnd({ index: end, text });
+  const lineBreak = readLineBreak({ index: lineEnd, text });
   const comment = text.slice(end, lineEnd);
   const indent = `${readIndent({ index: keyStart, text })}${LIST_INDENT}`;
 
   return {
     end: lineEnd,
     start: keyEnd,
-    text: `${comment}\n${indent}- ${value}\n${indent}- ${entry}`,
+    text: [
+      comment,
+      `${lineBreak}${indent}- ${value}`,
+      `${lineBreak}${indent}- ${entry}`,
+    ].join(""),
   };
 }
 
-/** Build a new `verified` entry, `by` first. */
+/** Build the signer's new entry as a flow mapping of `by`, then `at`. */
 function createEntry(params: FormatEntryParams): YAMLMap {
   const { at, verifiedBy } = params;
   const entry = new YAMLMap();
@@ -843,7 +1323,43 @@ function createEntry(params: FormatEntryParams): YAMLMap {
   return entry;
 }
 
-/** Describe a parsed frontmatter's YAML errors, if it has any. */
+/**
+ * Say why a top-level key can't be edited around: it must be a plain key that
+ * opens its line, not a quoted key or one after `?`, an anchor, or a tag.
+ */
+function describeKeyProblem(params: FieldPairParams): string | undefined {
+  const { field, pair, text } = params;
+  const { key } = pair;
+  const lineStart = readLineStart({ index: key.range[0], text });
+  const beforeKey = text.slice(lineStart, key.range[0]);
+
+  return key.type === "PLAIN" && beforeKey.trim() === ""
+    ? undefined
+    : `${field} isn't a plain key at the start of its line`;
+}
+
+/**
+ * Say why a node the edits touch can't be edited safely: it's missing, an
+ * alias, or carries an anchor or a tag, any of which ties its meaning to
+ * another part of the document.
+ */
+function describeNodeProblem(params: FieldNodeParams): string | undefined {
+  const { field, node } = params;
+
+  if (!isNode(node)) {
+    return `${field} has no value`;
+  }
+
+  if (isAlias(node)) {
+    return `${field} is an alias`;
+  }
+
+  return node.anchor === undefined && node.tag === undefined
+    ? undefined
+    : `${field} has an anchor or a tag`;
+}
+
+/** Join the parser's errors into one reason, or `undefined` for none. */
 function describeYamlErrors(doc: Frontmatter): string | undefined {
   const messages = doc.errors.map(({ message }) => message);
 
@@ -853,45 +1369,71 @@ function describeYamlErrors(doc: Frontmatter): string | undefined {
 }
 
 /**
- * Find where the line a node ends on ends, past any trailing comment.
- *
- * - A block node's range can end at the next line's start, after the line
- *   break and any blank lines it owns, such as a `|+` scalar's; the break
- *   just before that position is the line end, so those lines stay with it.
+ * Say why a frontmatter's meaning is ambiguous before any edit: an alias
+ * whose anchor isn't set before it, or a mapping with two keys that mean the
+ * same, such as an alias key repeating another, or `~` beside `null`.
  */
-function findLineEnd(params: PositionParams): number {
-  const { index, text } = params;
+function findAmbiguity(doc: Document): string | undefined {
+  const unresolved = findUnresolvedAlias(doc);
 
-  if (text[index - 1] === "\n") {
-    return index - 1;
+  if (unresolved !== undefined) {
+    return `the alias \`*${unresolved}\` names no anchor set before it`;
   }
 
-  const lineEnd = text.indexOf("\n", index);
-
-  return lineEnd === -1 ? text.length : lineEnd;
+  try {
+    return hasEqualKeys(doc)
+      ? "the frontmatter has two keys that mean the same"
+      : undefined;
+  } catch {
+    return TOO_MANY_ALIASES;
+  }
 }
 
 /**
- * Find `verifiedBy`'s `verified` entry: the field itself, or an item of a
- * list, whose own `by` is `verifiedBy`.
+ * Find where the line holding `index` ends, before its `\n` or `\r\n`, so
+ * an insert there keeps the line's own line break after it.
  *
- * - Only the entry's own `by` counts, not one nested under a child key, and the
- *   actor is compared whole, so `human:jjloneman2` is no one's alias.
+ * - An index just past a line break belongs to the line that break ends,
+ *   since a node's range often ends there.
+ *
+ * - Frontmatter that isn't empty always ends with a line break, the one before
+ *   the closing fence, so a line end is always found.
  */
-function findOwnEntry(params: FindOwnEntryParams): OwnEntry | undefined {
-  const { doc, verifiedBy } = params;
-  const verified = doc.get(FRONTMATTER_KEYS.verified, true);
-  const entries: unknown[] = isSeq(verified) ? verified.items : [verified];
+function findLineEnd(params: PositionParams): number {
+  const { index, text } = params;
+  const lineFeed = text.indexOf("\n", index - 1);
 
-  return entries.find(
-    (entry): entry is OwnEntry =>
-      isMap(entry) &&
-      isPlaced(entry) &&
-      readString(entry.get(ENTRY_KEYS.by, true)) === verifiedBy
-  );
+  return text[lineFeed - 1] === "\r" ? lineFeed - 1 : lineFeed;
 }
 
-/** Find a mapping's pair for a key, however the key is quoted. */
+/**
+ * Find `verifiedBy`'s entry, resolving aliases, for the reads and the meaning
+ * check; the edits find it in the editable layout instead.
+ */
+function findOwnEntry(params: FindOwnEntryParams): undefined | YAMLMap {
+  const { doc, verifiedBy } = params;
+
+  const verified = readField({
+    doc,
+    key: FRONTMATTER_KEYS.verified,
+    map: doc.contents,
+  });
+
+  const entries: unknown[] = isSeq(verified) ? verified.items : [verified];
+
+  return entries
+    .map((entry) => resolveAlias({ doc, node: entry }))
+    .find(
+      (entry): entry is YAMLMap =>
+        isMap(entry) &&
+        isSignersBy({
+          by: readField({ doc, key: ENTRY_KEYS.by, map: entry }),
+          verifiedBy,
+        })
+    );
+}
+
+/** Find a mapping's pair whose key is the given single value. */
 function findPair(params: FindPairParams): KeyedPair | undefined {
   const { key, map } = params;
 
@@ -901,17 +1443,56 @@ function findPair(params: FindPairParams): KeyedPair | undefined {
   );
 }
 
-/**
- * Write the signer's new entry as a one-line flow mapping.
- *
- * - The `yaml` package writes it, so a value holding YAML syntax, such as
- *   `, ` or ` #`, is quoted rather than read back as other keys or a comment.
- */
+/** Find an alias whose anchor isn't set before it, which can't be read. */
+function findUnresolvedAlias(doc: Document): string | undefined {
+  let source: string | undefined;
+
+  visit(doc, {
+    Alias(_key, node) {
+      if (node.resolve(doc) === undefined) {
+        source = node.source;
+
+        return visit.BREAK;
+      }
+
+      return undefined;
+    },
+  });
+
+  return source;
+}
+
+/** Write the signer's new entry as YAML, quoting `verifiedBy` if it must be. */
 function formatEntry(params: FormatEntryParams): string {
   return stringify(createEntry(params), { lineWidth: 0 }).trimEnd();
 }
 
-/** Whether a scalar is YAML's null: empty, or a null spelling, unquoted. */
+/** Whether any mapping in a document has two keys that mean the same. */
+function hasEqualKeys(doc: Document): boolean {
+  let isFound = false;
+
+  visit(doc, {
+    Map(_key, map) {
+      const keys = map.items.map(({ key }) => readKeyMeaning({ doc, key }));
+
+      isFound = keys.some((key, index) =>
+        keys.slice(index + 1).some((other) => isDeepStrictEqual(key, other))
+      );
+
+      return isFound ? visit.BREAK : undefined;
+    },
+  });
+
+  return isFound;
+}
+
+/**
+ * Whether a scalar is YAML's null: `~`, `null`, `Null`, `NULL`, or nothing,
+ * unquoted, as in YAML 1.2's core schema.
+ *
+ * - The one rule for both the reads and the edits; a quoted `"null"` is the
+ *   string `null`.
+ */
 function isNullScalar(node: Scalar): boolean {
   const value = readString(node);
 
@@ -922,45 +1503,137 @@ function isNullScalar(node: Scalar): boolean {
   );
 }
 
-/** Whether a parsed node knows where it sits in the text. */
+/** Whether a node's content, not its trailing comment, is on one line. */
+function isOneLine(params: IsOneLineParams): boolean {
+  const { node, text } = params;
+  const [start, end] = node.range;
+
+  return !text.slice(start, end).includes("\n");
+}
+
+/** Whether a parsed node carries its position in the text. */
 function isPlaced<T extends Node>(node: T): node is Placed<T> {
   return Array.isArray(node.range);
 }
 
-/** Whether a value is one of the statuses OKF defines. */
+/** Whether a value is a status OKF defines. */
 function isRecordStatus(value: string): value is RecordStatus {
   return RECORD_STATUS_VALUES.has(value);
 }
 
-/** Parse frontmatter text with every value read as text. */
+/**
+ * Whether an entry's `by` names the signer; a null `by` names nobody, even a
+ * signer whose name is spelled `null`.
+ */
+function isSignersBy(params: IsSignersByParams): boolean {
+  const { by, verifiedBy } = params;
+
+  return isScalar(by) && !isNullScalar(by) && readString(by) === verifiedBy;
+}
+
+/** Parse frontmatter with every value as text, positions included. */
 function parseFrontmatter(text: string): Frontmatter {
   return parseDocument(text, { schema: "failsafe" });
 }
 
-/**
- * Plan the edit that adds or renews `verifiedBy`'s `verified` entry.
- *
- * @returns the edit, or why the `verified` field can't be edited safely.
- */
+/** Plan the edit that adds or renews the signer's `verified` entry. */
 function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
-  const { at, doc, text, verifiedBy } = params;
-  const ownEntry = findOwnEntry({ doc, verifiedBy });
+  const { at, layout, lineBreak, text, verifiedBy } = params;
+  const { map, verified } = layout;
+  const ownEntry = readEntries(verified).find(
+    ({ by }) => by !== undefined && isSignersBy({ by, verifiedBy })
+  );
 
   if (ownEntry !== undefined) {
-    return renewOwnEntry({ at, entry: ownEntry, text });
+    return { edit: renewOwnEntry({ at, entry: ownEntry, text }), isOk: true };
   }
 
   const entry = formatEntry({ at, verifiedBy });
+
+  switch (verified.kind) {
+    case "absent": {
+      return {
+        edit:
+          map === undefined
+            ? appendVerifiedField({ entry, lineBreak, text })
+            : addVerifiedField({ entry, map, text }),
+        isOk: true,
+      };
+    }
+
+    case "entry": {
+      const { node } = verified.entry;
+
+      // Re-indenting a block mapping into a list item is a rewrite, not an
+      // edit, so it's left for a person.
+      if (node.flow !== true) {
+        return {
+          isOk: false,
+          reason: "`verified` is a nested mapping, not a list",
+        };
+      }
+
+      return {
+        edit: convertToList({
+          entry,
+          keyStart: verified.key.range[0],
+          node,
+          text,
+        }),
+        isOk: true,
+      };
+    }
+
+    case "list": {
+      return {
+        edit: appendToSequence({ entry, sequence: verified.node, text }),
+        isOk: true,
+      };
+    }
+
+    case "null": {
+      return {
+        edit: writeScalar({ node: verified.node, text, value: entry }),
+        isOk: true,
+      };
+    }
+  }
+}
+
+/** Find how far a position sits from the start of its line. */
+function readColumn(params: PositionParams): number {
+  return params.index - readLineStart(params);
+}
+
+/** Find where the content before a position ends, skipping whitespace back. */
+function readContentEnd(params: PositionParams): number {
+  const { index, text } = params;
+
+  return text.slice(0, index).trimEnd().length;
+}
+
+/**
+ * Check that the frontmatter's `status` and `verified` are in a layout the
+ * edits support, and return them typed for the edits.
+ *
+ * - An allowlist: each node must have an allowed shape, so a layout nobody
+ *   planned for is refused rather than edited.
+ *
+ * - Fields other than `status` and `verified`, and keys inside an entry other
+ *   than `by` and `at`, may take any form.
+ */
+function readEditableLayout(params: ReadEditableLayoutParams): LayoutResult {
+  const { doc, text, verifiedBy } = params;
   const { contents } = doc;
 
-  // Frontmatter of only comments, or nothing, has no mapping to add to.
   if (contents === null) {
-    const separator = text === "" ? "" : "\n";
-    const field = `${separator}${FRONTMATTER_KEYS.verified}: ${entry}`;
-
     return {
-      edit: { end: text.length, start: text.length, text: field },
       isOk: true,
+      layout: {
+        map: undefined,
+        status: undefined,
+        verified: { kind: "absent" },
+      },
     };
   }
 
@@ -968,160 +1641,431 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
     return { isOk: false, reason: "the frontmatter isn't a block mapping" };
   }
 
-  const pair = findPair({ key: FRONTMATTER_KEYS.verified, map: contents });
+  const status = readStatusLayout({ doc, map: contents, text, verifiedBy });
 
-  if (pair === undefined) {
-    return {
-      edit: addVerifiedField({ entry, map: contents, text }),
-      isOk: true,
-    };
+  if (!status.isOk) {
+    return status;
   }
 
-  const { key, value } = pair;
+  const verified = readVerifiedLayout({
+    doc,
+    map: contents,
+    text,
+    verifiedBy,
+  });
 
-  if (!isNode(value) || !isPlaced(value)) {
-    return { isOk: false, reason: "`verified` has no value to add to" };
-  }
-
-  if (isScalar(value) && isNullScalar(value)) {
-    return {
-      edit: writeScalar({ node: value, text, value: entry }),
-      isOk: true,
-    };
-  }
-
-  if (isSeq(value)) {
-    return {
-      edit: appendToSequence({ entry, sequence: value, text }),
-      isOk: true,
-    };
-  }
-
-  if (isMap(value) && value.flow !== true) {
-    return {
-      isOk: false,
-      reason: "`verified` is a nested mapping, not a list",
-    };
-  }
-
-  // Its anchor or tag would stay on the `verified:` line and name the list.
-  if (value.anchor !== undefined || value.tag !== undefined) {
-    return { isOk: false, reason: "`verified` has an anchor or a tag" };
+  if (!verified.isOk) {
+    return verified;
   }
 
   return {
-    edit: convertToList({
-      entry,
-      keyStart: key.range[0],
-      node: value,
-      text,
-    }),
     isOk: true,
+    layout: {
+      map: contents,
+      status: status.value,
+      verified: verified.value,
+    },
   };
 }
 
-/** Read the column a position sits at, counted from its line's start. */
-function readColumn(params: PositionParams): number {
-  const { index, text } = params;
+/** List the entries of an editable `verified` field, in order. */
+function readEntries(verified: VerifiedLayout): Entry[] {
+  switch (verified.kind) {
+    case "entry": {
+      return [verified.entry];
+    }
 
-  return index - (text.lastIndexOf("\n", index - 1) + 1);
+    case "list": {
+      return verified.entries;
+    }
+
+    default: {
+      return [];
+    }
+  }
 }
 
-/** Read where the text before a position ends, ignoring whitespace. */
-function readContentEnd(params: PositionParams): number {
-  const { index, text } = params;
+/**
+ * Check that a `verified` entry is in an editable layout, and read its `by`,
+ * and its `at` when it's the signer's.
+ *
+ * - Every entry's `by` is checked, since it decides whose entry is whose; only
+ *   the signer's `at` is, since no other entry's is edited.
+ */
+function readEntry(params: ReadEntryParams): LayoutPartResult<Entry> {
+  const { field, node, text, verifiedBy } = params;
 
-  return text.slice(0, index).trimEnd().length;
+  if (node.flow === true && !isOneLine({ node, text })) {
+    return { isOk: false, reason: spansLines(field) };
+  }
+
+  const by = readEntryField({ field, key: ENTRY_KEYS.by, map: node, text });
+
+  if (!by.isOk) {
+    return by;
+  }
+
+  if (!isSignersBy({ by: by.value, verifiedBy })) {
+    return { isOk: true, value: { at: undefined, by: by.value, node } };
+  }
+
+  const at = readEntryField({ field, key: ENTRY_KEYS.at, map: node, text });
+
+  if (!at.isOk) {
+    return at;
+  }
+
+  return { isOk: true, value: { at: at.value, by: by.value, node } };
 }
 
-/** Read the spaces that indent a position, as text to write before a line. */
+/** Check one of an entry's `by` and `at`, which may be absent. */
+function readEntryField(
+  params: ReadEntryFieldParams
+): LayoutPartResult<Placed<Scalar> | undefined> {
+  const { field, key, map, text } = params;
+  const pair = findPair({ key, map });
+
+  if (pair === undefined) {
+    return { isOk: true, value: undefined };
+  }
+
+  return readScalar({ field: `${field}'s \`${key}\``, node: pair.value, text });
+}
+
+/**
+ * Read a key's value from a mapping, resolving an alias for either, so the
+ * reads see what the YAML means.
+ */
+function readField(params: ReadFieldParams): unknown {
+  const { doc, key, map } = params;
+  const resolved = resolveAlias({ doc, node: map });
+
+  return isMap(resolved)
+    ? resolveAlias({ doc, node: resolved.get(key, true) })
+    : undefined;
+}
+
+/** Find how far a position's line is indented, as spaces. */
 function readIndent(params: PositionParams): string {
-  return " ".repeat(readColumn(params));
+  const { index, text } = params;
+  const beforeNode = text.slice(readLineStart(params), index);
+
+  // The parser starts a mapping after its first key's anchor or tag, which
+  // the new line's indent must not count.
+  const properties = /(?:[!&]\S*[\t ]+)+$/u.exec(beforeNode)?.[0] ?? "";
+
+  return " ".repeat(readColumn(params) - properties.length);
 }
 
-/** Read where a node's text ends, or `0` for a missing node. */
+/**
+ * Read what a key means, with its alias resolved and a null or missing key
+ * read as null, so two spellings of one key compare equal.
+ */
+function readKeyMeaning(params: ReadKeyMeaningParams): unknown {
+  const resolved = resolveAlias({ doc: params.doc, node: params.key });
+
+  if (!isNode(resolved) || (isScalar(resolved) && isNullScalar(resolved))) {
+    return NULL_MEANING;
+  }
+
+  return resolved.toJS(params.doc, { mapAsMap: true });
+}
+
+/** Read the line break that starts at a line end `findLineEnd` found. */
+function readLineBreak(params: PositionParams): string {
+  const { index, text } = params;
+
+  return text.startsWith(CRLF, index) ? CRLF : LF;
+}
+
+/** Find where the line holding a position starts. */
+function readLineStart(params: PositionParams): number {
+  const { index, text } = params;
+
+  return text.lastIndexOf("\n", index - 1) + 1;
+}
+
+/**
+ * Read what a throwaway copy of a document means, for the meaning check:
+ * nulls kept apart from empty text, and collection keys kept as keys.
+ */
+function readMeaning(doc: Document): unknown {
+  // Marks the document in place, so pass a copy that can be thrown away.
+  visit(doc, {
+    Scalar(_key, node) {
+      if (isNullScalar(node)) {
+        node.value = NULL_MEANING;
+      }
+    },
+  });
+
+  return doc.toJS({ mapAsMap: true });
+}
+
+/**
+ * Find where a node's content ends, or `0` for no node.
+ *
+ * - A block collection's own range can run on to the next field's first
+ *   character, past comment lines, when its last value is empty, so its end is
+ *   taken from its last value instead.
+ */
 function readNodeEnd(node: unknown): number {
-  return isNode(node) && isPlaced(node) ? node.range[1] : 0;
+  if (!isNode(node) || !isPlaced(node)) {
+    return 0;
+  }
+
+  if (!isCollection(node) || node.flow === true) {
+    return node.range[1];
+  }
+
+  return Math.max(
+    node.range[0],
+    ...node.items.flatMap((item: unknown) =>
+      isPair(item)
+        ? [readNodeEnd(item.key), readNodeEnd(item.value)]
+        : [readNodeEnd(item)]
+    )
+  );
 }
 
-/** Read `status`, when it is one of the statuses OKF defines. */
-function readStatus(doc: Frontmatter): RecordStatus | undefined {
-  const status = readString(doc.get(FRONTMATTER_KEYS.status, true));
+/**
+ * Check that a node the edits read or write is a single value on one line,
+ * without an anchor, alias, or tag, and return it typed.
+ */
+function readScalar(params: FieldNodeParams): LayoutPartResult<Placed<Scalar>> {
+  const { field, node, text } = params;
+  const problem = describeNodeProblem(params);
 
-  return status !== undefined && isRecordStatus(status) ? status : undefined;
+  if (problem !== undefined) {
+    return { isOk: false, reason: problem };
+  }
+
+  if (!isScalar(node) || !isPlaced(node)) {
+    return { isOk: false, reason: `${field} isn't a single value` };
+  }
+
+  return isOneLine({ node, text })
+    ? { isOk: true, value: node }
+    : { isOk: false, reason: spansLines(field) };
 }
 
-/** Read a node's text, when it is a single value rather than a collection. */
+/**
+ * Check that `status`, when it's a draft to promote, is a value the edits can
+ * overwrite.
+ *
+ * - Any other status is left as written, so it may take any form.
+ */
+function readStatusLayout(
+  params: ReadLayoutPartParams
+): LayoutPartResult<Placed<Scalar> | undefined> {
+  const { doc, map, text } = params;
+  const field = `\`${FRONTMATTER_KEYS.status}\``;
+  const pair = findPair({ key: FRONTMATTER_KEYS.status, map });
+
+  if (pair === undefined) {
+    return { isOk: true, value: undefined };
+  }
+
+  const { value } = pair;
+  const resolved = resolveAlias({ doc, node: value });
+
+  if (readString(resolved) !== RECORD_STATUSES.draft) {
+    return { isOk: true, value: undefined };
+  }
+
+  const problem = describeKeyProblem({ field, pair, text });
+
+  return problem === undefined
+    ? readScalar({ field, node: value, text })
+    : { isOk: false, reason: problem };
+}
+
+/** Read a value as text, or `undefined` when it isn't a single value. */
 function readString(node: unknown): string | undefined {
   return isScalar(node) && typeof node.value === "string"
     ? node.value
     : undefined;
 }
 
-/** Read an `at` as a timestamp, or `undefined` when it holds none. */
+/** Read a timestamp as ISO 8601, or with a space before the time, in UTC. */
+function readTime(value: Timestamp): DateTime {
+  const iso = DateTime.fromISO(value, { zone: "utc" });
+
+  return iso.isValid ? iso : DateTime.fromSQL(value, { zone: "utc" });
+}
+
+/** Read a timestamp, or `undefined` when it's missing, empty, or null. */
 function readTimestamp(node: unknown): Timestamp | undefined {
+  if (!isScalar(node) || isNullScalar(node)) {
+    return undefined;
+  }
+
   const value = readString(node);
 
-  return value === undefined || value === "" || NULL_SPELLINGS.has(value)
-    ? undefined
-    : value;
+  return value === "" ? undefined : value;
 }
 
 /**
- * Plan writing a new timestamp into the signer's entry, in place.
- *
- * @returns the edit, or why the entry can't be renewed.
+ * Check that `verified`, if present, is in a layout the edits support: null,
+ * one entry, or a list of entries.
  */
-function renewOwnEntry(params: RenewOwnEntryParams): TextEditResult {
-  const { at, entry, text } = params;
-  const atNode = entry.get(ENTRY_KEYS.at, true);
+function readVerifiedLayout(
+  params: ReadLayoutPartParams
+): LayoutPartResult<VerifiedLayout> {
+  const { map, text, verifiedBy } = params;
+  const field = `\`${FRONTMATTER_KEYS.verified}\``;
+  const pair = findPair({ key: FRONTMATTER_KEYS.verified, map });
 
-  if (atNode === undefined) {
-    return { edit: addTimestamp(params), isOk: true };
+  if (pair === undefined) {
+    return { isOk: true, value: { kind: "absent" } };
   }
 
-  if (!isScalar(atNode) || !isPlaced(atNode)) {
-    return { isOk: false, reason: "the signer's `at` isn't a single value" };
+  const { key, value } = pair;
+  const problem =
+    describeKeyProblem({ field, pair, text }) ??
+    describeNodeProblem({ field, node: value, text });
+
+  if (problem !== undefined) {
+    return { isOk: false, reason: problem };
   }
 
-  return { edit: writeScalar({ node: atNode, text, value: at }), isOk: true };
+  if (isMap(value) && isPlaced(value)) {
+    const entry = readEntry({ field, node: value, text, verifiedBy });
+
+    return entry.isOk
+      ? { isOk: true, value: { entry: entry.value, key, kind: "entry" } }
+      : entry;
+  }
+
+  return isSeq(value) && isPlaced(value)
+    ? readVerifiedList({ field, node: value, text, verifiedBy })
+    : readVerifiedScalar({ field, node: value });
 }
 
 /**
- * Split a record around its frontmatter, remembering its line breaks.
+ * Check that every item of a `verified` list is an entry in an editable
+ * layout, and that a flow list sits on one line.
+ */
+function readVerifiedList(
+  params: ReadVerifiedListParams
+): LayoutPartResult<VerifiedLayout> {
+  const { field, node, text, verifiedBy } = params;
+
+  if (node.flow === true && !isOneLine({ node, text })) {
+    return { isOk: false, reason: spansLines(field) };
+  }
+
+  const entries: Entry[] = [];
+
+  const itemField = `a ${field} item`;
+
+  for (const item of node.items) {
+    const problem = describeNodeProblem({ field: itemField, node: item, text });
+
+    if (problem !== undefined) {
+      return { isOk: false, reason: problem };
+    }
+
+    if (!isMap(item) || !isPlaced(item)) {
+      return { isOk: false, reason: `${itemField} isn't a mapping` };
+    }
+
+    const entry = readEntry({ field: itemField, node: item, text, verifiedBy });
+
+    if (!entry.isOk) {
+      return entry;
+    }
+
+    entries.push(entry.value);
+  }
+
+  return { isOk: true, value: { entries, kind: "list", node } };
+}
+
+/**
+ * Check that a single-value `verified` is null, the one scalar the edits
+ * replace with an entry.
+ */
+function readVerifiedScalar(
+  params: Pick<FieldNodeParams, "field" | "node">
+): LayoutPartResult<VerifiedLayout> {
+  const { field, node } = params;
+
+  // A null is never more than a word, so it can't span lines.
+  return isScalar(node) && isPlaced(node) && isNullScalar(node)
+    ? { isOk: true, value: { kind: "null", node } }
+    : {
+        isOk: false,
+        reason: `${field} holds a single value, not an entry or a list`,
+      };
+}
+
+/** Plan the edit that renews the signer's `at`, or adds one it lacks. */
+function renewOwnEntry(params: RenewOwnEntryParams): TextEdit {
+  const { at, entry, text } = params;
+
+  return entry.at === undefined
+    ? addTimestamp(params)
+    : writeScalar({ node: entry.at, text, value: at });
+}
+
+/** Follow an alias to the node its anchor names, or return the node as is. */
+function resolveAlias(params: ResolveAliasParams): unknown {
+  const { doc, node } = params;
+
+  return isAlias(node) ? node.resolve(doc) : node;
+}
+
+/** Say that a field spans several lines, which the edits don't handle. */
+function spansLines(field: string): string {
+  return `${field} spans several lines`;
+}
+
+/**
+ * Find a record's frontmatter: the text between a `---` first line and the
+ * next `---` line, by position, so the rest of the record is never rewritten.
  *
- * @returns the parts, or `undefined` when there is no closed `---` block.
+ * - The text keeps its line breaks as written, LF or CRLF, mixed or not, and
+ *   ends with the one before the closing fence, unless it's empty.
  */
 function splitFrontmatter(text: string): FrontmatterBlock | undefined {
-  const lineBreak = text.includes("\r\n") ? "\r\n" : "\n";
-  const [first, ...remaining] = text.split(lineBreak);
+  const byteOrderMark = text.startsWith(BYTE_ORDER_MARK) ? BYTE_ORDER_MARK : "";
+  const lineBreak = [LF, CRLF].find((candidate) =>
+    text.startsWith(`${byteOrderMark}${FENCE}${candidate}`)
+  );
 
-  if (first !== FENCE) {
+  if (lineBreak === undefined) {
     return undefined;
   }
 
-  const closingIndex = remaining.indexOf(FENCE);
+  const start = byteOrderMark.length + FENCE.length + lineBreak.length;
+  let lineStart = start;
 
-  if (closingIndex === -1) {
-    return undefined;
+  for (const line of text.slice(start).split(LF)) {
+    if (line === FENCE || line === `${FENCE}\r`) {
+      // A byte order mark after the fence isn't indentation, so it stays out
+      // of the frontmatter the parser reads.
+      const contentStart = text.startsWith(BYTE_ORDER_MARK, start)
+        ? start + BYTE_ORDER_MARK.length
+        : start;
+
+      return {
+        end: lineStart,
+        lineBreak,
+        start: contentStart,
+        text: text.slice(contentStart, lineStart),
+      };
+    }
+
+    lineStart += line.length + LF.length;
   }
 
-  return {
-    lineBreak,
-    rest: remaining.slice(closingIndex),
-    text: remaining.slice(0, closingIndex).join("\n"),
-  };
+  return undefined;
 }
 
 /**
- * Plan overwriting a scalar's value, in place.
- *
- * - The old value's quotes are kept, as is any whitespace its range ends with,
- *   such as a block scalar's closing line break; a block scalar's range starts
- *   at its `|` or `>` header, so it becomes a plain value.
- *
- * - An empty value has no characters to replace, so it's written as
- *   `key: value`, a space apart from any comment or closing brace.
+ * Plan the edit that overwrites a scalar, keeping its quotes, or fills an
+ * empty one after its key.
  */
 function writeScalar(params: WriteScalarParams): TextEdit {
   const { node, text, value } = params;

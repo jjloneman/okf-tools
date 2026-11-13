@@ -379,7 +379,7 @@ describe("runInteractive", () => {
     );
   });
 
-  test("fails without editing when a record refuses", async () => {
+  test("warns about a record the edits refuse, and verifies the rest", async () => {
     // Given - a draft whose verified key is a nested mapping
     repo.write(
       "docs/references/c.md",
@@ -391,15 +391,15 @@ describe("runInteractive", () => {
       ])
     );
 
-    // When - running
+    // When - running and accepting every prompt
     const code = await runInteractive(context());
 
-    // Then - a failure, and the other draft untouched
-    expect(code).toBe(1);
-    expect(cancel).toHaveBeenCalledWith(
-      expect.stringContaining("No files changed.\ndocs/references/c.md:")
+    // Then - a warning naming it before the checklist, and the rest verified
+    expect(code).toBe(0);
+    expect(log.warn).toHaveBeenCalledWith(
+      "Skipping docs/references/c.md: `verified` is a nested mapping, not a list; edit the record by hand"
     );
-    expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
+    expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
   });
 
   test("fails, leaving the edits on disk, when the commit is rejected", async () => {
