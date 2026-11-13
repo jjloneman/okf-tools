@@ -11,14 +11,10 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
+import { listChangedPaths } from "./git.ts";
 import { printError, printInfo } from "./output.ts";
 import { needsSignOff } from "./records.ts";
-import {
-  listChangedPaths,
-  loadCandidate,
-  loadCandidatesAt,
-  resolveRecordPaths,
-} from "./repo.ts";
+import { loadCandidate, loadCandidatesAt, resolveRecordPaths } from "./repo.ts";
 
 /** The records a run would consider, or why they can't be loaded. */
 type LoadResult =

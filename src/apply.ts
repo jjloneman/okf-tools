@@ -8,17 +8,13 @@
 import type { Candidate } from "./records.ts";
 import type { RunContext } from "./run-context.ts";
 
+import { commitFiles, listDirtyPaths } from "./git.ts";
 import {
   buildCommitMessage,
   currentTimestamp,
   prepareEdits,
 } from "./records.ts";
-import {
-  commitFiles,
-  listDirtyPaths,
-  readRecordText,
-  writeRecords,
-} from "./repo.ts";
+import { readRecordText, writeRecords } from "./repo.ts";
 
 /** What applying a plan did. */
 export type ApplyOutcome =
