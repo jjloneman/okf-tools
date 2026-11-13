@@ -5,7 +5,7 @@ description: The branch diff against `origin/HEAD`, else `origin/main`, else the
 tags: [git]
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-13T02:28:00Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
 # What a record counts as changed against
