@@ -25,6 +25,7 @@ import { checkMeaning, createEntry, findAmbiguity } from "./meaning.ts";
 import {
   describeYamlErrors,
   ENTRY_KEYS,
+  findFenceProblem,
   findLatestIndex,
   findLineEnd,
   findPair,
@@ -342,7 +343,7 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
     return {
       isOk: false,
       kind: REFUSAL_KINDS.noFrontmatter,
-      reason: "no frontmatter block",
+      reason: findFenceProblem(recordText) ?? "no frontmatter block",
     };
   }
 

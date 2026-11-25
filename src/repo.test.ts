@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import {
   draftRecord,
+  NEAR_MISSES,
   record,
   useTestRepo,
   VERIFIED_BY,
@@ -345,6 +346,87 @@ describe("loadCandidates", () => {
   });
 });
 
+describe("loadCandidates, given near-miss frontmatter", () => {
+  test.each(NEAR_MISSES)(
+    "reports a record with $description as skipped",
+    ({ problem, text }) => {
+      // Given - a record whose frontmatter block is almost right
+      repo.write("docs/decisions/a.md", text);
+
+      // When - listing the bundle's records, as the checklist does
+      const loaded = unwrap(
+        loadCandidates({
+          bundleDirs: ["docs/decisions"],
+          repoRoot: repo.root,
+          verifiedBy: VERIFIED_BY,
+        })
+      );
+
+      // Then - it's skipped with why, not dropped unseen
+      expect(loaded).toStrictEqual({
+        candidates: [],
+        skipped: [
+          {
+            filePath: "docs/decisions/a.md",
+            reason: `docs/decisions/a.md: ${problem}`,
+          },
+        ],
+      });
+    }
+  );
+
+  test("lists every file that opens with `---` as a record or a skipped one", () => {
+    // Given - a clean record, every near miss, and a file with no frontmatter
+    repo.write("docs/decisions/clean.md", draftRecord("Clean"));
+    repo.write("docs/decisions/notes.md", "# Notes\n");
+    NEAR_MISSES.forEach(({ text }, index) => {
+      repo.write(`docs/decisions/near-${String(index)}.md`, text);
+    });
+
+    // When - listing the bundle's records
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - each is one or the other, and only the notes are left out
+    expect(
+      [...candidates, ...skipped].map(({ filePath }) => filePath).sort()
+    ).toStrictEqual(
+      [
+        "docs/decisions/clean.md",
+        ...NEAR_MISSES.map(
+          (_, index) => `docs/decisions/near-${String(index)}.md`
+        ),
+      ].sort()
+    );
+  });
+
+  test("never offers the bundle's log.md, which OKF reserves", () => {
+    // Given - a log.md that carries frontmatter, beside a record
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write("docs/decisions/log.md", draftRecord("Log"));
+
+    // When - listing the bundle's records
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - only the record
+    expect({
+      filePaths: candidates.map(({ filePath }) => filePath),
+      skipped,
+    }).toStrictEqual({ filePaths: ["docs/decisions/a.md"], skipped: [] });
+  });
+});
+
 describe("loadCandidatesAt", () => {
   test("keeps the record files among the paths, in the given order", () => {
     // Given - two records, a file outside the bundle, and the bundle's index
@@ -441,6 +523,7 @@ describe("resolveRecordPaths", () => {
   beforeEach(() => {
     repo.write("docs/decisions/a.md", "a\n");
     repo.write("docs/decisions/index.md", "i\n");
+    repo.write("docs/decisions/log.md", "l\n");
     repo.write("docs/decisions/notes.txt", "n\n");
     repo.write("docs/decisions/folder.md/inner.txt", "x\n");
   });
@@ -481,6 +564,11 @@ describe("resolveRecordPaths", () => {
       description: "the bundle's index",
       reason: "docs/decisions/index.md isn't a record in docs/decisions.",
       recordPath: "docs/decisions/index.md",
+    },
+    {
+      description: "the bundle's log",
+      reason: "docs/decisions/log.md isn't a record in docs/decisions.",
+      recordPath: "docs/decisions/log.md",
     },
     {
       description: "a missing record",

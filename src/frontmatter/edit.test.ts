@@ -559,20 +559,25 @@ describe("verifyRecord", () => {
   });
 
   test.each([
-    { description: "no frontmatter at all", text: "# Title\n" },
+    {
+      description: "no frontmatter at all",
+      reason: "no frontmatter block",
+      text: "# Title\n",
+    },
     {
       description: "an unclosed frontmatter block",
+      reason: "the frontmatter has no closing `---` line",
       text: "---\nstatus: draft\n",
     },
-  ])("rejects a record with $description", ({ text }) => {
+  ])("rejects a record with $description", ({ reason, text }) => {
     // When - verifying a record with $description
     const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
-    // Then - it is rejected for the missing block
+    // Then - it is rejected for the missing block, saying why
     expect(result).toStrictEqual({
       isOk: false,
       kind: "noFrontmatter",
-      reason: "no frontmatter block",
+      reason,
     });
   });
 
@@ -1957,11 +1962,11 @@ describe("verifyRecord", () => {
     // When - verifying a record whose first line isn't exactly a fence
     const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
-    // Then - no frontmatter found, rather than a guess
+    // Then - no frontmatter found, rather than a guess, naming the fence
     expect(result).toStrictEqual({
       isOk: false,
       kind: "noFrontmatter",
-      reason: "no frontmatter block",
+      reason: 'the opening fence must be `---` alone on its line, not "--- "',
     });
   });
 
