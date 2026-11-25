@@ -31,6 +31,7 @@ import {
   FRONTMATTER_KEYS,
   isSignersBy,
   isWritableTimestamp,
+  LF,
   parseFrontmatter,
   readContentEnd,
   readIndent,
@@ -221,15 +222,15 @@ type TextEdit = {
   text: string;
 };
 
-/** An edit, or why it can't be made. */
+/** The edits, or why they can't be made. */
 type TextEditResult =
   | {
       /**
-       * The edit to make.
+       * The edits to make, none overlapping another.
        *
-       * @example `{ end: 13, start: 8, text: "stable" }`
+       * @example `[{ end: 13, start: 8, text: "stable" }]`
        */
-      edit: TextEdit;
+      edits: TextEdit[];
 
       /**
        * Whether the edit can be made; `true` here.
@@ -389,7 +390,7 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
     return refuseLayout(verifiedEdit.reason);
   }
 
-  const edits = [verifiedEdit.edit];
+  const edits = [...verifiedEdit.edits];
   const { status } = layout.layout;
 
   if (status !== undefined) {
@@ -548,28 +549,58 @@ function applyEdits(params: ApplyEditsParams): string {
 }
 
 /**
- * Plan the edit that turns someone else's one-line entry into a block list of
- * that entry and the signer's, keeping any trailing comment on the key's line.
+ * Plan the edits that turn someone else's one-line entry into a block list of
+ * that entry and the signer's, keeping every line break and comment in place.
+ *
+ * - An entry on a later line than the key gains its list marker where it
+ *   stands, so the key's line, with its comment and line break, is untouched.
+ *
+ * - An entry on the key's line moves to the line after it, behind the key
+ *   line's own line break, and any comment after it stays on the key's line.
+ *
+ * - The signer's entry goes after the comment lines the parser reads as
+ *   trailing the entry, so it never comes between the entry and them.
  */
-function convertToList(params: ConvertToListParams): TextEdit {
+function convertToList(params: ConvertToListParams): TextEdit[] {
   const { entry, keyStart, node, text } = params;
-  const [start, end] = node.range;
-  const value = text.slice(start, end);
+  const [start, end, nodeEnd] = node.range;
   const keyEnd = readContentEnd({ index: start, text });
+  const insertAt = findLineEnd({
+    index: readContentEnd({ index: nodeEnd, text }),
+    text,
+  });
+  const lineBreak = readLineBreak({ index: insertAt, text });
+
+  if (text.slice(keyEnd, start).includes(LF)) {
+    const indent = readIndent({ index: start, text });
+
+    return [
+      { end: start, start, text: "- " },
+      {
+        end: insertAt,
+        start: insertAt,
+        text: `${lineBreak}${indent}- ${entry}`,
+      },
+    ];
+  }
+
   const lineEnd = findLineEnd({ index: end, text });
-  const lineBreak = readLineBreak({ index: lineEnd, text });
   const comment = text.slice(end, lineEnd);
   const indent = `${readIndent({ index: keyStart, text })}${LIST_INDENT}`;
+  const value = text.slice(start, end);
 
-  return {
-    end: lineEnd,
-    start: keyEnd,
-    text: [
-      comment,
-      `${lineBreak}${indent}- ${value}`,
-      `${lineBreak}${indent}- ${entry}`,
-    ].join(""),
-  };
+  return [
+    {
+      end: lineEnd,
+      start: keyEnd,
+      text: `${comment}${readLineBreak({ index: lineEnd, text })}${indent}- ${value}`,
+    },
+    {
+      end: insertAt,
+      start: insertAt,
+      text: `${lineBreak}${indent}- ${entry}`,
+    },
+  ];
 }
 
 /** Write the signer's new entry as YAML, quoting `verifiedBy` if it must be. */
@@ -591,7 +622,10 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
     ownEntries[findLatestIndex(ownEntries.map(({ at }) => readTimestamp(at)))];
 
   if (ownEntry !== undefined) {
-    return { edit: renewOwnEntry({ at, entry: ownEntry, text }), isOk: true };
+    return {
+      edits: [renewOwnEntry({ at, entry: ownEntry, text })],
+      isOk: true,
+    };
   }
 
   const entry = formatEntry({ at, verifiedBy });
@@ -599,10 +633,11 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
   switch (verified.kind) {
     case "absent": {
       return {
-        edit:
+        edits: [
           map === undefined
             ? appendVerifiedField({ entry, lineBreak, text })
             : addVerifiedField({ entry, map, text }),
+        ],
         isOk: true,
       };
     }
@@ -620,7 +655,7 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
       }
 
       return {
-        edit: convertToList({
+        edits: convertToList({
           entry,
           keyStart: verified.key.range[0],
           node,
@@ -632,14 +667,14 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
 
     case "list": {
       return {
-        edit: appendToSequence({ entry, sequence: verified.node, text }),
+        edits: [appendToSequence({ entry, sequence: verified.node, text })],
         isOk: true,
       };
     }
 
     case "null": {
       return {
-        edit: writeScalar({ node: verified.node, text, value: entry }),
+        edits: [writeScalar({ node: verified.node, text, value: entry })],
         isOk: true,
       };
     }

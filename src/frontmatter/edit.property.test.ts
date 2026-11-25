@@ -168,6 +168,23 @@ type Rendered = {
   touchable: Set<number>;
 };
 
+/** One rendered frontmatter line, and whether an edit may touch it. */
+type RenderedLine = {
+  /**
+   * Whether an edit may rewrite the line.
+   *
+   * @example false
+   */
+  isTouchable: boolean;
+
+  /**
+   * The line, without its line break.
+   *
+   * @example "verified: # key"
+   */
+  line: string;
+};
+
 /** One value in the generated frontmatter, and how it's quoted. */
 type Scalar = {
   /**
@@ -244,11 +261,25 @@ type VerifiedModel =
       entry: EntryModel;
 
       /**
+       * Whether an indented comment line trails the entry.
+       *
+       * @example true
+       */
+      hasTrailingComment: boolean;
+
+      /**
        * Whether it's a block mapping rather than inline.
        *
        * @example false
        */
       isBlock: boolean;
+
+      /**
+       * Whether an inline entry sits on the line after the key.
+       *
+       * @example false
+       */
+      isNextLine: boolean;
 
       /**
        * The layout.
@@ -295,6 +326,9 @@ const OLD_ATS = ["2026-09-01T00:00:00Z", "2026-09-28T09:00:00Z"];
 const RUN_OPTIONS = { numRuns: 400, seed: 13 };
 
 /** Names that are safe unquoted, in flow and block context alike. */
+/** The comment line that trails an inline entry, in the generated layouts. */
+const TRAILING_COMMENT = "  # theirs";
+
 const SAFE_NAMES = ["claude-code/model", "human:jjloneman", "human:someone"];
 
 /** Names YAML would misread unquoted, so they're always quoted. */
@@ -501,7 +535,9 @@ function verifiedArb(verifiedBy: string): fc.Arbitrary<VerifiedModel> {
     fc
       .record({
         entry,
+        hasTrailingComment: fc.boolean(),
         isBlock: fc.boolean(),
+        isNextLine: fc.boolean(),
         kind: fc.constant("entry" as const),
       })
       .map((model) =>
@@ -686,38 +722,37 @@ function readModelEntries(layout: VerifiedModel): EntryModel[] {
 /** Render a record, and note which lines the edits may touch. */
 function render(model: RecordModel): Rendered {
   const { fields, indent, status, verified } = model;
-  const blocks: { isTouchable: boolean; lines: string[] }[] = fields.map(
-    (field) => ({ isTouchable: false, lines: renderField({ field, indent }) })
+  const blocks: RenderedLine[][] = fields.map((field) =>
+    renderField({ field, indent }).map((line) => ({
+      isTouchable: false,
+      line,
+    }))
   );
 
   const verifiedLines = renderVerified({ indent, layout: verified.layout });
 
   if (verifiedLines.length > 0) {
-    blocks.splice(Math.min(verified.index, blocks.length), 0, {
-      isTouchable: true,
-      lines: verifiedLines,
-    });
+    blocks.splice(Math.min(verified.index, blocks.length), 0, verifiedLines);
   }
 
   if (status !== undefined) {
     const comment = status.comment ? " # wip" : "";
 
-    blocks.splice(Math.min(status.index, blocks.length), 0, {
-      isTouchable: true,
-      lines: [`${indent}status: ${renderScalar(status.value)}${comment}`],
-    });
+    blocks.splice(Math.min(status.index, blocks.length), 0, [
+      {
+        isTouchable: true,
+        line: `${indent}status: ${renderScalar(status.value)}${comment}`,
+      },
+    ]);
   }
 
   for (const before of [...model.commentsBefore].sort((a, b) => b - a)) {
-    blocks.splice(Math.min(before, blocks.length), 0, {
-      isTouchable: false,
-      lines: [`${indent}# a comment`],
-    });
+    blocks.splice(Math.min(before, blocks.length), 0, [
+      { isTouchable: false, line: `${indent}# a comment` },
+    ]);
   }
 
-  const body = blocks.flatMap(({ isTouchable, lines }) =>
-    lines.map((line) => ({ isTouchable, line }))
-  );
+  const body = blocks.flat();
 
   const all = [
     { isTouchable: false, line: "---" },
@@ -802,13 +837,13 @@ function renderFlowEntry(entry: EntryModel): string {
   return pairs.length === 0 ? "{}" : `{ ${pairs.join(", ")} }`;
 }
 
-/** Write the `verified` field's lines, marking which an edit may touch. */
-function renderVerified(params: {
+/** Write the lines of a `verified` layout an edit may rewrite throughout. */
+function renderTouchableVerified(params: {
   indent: string;
+  key: string;
   layout: VerifiedModel;
 }): string[] {
-  const { indent, layout } = params;
-  const key = `${indent}verified:`;
+  const { indent, key, layout } = params;
 
   switch (layout.kind) {
     case "absent": {
@@ -839,12 +874,10 @@ function renderVerified(params: {
     }
 
     case "entry": {
-      return layout.isBlock
-        ? [
-            key,
-            ...renderBlockEntry({ entry: layout.entry, indent: `${indent}  ` }),
-          ]
-        : [`${key} ${renderFlowEntry(layout.entry)} # one`];
+      return [
+        key,
+        ...renderBlockEntry({ entry: layout.entry, indent: `${indent}  ` }),
+      ];
     }
 
     case "flowList": {
@@ -861,6 +894,40 @@ function renderVerified(params: {
           ];
     }
   }
+}
+
+/**
+ * Write the `verified` field's lines, marking which an edit may touch.
+ *
+ * - Turning an inline entry into a list may touch only the entry's own line,
+ *   so a key line above it and the comment line trailing it must survive.
+ */
+function renderVerified(params: {
+  indent: string;
+  layout: VerifiedModel;
+}): RenderedLine[] {
+  const { indent, layout } = params;
+  const key = `${indent}verified:`;
+
+  if (layout.kind === "entry" && !layout.isBlock) {
+    const entry = renderFlowEntry(layout.entry);
+    const trailing = layout.hasTrailingComment
+      ? [{ isTouchable: false, line: `${indent}${TRAILING_COMMENT}` }]
+      : [];
+
+    return layout.isNextLine
+      ? [
+          { isTouchable: false, line: `${key} # key` },
+          { isTouchable: true, line: `${indent}  ${entry} # one` },
+          ...trailing,
+        ]
+      : [{ isTouchable: true, line: `${key} ${entry} # one` }, ...trailing];
+  }
+
+  return renderTouchableVerified({ indent, key, layout }).map((line) => ({
+    isTouchable: true,
+    line,
+  }));
 }
 
 /** Split text into lines that keep their line breaks. */
@@ -903,6 +970,19 @@ describe("verifyRecord over generated layouts", () => {
             haystack: splitLines(edited.slice(0, -BODY.length)),
             needle: untouched,
           })
+        ).toBe(true);
+
+        // Then - a comment trailing someone else's entry stays above the new one
+        const { layout } = model.verified;
+        const isAddedBelowComment =
+          layout.kind === "entry" &&
+          layout.hasTrailingComment &&
+          !layout.isBlock &&
+          !isOwn({ entry: layout.entry, verifiedBy: model.verifiedBy });
+
+        expect(
+          !isAddedBelowComment ||
+            edited.indexOf(TRAILING_COMMENT) < edited.indexOf(AT)
         ).toBe(true);
       }),
       RUN_OPTIONS

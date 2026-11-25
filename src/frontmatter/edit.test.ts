@@ -1807,6 +1807,102 @@ describe("verifyRecord", () => {
 
   test.each([
     {
+      description: "an LF key line above an entry ending in CRLF",
+      expected: `---\r\nverified:\n  - { by: human:someone }\r\n  - { by: ${VERIFIED_BY}, at: ${AT} }\r\n---\n`,
+      text: "---\r\nverified:\n  { by: human:someone }\r\n---\n",
+    },
+    {
+      description: "a CRLF key line above an entry ending in LF",
+      expected: `---\nverified:\r\n  - { by: human:someone }\n  - { by: ${VERIFIED_BY}, at: ${AT} }\n---\n`,
+      text: "---\nverified:\r\n  { by: human:someone }\n---\n",
+    },
+    {
+      description: "an entry on the key's line, ending in CRLF",
+      expected: `---\nverified:\r\n  - { by: human:someone }\r\n  - { by: ${VERIFIED_BY}, at: ${AT} }\r\n---\n`,
+      text: "---\nverified: { by: human:someone }\r\n---\n",
+    },
+  ])(
+    "keeps every line ending when turning $description into a list",
+    ({ expected, text }) => {
+      // Given - someone else's entry, with the line endings mixed
+      // When - verifying it, which turns the entry into a list
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+      // Then - the marker and the new entry added, each ending kept in order
+      expect(result).toStrictEqual({ isOk: true, text: expected });
+    }
+  );
+
+  test.each([
+    {
+      description: "a comment after the key and one after the entry",
+      expected: [
+        "verified: # key",
+        "  - { by: human:someone } # theirs",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ["verified: # key", "  { by: human:someone } # theirs"],
+    },
+    {
+      description: "a comment line between the key and the entry",
+      expected: [
+        "verified:",
+        "",
+        "  # theirs",
+        "  - { by: human:someone }",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: ["verified:", "", "  # theirs", "  { by: human:someone }"],
+    },
+    {
+      description: "an indented comment trailing an entry on the next line",
+      expected: [
+        "verified:",
+        "  - { by: human:someone }",
+        "    # theirs",
+        "",
+        "  # still theirs",
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: [
+        "verified:",
+        "  { by: human:someone }",
+        "    # theirs",
+        "",
+        "  # still theirs",
+      ],
+    },
+    {
+      description: "an indented comment trailing an entry on the key's line",
+      expected: [
+        "  verified: # one",
+        "    - { by: human:someone }",
+        "    # theirs",
+        `    - { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "  type: x",
+      ],
+      lines: [
+        "  verified: { by: human:someone } # one",
+        "    # theirs",
+        "  type: x",
+      ],
+    },
+  ])(
+    "keeps $description in place when turning an entry into a list",
+    ({ expected, lines }) => {
+      // Given - someone else's entry, with comments around it
+      const text = record(lines);
+
+      // When - verifying it
+      const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+      // Then - every comment where it was, the new entry after them all
+      expect(result).toStrictEqual({ isOk: true, text: record(expected) });
+    }
+  );
+
+  test.each([
+    {
       description: "a new field",
       expected: [
         "status: stable",
