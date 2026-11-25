@@ -113,11 +113,13 @@ export function findFrontmatterProblem(text: string): string | undefined {
  *   that the sign-off's timestamp can't be read.
  *
  * - `verified` means it was signed off and not touched since, or that the
- *   generation time can't be read or is ahead of the clock, since no sign-off
- *   could ever follow it.
+ *   generation time can't be read, since no sign-off could ever follow it.
  *
  * - Times are compared at whole seconds, since a sign-off is stamped to the
  *   second.
+ *
+ * - It never reads the clock: a `generated.at` ahead of it is judged like any
+ *   other, and `isGeneratedAhead` is how a listing refuses such a record.
  */
 export function getRecordState(summary: RecordTimes): RecordState {
   if (summary.verifiedAt === undefined) {
@@ -143,17 +145,17 @@ export function getRecordState(summary: RecordTimes): RecordState {
     return "changed";
   }
 
-  // A generation time still to come is later than any sign-off made now, so
-  // it can't be judged either.
-  return isAhead(generatedTime) ||
-    toSeconds(generatedTime) <= toSeconds(verifiedTime)
+  return toSeconds(generatedTime) <= toSeconds(verifiedTime)
     ? "verified"
     : "changed";
 }
 
 /**
  * Whether a record's `generated.at` is later than now, to the second, as a
- * wrong time zone writes it; such a record can't be judged changed.
+ * wrong time zone writes it.
+ *
+ * - Such a record is refused when it's listed, since any sign-off made now
+ *   would be older than it, and one made later would hide a regeneration.
  */
 export function isGeneratedAhead(summary: RecordTimes): boolean {
   if (summary.generatedAt === undefined) {
@@ -162,7 +164,10 @@ export function isGeneratedAhead(summary: RecordTimes): boolean {
 
   const generatedTime = readTime(summary.generatedAt);
 
-  return generatedTime.isValid && isAhead(generatedTime);
+  return (
+    generatedTime.isValid &&
+    toSeconds(generatedTime) > toSeconds(DateTime.utc())
+  );
 }
 
 /**
@@ -256,11 +261,6 @@ export function readStatusText(text: string): string | undefined {
   return isScalar(node)
     ? readString(node)
     : block.text.slice(node.range?.[0], readNodeEnd(node));
-}
-
-/** Whether a time is later than now, to the second. */
-function isAhead(time: DateTime): boolean {
-  return toSeconds(time) > toSeconds(DateTime.utc());
 }
 
 /** Read a time as whole seconds since the epoch, dropping any fraction. */

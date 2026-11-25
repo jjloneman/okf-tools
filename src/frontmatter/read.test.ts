@@ -628,9 +628,15 @@ describe("getRecordState", () => {
     },
     {
       description: "generated ahead of the clock",
-      expected: "verified",
+      expected: "changed",
       generatedAt: "2026-12-01T10:00:00Z",
       verifiedAt: "2026-11-01T10:00:00Z",
+    },
+    {
+      description: "verified after a generation ahead of the clock",
+      expected: "verified",
+      generatedAt: "2026-12-01T10:00:00Z",
+      verifiedAt: "2026-12-02T10:00:00Z",
     },
     {
       description:
@@ -646,17 +652,21 @@ describe("getRecordState", () => {
       verifiedAt: "2026-11-12T00:00:00Z",
     },
   ])("$description is $expected", ({ expected, generatedAt, verifiedAt }) => {
-    // Given - the clock on a fixed day
-    vi.useFakeTimers({
-      now: DateTime.fromISO(NOW).toJSDate(),
-      toFake: ["Date"],
-    });
+    // Given - two clocks, one before every row's times and one on a fixed day
+    const judgeAt = (now: string): string => {
+      vi.useFakeTimers({
+        now: DateTime.fromISO(now).toJSDate(),
+        toFake: ["Date"],
+      });
 
-    // When - judging a summary whose timestamps are $description
-    const state = getRecordState({ generatedAt, verifiedAt });
+      return getRecordState({ generatedAt, verifiedAt });
+    };
 
-    // Then - the state is $expected
-    expect(state).toBe(expected);
+    // When - judging a summary whose timestamps are $description under each
+    const states = [judgeAt("2000-01-01T00:00:00Z"), judgeAt(NOW)];
+
+    // Then - the state is $expected under both, as it never reads the clock
+    expect(states).toStrictEqual([expected, expected]);
   });
 });
 

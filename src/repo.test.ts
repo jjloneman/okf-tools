@@ -220,6 +220,42 @@ describe("loadCandidates, given a layout the edits refuse", () => {
   });
 });
 
+describe("loadCandidates, given a generated.at ahead of the clock", () => {
+  test("reports the record instead of listing it as verified", () => {
+    // Given - a record signed off, then regenerated with a time still to come
+    repo.write(
+      "docs/decisions/a.md",
+      record([
+        "type: Decision",
+        "status: stable",
+        "generated: { by: claude-code/model, at: 2099-11-25T20:00:00Z }",
+        `verified: { by: "${VERIFIED_BY}", at: 2026-11-01T10:00:00Z }`,
+      ])
+    );
+
+    // When - loading the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - nothing listed, and the record reported with the fix
+    expect({ candidates, skipped }).toStrictEqual({
+      candidates: [],
+      skipped: [
+        {
+          filePath: "docs/decisions/a.md",
+          reason:
+            "docs/decisions/a.md: generated.at is ahead of the clock; fix its time zone",
+        },
+      ],
+    });
+  });
+});
+
 describe("loadCandidates", () => {
   test("reports a record that can't be read instead of listing it", () => {
     // Given - two records, the first with no read permission

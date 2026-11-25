@@ -25,6 +25,7 @@ import { findEditProblem } from "./frontmatter/edit.ts";
 import {
   findFrontmatterProblem,
   getRecordState,
+  isGeneratedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
 import { describeError } from "./output.ts";
@@ -49,8 +50,8 @@ export type LoadedRecord =
   | {
       /**
        * What the path turned out to be: a file whose frontmatter isn't valid
-       * YAML, one reached through a symlink, one with no frontmatter block, or
-       * one that can't be read.
+       * YAML or can't be signed off as it stands, one reached through a
+       * symlink, one with no frontmatter block, or one that can't be read.
        *
        * @example "unreadable"
        */
@@ -78,8 +79,8 @@ export type LoadedRecords = {
   candidates: Candidate[];
 
   /**
-   * The records left out because they can't be read, aren't valid YAML, or
-   * have a layout the edits refuse.
+   * The records left out because they can't be read, aren't valid YAML,
+   * have a layout the edits refuse, or were generated ahead of the clock.
    *
    * @example `[{ filePath: "docs/decisions/b.md", reason: "…" }]`
    */
@@ -147,7 +148,8 @@ export function isRecordUnchanged(params: {
  *
  * @returns the candidate, or why it isn't one: it can't be read, it's
  * reached through a symlink, its frontmatter isn't valid YAML or is in a
- * layout the edits refuse, or it has none.
+ * layout the edits refuse, its `generated.at` is ahead of the clock, or it
+ * has no frontmatter.
  */
 export function loadCandidate(params: {
   filePath: string;
@@ -194,8 +196,17 @@ export function loadCandidate(params: {
   // the records chosen with it from being written too.
   const editProblem = findEditProblem({ text, verifiedBy });
 
-  return editProblem !== undefined
-    ? { kind: "invalid", reason: `${filePath}: ${editProblem}` }
+  if (editProblem !== undefined) {
+    return { kind: "invalid", reason: `${filePath}: ${editProblem}` };
+  }
+
+  // No sign-off made now can follow a generation time still to come, and an
+  // older one would hide the regeneration, so its time zone is fixed first.
+  return isGeneratedAhead(summary)
+    ? {
+        kind: "invalid",
+        reason: `${filePath}: generated.at is ahead of the clock; fix its time zone`,
+      }
     : {
         candidate: {
           filePath,
@@ -215,8 +226,9 @@ export function loadCandidate(params: {
  *   frontmatter aren't records, so they're left out.
  *
  * - A record that can't be read, is reached through a symlink, isn't valid
- *   YAML, or has a layout the edits refuse is left out too, but reported, so
- *   the caller can say so rather than skip it unseen.
+ *   YAML, has a layout the edits refuse, or was generated ahead of the clock
+ *   is left out too, but reported, so the caller can say so rather than skip
+ *   it unseen.
  *
  * - A bundle that can't be listed fails the whole load, naming the bundle,
  *   since its records can't even be counted as skipped.
@@ -256,7 +268,8 @@ export function loadCandidates(params: {
  *   that have a frontmatter block; anything else is skipped.
  *
  * - A record that can't be read, is reached through a symlink, isn't valid
- *   YAML, or has a layout the edits refuse is reported in `skipped` instead.
+ *   YAML, has a layout the edits refuse, or was generated ahead of the clock
+ *   is reported in `skipped` instead.
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];

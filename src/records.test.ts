@@ -154,13 +154,6 @@ describe("describeState", () => {
       state: "verified",
       status: "stable",
     },
-    {
-      description: "a verified record generated ahead of the clock",
-      expected: "already verified; generated.at is ahead of the clock",
-      generatedAt: "2999-01-01T00:00:00Z",
-      state: "verified",
-      status: "stable",
-    },
   ] as const)(
     "words $description",
     ({ expected, state, status, text, ...summary }) => {
