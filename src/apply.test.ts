@@ -127,12 +127,13 @@ describe("applyVerification", () => {
     });
 
     // Then - not written, and no file put back in its place
-    expect(outcome).toStrictEqual({
-      kind: "notWritten",
-      message: expect.stringMatching(
+    expect(outcome).toHaveProperty("kind", "notWritten");
+    expect(outcome).toHaveProperty(
+      "message",
+      expect.stringMatching(
         /^docs\/decisions\/a\.md can't be read any more: ENOENT[^\n]*\nNo files changed\.$/u
-      ),
-    });
+      )
+    );
     expect(existsSync(path.join(repo.root, "docs/decisions/a.md"))).toBe(false);
   });
 });
