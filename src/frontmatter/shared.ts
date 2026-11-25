@@ -56,7 +56,7 @@ export const FRONTMATTER_KEYS = {
 } as const;
 
 /** A Unix line break, which also ends each line of a CRLF record. */
-const LF = "\n";
+export const LF = "\n";
 
 /** How YAML spells null, other than leaving a value empty. */
 const NULL_SPELLINGS: ReadonlySet<string> = new Set([
