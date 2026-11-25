@@ -116,7 +116,10 @@ export function parseCliArgs(args: readonly string[]): ParsedArgs {
   try {
     parsed = parseCommandLine(args);
   } catch (error) {
-    return { kind: "invalid", message: describeError(error) };
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
   }
 
   const { positionals, values } = parsed;
@@ -150,8 +153,12 @@ export function parseCliArgs(args: readonly string[]): ParsedArgs {
  * @returns the problem, or `undefined` when the combination is valid.
  */
 function findSelectionProblem(options: CliOptions): string | undefined {
-  const { isChanged, isYes, recordPaths } = options;
+  const { bundles, isChanged, isYes, recordPaths } = options;
   const hasPaths = recordPaths.length > 0;
+
+  if (bundles.includes("")) {
+    return "--bundle needs a directory, not an empty string.";
+  }
 
   if (isChanged && hasPaths) {
     return "Pass --changed or record paths, not both.";
@@ -166,6 +173,21 @@ function findSelectionProblem(options: CliOptions): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Whether the command line asks for help, read loosely so an unknown flag or
+ * a missing value beside it can't throw.
+ */
+function isHelpAsked(args: readonly string[]): boolean {
+  const { values } = parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: { help: { short: "h", type: "boolean" } },
+    strict: false,
+  });
+
+  return values.help === true;
 }
 
 /**

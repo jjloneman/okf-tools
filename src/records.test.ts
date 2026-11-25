@@ -19,7 +19,7 @@ function candidate(params: {
   filePath: string;
   state?: Candidate["state"];
   summary?: Partial<Candidate["summary"]>;
-  text?: string;
+  text?: string | undefined;
 }): Candidate {
   const {
     filePath,
@@ -117,6 +117,35 @@ describe("describeState", () => {
       expected: "no status",
       state: "unverified",
       status: undefined,
+      text: "---\ntype: Decision\n---\n",
+    },
+    {
+      description: "a record whose status is null",
+      expected: "no status",
+      state: "unverified",
+      status: undefined,
+      text: "---\nstatus: ~\n---\n",
+    },
+    {
+      description: "a record with a status OKF doesn't define",
+      expected: 'status "wip", which OKF doesn\'t define',
+      state: "unverified",
+      status: undefined,
+      text: "---\nstatus: wip\n---\n",
+    },
+    {
+      description: "a status that's a list",
+      expected: 'status "[draft]", which OKF doesn\'t define',
+      state: "unverified",
+      status: undefined,
+      text: "---\nstatus: [draft]\n---\n",
+    },
+    {
+      description: "a status of several lines and a control code",
+      expected: 'status "wip [31mred more", which OKF doesn\'t define',
+      state: "unverified",
+      status: undefined,
+      text: '---\nstatus: "wip\\e[31mred\\nmore\\u202E\\n"\n---\n',
     },
     {
       description: "a verified record",
@@ -134,7 +163,7 @@ describe("describeState", () => {
     },
   ] as const)(
     "words $description",
-    ({ expected, state, status, ...summary }) => {
+    ({ expected, state, status, text, ...summary }) => {
       // When/Then - the hint
       expect(
         describeState(
@@ -142,6 +171,7 @@ describe("describeState", () => {
             filePath: "a.md",
             state,
             summary: { ...summary, status },
+            text,
           })
         )
       ).toBe(expected);

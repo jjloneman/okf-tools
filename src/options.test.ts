@@ -51,6 +51,11 @@ describe("parseCliArgs", () => {
   test.each([
     { args: ["--help"], description: "--help" },
     { args: ["-h", "--yes"], description: "-h alongside other flags" },
+    {
+      args: ["--help", "--bogus"],
+      description: "--help beside an unknown flag",
+    },
+    { args: ["--by", "-h"], description: "-h where a flag's value should be" },
   ])("asks for help with $description", ({ args }) => {
     // When/Then - help, whatever else was passed
     expect(parseCliArgs(args)).toStrictEqual({ kind: "help" });
@@ -61,6 +66,11 @@ describe("parseCliArgs", () => {
       args: ["--nope"],
       description: "an unknown flag",
       message: expect.stringContaining("--nope") as unknown,
+    },
+    {
+      args: ["--yes", "--changed", "--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
     },
     {
       args: ["--yes"],

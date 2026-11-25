@@ -8,6 +8,7 @@ import {
   getRecordState,
   isGeneratedAhead,
   readRecordSummary,
+  readStatusText,
 } from "./read.ts";
 
 const AT = "2026-10-02T13:30:00Z";
@@ -702,5 +703,45 @@ describe("isGeneratedAhead", () => {
 
     // Then - only a time in a later second is
     expect(isAhead).toBe(shouldBeAhead);
+  });
+});
+
+describe("readStatusText", () => {
+  test.each([
+    {
+      description: "a status OKF doesn't define",
+      expected: "wip",
+      text: record(["status: wip"]),
+    },
+    {
+      description: "a status OKF defines",
+      expected: "draft",
+      text: record(["status: draft"]),
+    },
+    { description: "no status", expected: undefined, text: record(["a: b"]) },
+    {
+      description: "a null status",
+      expected: undefined,
+      text: record(["status: null"]),
+    },
+    {
+      description: "a status that's a list, as written",
+      expected: "[draft]",
+      text: record(["status: [draft]"]),
+    },
+    {
+      description: "a status that's a mapping, as written",
+      expected: "value: wip",
+      text: record(["status:", "  value: wip"]),
+    },
+    {
+      description: "a block list whose last item is empty, up to that item",
+      expected: "- wip\n  -",
+      text: record(["status:", "  - wip", "  -", "# note", "title: X"]),
+    },
+    { description: "no frontmatter", expected: undefined, text: BODY },
+  ])("reads $description", ({ expected, text }) => {
+    // When/Then - the status as written, or nothing
+    expect(readStatusText(text)).toBe(expected);
   });
 });

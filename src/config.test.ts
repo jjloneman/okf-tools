@@ -115,14 +115,14 @@ describe("resolveSettings", () => {
       config: EMPTY,
       description: "no bundles anywhere",
       reason:
-        "No bundles: pass --bundle <dir>, or set `okf.bundles` in package.json.",
+        "No bundles: pass --bundle <dir>, or set `okf.bundles` in /repo/package.json.",
     },
     {
       by: undefined,
       config: { bundles: ["docs"], verifiedBy: undefined },
       description: "no actor anywhere",
       reason:
-        "No one to sign as: pass --by <actor>, or set `okf.verifiedBy` in package.json.",
+        "No one to sign as: pass --by <actor>, or set `okf.verifiedBy` in /repo/package.json.",
     },
     {
       by: "human:jj loneman",

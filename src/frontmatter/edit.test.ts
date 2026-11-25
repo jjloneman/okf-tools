@@ -441,6 +441,29 @@ describe("verifyRecord", () => {
     });
   });
 
+  test.each([
+    { description: "a no-break space", tail: "\u00A0" },
+    { description: "a zero-width no-break space", tail: "\uFEFF" },
+    { description: "an ideographic space", tail: "\u3000" },
+  ])("renews a timestamp that ends in $description", ({ tail }) => {
+    // Given - the owner's entry, its timestamp ending in a space YAML keeps
+    const text = record([
+      ...DRAFT_LINES,
+      `verified: { by: ${VERIFIED_BY}, at: ${OLD_AT}${tail} }`,
+    ]);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the whole value, that space included, is the new timestamp
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: text
+        .replace(`${OLD_AT}${tail}`, AT)
+        .replace("status: draft", "status: stable"),
+    });
+  });
+
   test("indents a new list item like the existing ones", () => {
     // Given - list items that start at column 0
     const text = record([

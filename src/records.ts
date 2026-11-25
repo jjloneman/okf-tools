@@ -4,7 +4,7 @@ import path from "node:path";
 import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
 
 import { verifyRecord } from "./frontmatter/edit.ts";
-import { isGeneratedAhead } from "./frontmatter/read.ts";
+import { isGeneratedAhead, readStatusText } from "./frontmatter/read.ts";
 
 /** A record in a bundle that could be verified. */
 export type Candidate = {
@@ -126,7 +126,7 @@ export function currentTimestamp(): string {
 export function describeState(candidate: Candidate): string {
   const hints: Record<RecordState, string> = {
     changed: "changed since you verified it",
-    unverified: candidate.summary.status ?? "no status",
+    unverified: describeStatus(candidate),
     verified: isGeneratedAhead(candidate.summary)
       ? "already verified; generated.at is ahead of the clock"
       : "already verified, unchanged",
@@ -169,6 +169,32 @@ export function prepareEdits(params: {
   });
 
   return { edits, failures };
+}
+
+/**
+ * Word an unverified record's status for its hint.
+ *
+ * - A status OKF doesn't define, such as `wip`, is named as written, since
+ *   "no status" would send someone looking for a field that's there.
+ */
+function describeStatus(candidate: Candidate): string {
+  const { summary, text } = candidate;
+
+  if (summary.status !== undefined) {
+    return summary.status;
+  }
+
+  const written = readStatusText(text);
+
+  if (written === undefined) {
+    return "no status";
+  }
+
+  // The hint is one line of a terminal prompt, so the record's own text can't
+  // break it, send the terminal control codes, or reorder it with bidi marks.
+  const shown = written.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim();
+
+  return `status "${shown}", which OKF doesn't define`;
 }
 
 /** Name a commit's scope after its one bundle, or `okf` for none or the root. */

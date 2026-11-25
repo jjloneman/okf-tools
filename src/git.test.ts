@@ -212,6 +212,28 @@ describe("listDirtyPaths", () => {
     // Then - the edited and the new one
     expect(dirtyPaths).toStrictEqual({ isOk: true, value: ["c.md", "b.md"] });
   });
+
+  test("leaves out files HEAD doesn't have when told to skip new ones", () => {
+    // Given - an edited file, an untracked one, a staged one, and one added with intent to add
+    repo.write("a.md", "a\n");
+    repo.commitAll("add");
+    repo.write("a.md", "a2\n");
+    repo.write("b.md", "b\n");
+    repo.write("c.md", "c\n");
+    repo.git("add", "--", "c.md");
+    repo.write("d.md", "d\n");
+    repo.git("add", "--intent-to-add", "--", "d.md");
+
+    // When - asking about all four, skipping new files
+    const dirtyPaths = listDirtyPaths({
+      filePaths: ["a.md", "b.md", "c.md", "d.md"],
+      repoRoot: repo.root,
+      shouldSkipNew: true,
+    });
+
+    // Then - only the edited one
+    expect(dirtyPaths).toStrictEqual({ isOk: true, value: ["a.md"] });
+  });
 });
 
 describe("listDirtyPaths and listChangedPaths, when git status fails", () => {
@@ -334,14 +356,39 @@ describe("listChangedPaths", () => {
       repoRoot: repo.root,
     });
 
-    // Then - no branch diff, but the uncommitted file
+    // Then - no branch diff, but the uncommitted file, new to HEAD
     expect(result).toStrictEqual({
       isOk: true,
       value: {
         hasBranchDiff: false,
         paths: new Set(["docs/a.md"]),
-        statusPaths: new Set(["docs/a.md"]),
+        statusPaths: new Set(),
       },
+    });
+  });
+
+  test("reports only the files HEAD has as the working tree's status", () => {
+    // Given - a committed record edited, and a new one beside it
+    repo.write("docs/a.md", "a\n");
+    repo.commitAll("add");
+    repo.write("docs/a.md", "a2\n");
+    repo.write("docs/b.md", "b\n");
+
+    // When - listing changes
+    const result = listChangedPaths({
+      bundleDirs: ["docs"],
+      repoRoot: repo.root,
+    });
+
+    // Then - both changed, only the edited one in the status
+    expect(
+      result.isOk && {
+        paths: [...result.value.paths].sort(),
+        statusPaths: [...result.value.statusPaths],
+      }
+    ).toStrictEqual({
+      paths: ["docs/a.md", "docs/b.md"],
+      statusPaths: ["docs/a.md"],
     });
   });
 });

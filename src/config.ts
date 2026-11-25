@@ -84,7 +84,7 @@ export type SettingsResult =
       /**
        * Why not.
        *
-       * @example "No bundles: pass --bundle <dir>, or set `okf.bundles` in package.json."
+       * @example "No bundles: pass --bundle <dir>, or set `okf.bundles` in /repo/package.json."
        */
       reason: string;
     }
@@ -190,6 +190,7 @@ export function resolveSettings(params: {
   repoRoot: string;
 }): SettingsResult {
   const { config, cwd, options, repoRoot } = params;
+  const packageJsonPath = path.join(repoRoot, "package.json");
 
   const bundleDirs =
     options.bundles.length > 0
@@ -199,8 +200,7 @@ export function resolveSettings(params: {
   if (bundleDirs.length === 0) {
     return {
       isOk: false,
-      reason:
-        "No bundles: pass --bundle <dir>, or set `okf.bundles` in package.json.",
+      reason: `No bundles: pass --bundle <dir>, or set \`okf.bundles\` in ${packageJsonPath}.`,
     };
   }
 
@@ -209,8 +209,7 @@ export function resolveSettings(params: {
   if (verifiedBy === undefined) {
     return {
       isOk: false,
-      reason:
-        "No one to sign as: pass --by <actor>, or set `okf.verifiedBy` in package.json.",
+      reason: `No one to sign as: pass --by <actor>, or set \`okf.verifiedBy\` in ${packageJsonPath}.`,
     };
   }
 

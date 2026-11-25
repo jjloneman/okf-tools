@@ -3,8 +3,8 @@ type: Decision
 title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:37:22Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T16:09:03Z }
 verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
@@ -46,6 +46,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
   - A commit whose hash can't be read back still counts as committed, reported as `(hash unknown)`, since git made it.
 - **The commit names only the verified files:** `git add -- <files>`, then `git commit -m <message> -- <files>`, so anything else staged stays out of it.
   - A chosen record with other uncommitted changes is committed whole, with a warning listing it first.
+    - As of 2026-11-25, a record new to the repo (untracked, or added to the index) isn't listed, since every line of it is new (issue #35).
 - **A rejected commit is unstaged:** if a hook rejects it, the files are unstaged again so the next unrelated commit doesn't pick them up; the edits stay on disk, and the hook's output is printed.
   - As of 2026-11-25, a `--yes` run's message says to run the same command again once the commit can go through, and that re-run commits the sign-off left on disk as it is (see [What `--yes` verifies](yes-selection.md); issue #29).
   - Staging done before the run for those same files is lost; their content isn't.

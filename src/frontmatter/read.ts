@@ -3,7 +3,7 @@
  * verified. Reading accepts any valid YAML; only editing is allowlisted.
  */
 import { DateTime } from "luxon";
-import { isScalar } from "yaml";
+import { isNode, isScalar } from "yaml";
 
 import type { RecordStatus, Timestamp, VerifyRecordParams } from "./types.ts";
 
@@ -16,6 +16,7 @@ import {
   isRecordStatus,
   parseFrontmatter,
   readField,
+  readNodeEnd,
   readString,
   readTime,
   readTimestamp,
@@ -221,6 +222,40 @@ export function readRecordSummary(
     ),
     writtenStatus: status,
   };
+}
+
+/**
+ * Read a record's `status` as it is written, even one OKF doesn't define.
+ *
+ * - `readRecordSummary` leaves such a status out, so a hint reads it here
+ *   rather than claim the record has none.
+ *
+ * - A list or a mapping is returned as it is written, since it's there all
+ *   the same.
+ *
+ * @returns the status, or `undefined` when it's missing or null.
+ */
+export function readStatusText(text: string): string | undefined {
+  const block = splitFrontmatter(text);
+
+  if (block === undefined) {
+    return undefined;
+  }
+
+  const doc = parseFrontmatter(block.text);
+  const node = readField({
+    doc,
+    key: FRONTMATTER_KEYS.status,
+    map: doc.contents,
+  });
+
+  if (!isNode(node) || (isScalar(node) && isNullScalar(node))) {
+    return undefined;
+  }
+
+  return isScalar(node)
+    ? readString(node)
+    : block.text.slice(node.range?.[0], readNodeEnd(node));
 }
 
 /** Whether a time is later than now, to the second. */
