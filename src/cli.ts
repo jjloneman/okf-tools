@@ -20,9 +20,12 @@ import {
   parseCliArgs,
   parseCommand,
   parseDiffArgs,
+  parseStatusArgs,
+  STATUS_USAGE,
 } from "./options.ts";
 import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
+import { runStatus } from "./status.ts";
 import { spellLikeRepoRoot } from "./working-directory.ts";
 
 /** What a run of the CLI is given by the process that starts it. */
@@ -97,9 +100,15 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runInit({ args: parsed.args, cwd, output });
   }
 
-  return parsed.kind === "diff"
-    ? runDiffCommand({ args: parsed.args, cwd, output })
-    : runVerify({ args: parsed.args, cwd, isInteractive, output, program });
+  if (parsed.kind === "diff") {
+    return runDiffCommand({ args: parsed.args, cwd, output });
+  }
+
+  if (parsed.kind === "status") {
+    return runStatusCommand({ args: parsed.args, cwd, output });
+  }
+
+  return runVerify({ args: parsed.args, cwd, isInteractive, output, program });
 }
 
 /** Resolve the repo, config, bundles, and actor a run works with. */
@@ -205,6 +214,56 @@ function runDiffCommand(params: {
       context: context.value,
       recordPaths: options.recordPaths,
     });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
+ * Run `okf status`: read its arguments and config, then print the report.
+ *
+ * - Exits `0` whatever the records hold; only a usage error, a config it
+ *   can't use, a named path that isn't a record in the bundles, or a bundle
+ *   it can't list exits `1`.
+ */
+function runStatusCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseStatusArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(STATUS_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${STATUS_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildContext({
+      cwd,
+      options: { ...options, shouldCommit: false },
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runStatus({ context: context.value, options });
   } catch (error) {
     output.error(describeError(error));
 

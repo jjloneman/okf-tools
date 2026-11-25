@@ -357,6 +357,7 @@ describe.each(INVOCATIONS)("as $command", (current) => {
         cwd: path.join(repo.root, "docs"),
         excludeGlobs: [],
         output: {
+          data: expect.any(Function) as unknown,
           error: expect.any(Function) as unknown,
           info: expect.any(Function) as unknown,
         },

@@ -255,6 +255,9 @@ export function listBundleChanges(params: {
  * - A sign-off whose `verified.at` is ahead of the clock counts as `changed`,
  *   so the record is offered again and a fresh sign-off renews it.
  *
+ * - `isReadOnly` reads it for a report, which never edits it: a layout the
+ *   edits refuse, and a `generated.at` ahead of the clock, don't refuse it.
+ *
  * @returns the candidate, or why it isn't one: it can't be read, it's
  * reached through a symlink, its frontmatter block is a near miss, such as
  * one with no closing fence, its frontmatter isn't valid YAML or is in a
@@ -263,10 +266,11 @@ export function listBundleChanges(params: {
  */
 export function loadCandidate(params: {
   filePath: string;
+  isReadOnly?: boolean | undefined;
   repoRoot: string;
   verifiedBy: string;
 }): LoadedRecord {
-  const { filePath, repoRoot, verifiedBy } = params;
+  const { filePath, isReadOnly = false, repoRoot, verifiedBy } = params;
   let text: string;
 
   try {
@@ -302,6 +306,19 @@ export function loadCandidate(params: {
     };
   }
 
+  const candidate: Candidate = {
+    filePath,
+    state: readListedState(summary),
+    summary,
+    text,
+  };
+
+  // A report only reads the record, so what would stop an edit doesn't
+  // matter to it.
+  if (isReadOnly) {
+    return { candidate, kind: "record" };
+  }
+
   // A layout the edits refuse is reported now, since choosing it would stop
   // the records chosen with it from being written too.
   const editProblem = findEditProblem({ text, verifiedBy });
@@ -317,15 +334,7 @@ export function loadCandidate(params: {
         kind: "invalid",
         reason: `${filePath}: generated.at is ahead of the clock; fix its time zone`,
       }
-    : {
-        candidate: {
-          filePath,
-          state: readListedState(summary),
-          summary,
-          text,
-        },
-        kind: "record",
-      };
+    : { candidate, kind: "record" };
 }
 
 /**
@@ -350,10 +359,13 @@ export function loadCandidate(params: {
  *
  * - A bundle, or a folder in one, that can't be listed fails the whole load,
  *   naming the bundle, since its records can't even be counted as skipped.
+ *
+ * - `isReadOnly` loads them for a report, as `loadCandidate` says.
  */
 export function loadCandidates(params: {
   bundleDirs: readonly string[];
   excludeGlobs: readonly string[];
+  isReadOnly?: boolean | undefined;
   repoRoot: string;
   verifiedBy: string;
 }): Outcome<LoadedRecords> {
@@ -415,16 +427,24 @@ export function loadCandidates(params: {
  * - A record that can't be read, is reached through a symlink, has a
  *   near-miss frontmatter block, isn't valid YAML, has a layout the edits
  *   refuse, or was generated ahead of the clock is reported in `skipped`
- *   instead.
+ *   instead; under `isReadOnly`, only the first four are.
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];
   excludeGlobs: readonly string[];
   filePaths: readonly string[];
+  isReadOnly?: boolean | undefined;
   repoRoot: string;
   verifiedBy: string;
 }): LoadedRecords {
-  const { bundleDirs, excludeGlobs, filePaths, repoRoot, verifiedBy } = params;
+  const {
+    bundleDirs,
+    excludeGlobs,
+    filePaths,
+    isReadOnly,
+    repoRoot,
+    verifiedBy,
+  } = params;
   const isExcluded = matchExcluded(excludeGlobs);
   const loaded: LoadedRecords = { candidates: [], skipped: [] };
 
@@ -433,7 +453,12 @@ export function loadCandidatesAt(params: {
       continue;
     }
 
-    const record = loadCandidate({ filePath, repoRoot, verifiedBy });
+    const record = loadCandidate({
+      filePath,
+      isReadOnly,
+      repoRoot,
+      verifiedBy,
+    });
 
     if (record.kind === "record") {
       loaded.candidates.push(record.candidate);

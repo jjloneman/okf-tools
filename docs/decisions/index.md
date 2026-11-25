@@ -6,6 +6,7 @@ okf_version: "0.2"
 
 - [How a record's tags are laid out](tags-layout.md) - okf-tools recommends a block list for `tags`, one `- tag` per line, since Prettier rewraps a long one-line flow list; it reads every valid layout, and recommends block only for new and fixed records.
 - [How changelog lines are built](changelog-formatter.md) - `scripts/changelog.ts` prefixes each changeset's summary with the gitmoji and scope of the squash commit that added it, under changesets' own bump-type headings; it's tested but never published, and runs under Node's type stripping.
+- [How okf status reports a bundle's trust state](status-report.md) - `okf status` lists every record under the first group that fits, changed, draft, never signed off, stale, or settled, judged against the signer's sign-off; it writes nothing, exits `0` whatever it finds, and prints a versioned JSON shape for programs.
 - [How okf-tools is distributed](distribution.md) - A public package on the npm registry, installed as an exact-pinned dev dependency; not a private package, GitHub Packages, a git dependency, or a global CLI.
 - [How okf-tools lays out its commands](command-layout.md) - One `okf` binary takes the command as its first argument, starting with `okf verify`; `okf-verify` stays as an alias that runs `okf verify` and prints under its own name.
 - [How okf-verify writes and commits records](writes.md) - Edits only an allowlist of layouts, writing a new entry in the record's own style, never through a symlink; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
@@ -84,6 +85,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - `formatting` — How formatters such as Prettier treat records.
 - `frontmatter` — What the tool reads from and writes into a record's frontmatter.
 - `git` — How the tool reads and changes the repo through git.
+- `json` — Output for programs to read, and how its shape is versioned.
 - `github-actions` — Workflows and how their runs are approved.
 - `instructions` — The block of agent rules `okf init` keeps in a repo's instruction files.
 - `links` — How docs and records link to the spec and to each other.
@@ -100,6 +102,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - `selection` — Which records a run acts on.
 - `spec` — Which OKF spec text the tool follows.
 - `spec-watch` — How the tool watches the upstream spec for changes.
+- `staleness` — When a record goes stale, from its `stale_after`.
 - `status` — A record's `status` lifecycle: `draft`, `stable`, `deprecated`.
 - `symlinks` — How the tool treats symbolic links in and out of a bundle.
 - `tags` — How a record's `tags` are written and read.

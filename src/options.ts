@@ -51,8 +51,12 @@ export type CliOptions = {
 /** The flags and record paths `okf diff` was given. */
 export type DiffOptions = Pick<CliOptions, "bundles" | "by" | "recordPaths">;
 
-/** What the command line asked for: help, a run, or nothing valid. */
-export type ParsedArgs =
+/**
+ * What a command's line asked for: help, a run, or nothing valid.
+ *
+ * - `Options` is the command's own options, the verify command's by default.
+ */
+export type ParsedArgs<Options = CliOptions> =
   | {
       /**
        * `--help` was passed.
@@ -89,7 +93,7 @@ export type ParsedArgs =
        *
        * @example `{ bundles: [], by: undefined, isChanged: true, isYes: true, recordPaths: [], shouldCommit: true }`
        */
-      options: CliOptions;
+      options: Options;
     };
 
 /** What `okf`'s first argument asked for: help, a command, or nothing valid. */
@@ -115,7 +119,7 @@ export type ParsedCommand =
        *
        * @example "verify"
        */
-      kind: "diff" | "init" | "verify";
+      kind: "diff" | "init" | "status" | "verify";
     }
   | {
       /**
@@ -174,6 +178,54 @@ export type ParsedDiffArgs =
       options: DiffOptions;
     };
 
+/** Which records `okf status` lists; with none, it lists them all. */
+export type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+/** How `okf status` prints its report. */
+export type StatusFormat = (typeof STATUS_FORMATS)[number];
+
+/** The flags and record paths an `okf status` run was given. */
+export type StatusOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * The actor passed with `--by`, whose sign-off counts, which overrides
+   * `okf.verifiedBy`.
+   *
+   * @example "human:jjloneman"
+   */
+  by: string | undefined;
+
+  /**
+   * The filters passed, in the order `STATUS_FILTERS` lists them; a record
+   * matching any of them is listed.
+   *
+   * @example `["draft", "stale"]`
+   */
+  filters: readonly StatusFilter[];
+
+  /**
+   * How to print the report, from `--format`.
+   *
+   * @example "json"
+   */
+  format: StatusFormat;
+
+  /**
+   * Record files named on the command line, relative to where it was run;
+   * empty means every record in the bundles.
+   *
+   * @example `["docs/decisions/package-promise.md"]`
+   */
+  recordPaths: readonly string[];
+};
+
 /** The name the verify command is called by: under `okf`, or as its alias. */
 export type VerifyCommand = "okf-verify" | "okf verify";
 
@@ -184,6 +236,7 @@ commands:
   diff    print what changed in records since their last sign-off
   init    write the \`okf\` config and the agent-instructions block, or
           check the block is current
+  status  list every record's trust state, writing nothing
   verify  mark records \`status: stable\` with a \`verified\` entry, then
           commit just those files
 
@@ -278,6 +331,32 @@ export type ParsedInitArgs =
       options: InitOptions;
     };
 
+/** The filters `okf status` takes, each a flag of the same name. */
+export const STATUS_FILTERS = ["changed", "draft", "stale"] as const;
+
+/** The formats `okf status --format` takes; `text` is the default. */
+export const STATUS_FORMATS = ["json", "text"] as const;
+
+/** How to call `okf status`, printed for `--help` and after a usage error. */
+export const STATUS_USAGE = `usage: okf status [options] [<record>...]
+
+Lists every record's trust state: changed since its sign-off, draft, never
+signed off, stale, or settled. It writes nothing, and exits 0 whatever it
+finds. Name records to list only those.
+
+options:
+  --bundle <dir>     a bundle directory to scan; repeat for more
+                     (default: \`okf.bundles\` in package.json)
+  --by <actor>       whose sign-off counts
+                     (default: \`okf.verifiedBy\` in package.json)
+  --changed          only records changed since their sign-off
+  --draft            only records with \`status: draft\`
+  --stale            only records past their \`stale_after\`
+  --format <format>  text (the default) or json
+  --help, -h         print this help
+
+Filters add up: a record that matches any of them is listed.`;
+
 /**
  * How to call the verify command, printed for `--help` and after a usage
  * error, under the name it was called by.
@@ -350,7 +429,12 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     return { kind: "help" };
   }
 
-  if (name === "diff" || name === "init" || name === "verify") {
+  if (
+    name === "diff" ||
+    name === "init" ||
+    name === "status" ||
+    name === "verify"
+  ) {
     return { args: rest, kind: name };
   }
 
@@ -402,6 +486,57 @@ export function parseDiffArgs(args: readonly string[]): ParsedDiffArgs {
     : { kind: "options", options };
 }
 
+/** Read `okf status`'s command line into options, or say why it can't run. */
+export function parseStatusArgs(
+  args: readonly string[]
+): ParsedArgs<StatusOptions> {
+  let parsed: ReturnType<typeof parseStatusLine>;
+
+  try {
+    parsed = parseStatusLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const bundles = values.bundle ?? [];
+
+  if (bundles.includes("")) {
+    return {
+      kind: "invalid",
+      message: "--bundle needs a directory, not an empty string.",
+    };
+  }
+
+  const format = values.format ?? "text";
+
+  if (!isStatusFormat(format)) {
+    return {
+      kind: "invalid",
+      message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
+    };
+  }
+
+  return {
+    kind: "options",
+    options: {
+      bundles,
+      by: values.by,
+      filters: STATUS_FILTERS.filter((filter) => values[filter] === true),
+      format,
+      recordPaths: positionals,
+    },
+  };
+}
+
 /**
  * Check that `--yes`, `--changed`, and record paths come in a combination that
  * selects records exactly one way.
@@ -446,6 +581,11 @@ function isHelpAsked(args: readonly string[]): boolean {
   });
 
   return values.help === true;
+}
+
+/** Whether a `--format` value is one `okf status` prints. */
+function isStatusFormat(format: string): format is StatusFormat {
+  return STATUS_FORMATS.some((known) => known === format);
 }
 
 /**
@@ -576,6 +716,29 @@ function parseInitCommandLine(args: readonly string[]) {
       check: { type: "boolean" },
       copilot: { type: "boolean" },
       help: { short: "h", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf status`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseStatusLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      by: { type: "string" },
+      changed: { type: "boolean" },
+      draft: { type: "boolean" },
+      format: { type: "string" },
+      help: { short: "h", type: "boolean" },
+      stale: { type: "boolean" },
     },
     strict: true,
   });

@@ -8,6 +8,7 @@ import {
   findFrontmatterProblem,
   getRecordState,
   isGeneratedAhead,
+  isStale,
   isVerifiedAhead,
   readRecordSummary,
   readStatusText,
@@ -145,6 +146,7 @@ describe("readRecordSummary", () => {
     const text = record([
       ...DRAFT_LINES,
       `verified: { by: ${VERIFIED_BY}, at: 2026-09-28T09:00:00Z }`,
+      "stale_after: 2027-01-01T00:00:00Z",
     ]);
 
     // When - reading its summary
@@ -153,6 +155,7 @@ describe("readRecordSummary", () => {
     // Then - the checklist fields come back
     expect(summary).toStrictEqual({
       generatedAt: "2026-10-01T15:00:00Z",
+      staleAfter: "2027-01-01T00:00:00Z",
       status: "draft",
       title: "What every export promises",
       type: "Decision",
@@ -452,6 +455,7 @@ describe("readRecordSummary", () => {
     // Then - each read as what its anchor names
     expect(summary).toStrictEqual({
       generatedAt: "2026-10-01T15:00:00Z",
+      staleAfter: undefined,
       status: "draft",
       title: "What every export promises",
       type: "Decision",
@@ -594,6 +598,7 @@ describe("readRecordSummary", () => {
     // Then - every other field is undefined
     expect(summary).toStrictEqual({
       generatedAt: undefined,
+      staleAfter: undefined,
       status: "draft",
       title: undefined,
       type: undefined,
@@ -773,6 +778,62 @@ describe("isGeneratedAhead", () => {
 
     // Then - only a time in a later second is
     expect(isAhead).toBe(shouldBeAhead);
+  });
+});
+
+describe("isStale", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test.each([
+    {
+      description: "no stale_after",
+      shouldBeStale: false,
+      staleAfter: undefined,
+    },
+    {
+      description: "an unreadable one",
+      shouldBeStale: false,
+      staleAfter: "next year",
+    },
+    {
+      description: "one in the next second",
+      shouldBeStale: false,
+      staleAfter: "2026-11-20T12:00:01Z",
+    },
+    {
+      description: "one earlier in the same second",
+      shouldBeStale: true,
+      staleAfter: "2026-11-20T12:00:00Z",
+    },
+    {
+      description: "one later in the same second",
+      shouldBeStale: false,
+      staleAfter: "2026-11-20T12:00:00.900Z",
+    },
+    {
+      description: "one at the same instant",
+      shouldBeStale: true,
+      staleAfter: "2026-11-20T12:00:00.400Z",
+    },
+    {
+      description: "one in the past",
+      shouldBeStale: true,
+      staleAfter: "2026-09-23T00:00:00Z",
+    },
+  ])("is $shouldBeStale for $description", ({ shouldBeStale, staleAfter }) => {
+    // Given - the clock on a fixed day
+    vi.useFakeTimers({
+      now: DateTime.fromISO(NOW).toJSDate(),
+      toFake: ["Date"],
+    });
+
+    // When - asking whether the record is past its stale_after
+    const isPast = isStale({ staleAfter });
+
+    // Then - it is from that instant on
+    expect(isPast).toBe(shouldBeStale);
   });
 });
 

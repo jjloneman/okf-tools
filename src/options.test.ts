@@ -5,7 +5,16 @@ import {
   parseCommand,
   parseDiffArgs,
   parseInitArgs,
+  parseStatusArgs,
 } from "./options.ts";
+
+const STATUS_DEFAULTS = {
+  bundles: [],
+  by: undefined,
+  filters: [],
+  format: "text",
+  recordPaths: [],
+};
 
 const DEFAULTS = {
   bundles: [],
@@ -151,6 +160,11 @@ describe("parseCommand", () => {
           "--yes isn't a command; options follow the command, as in okf <command> --yes.",
       },
     },
+    {
+      args: ["status", "--draft"],
+      description: "status, with the arguments after it",
+      expected: { args: ["--draft"], kind: "status" },
+    },
   ])("reads $description", ({ args, expected }) => {
     // Given/When/Then - the command and its arguments, or why there's none
     expect(parseCommand(args)).toStrictEqual(expected);
@@ -290,5 +304,78 @@ describe("parseInitArgs", () => {
       kind: "invalid",
       message: expect.stringMatching(message) as unknown,
     });
+  });
+});
+
+describe("parseStatusArgs", () => {
+  test.each([
+    { args: [], description: "no arguments", options: {} },
+    {
+      args: ["--bundle", "a", "--bundle", "b", "--by", "human:x"],
+      description: "bundles and a signer",
+      options: { bundles: ["a", "b"], by: "human:x" },
+    },
+    {
+      args: ["--stale", "--draft", "--changed"],
+      description: "every filter, in any order",
+      options: { filters: ["changed", "draft", "stale"] },
+    },
+    {
+      args: ["--format", "json", "docs/a.md", "docs/b.md"],
+      description: "--format json with record paths",
+      options: { format: "json", recordPaths: ["docs/a.md", "docs/b.md"] },
+    },
+    {
+      args: ["--format", "text"],
+      description: "--format text",
+      options: { format: "text" },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When - parsing the arguments
+    const parsed = parseStatusArgs(args);
+
+    // Then - the options, with every other flag at its default
+    expect(parsed).toStrictEqual({
+      kind: "options",
+      options: { ...STATUS_DEFAULTS, ...options },
+    });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "--draft"], description: "-h alongside other flags" },
+    {
+      args: ["--help", "--yes"],
+      description: "--help beside a flag status doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseStatusArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["--yes"],
+      description: "a verify flag",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+    {
+      args: ["--format"],
+      description: "--format with no value",
+      message: expect.stringContaining("--format") as unknown,
+    },
+    {
+      args: ["--format", "yaml"],
+      description: "a format it doesn't print",
+      message: '--format takes json or text, not "yaml".',
+    },
+    {
+      args: ["--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseStatusArgs(args)).toStrictEqual({ kind: "invalid", message });
   });
 });
