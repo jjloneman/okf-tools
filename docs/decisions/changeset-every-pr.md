@@ -2,13 +2,19 @@
 type: Decision
 title: Why every PR adds a changeset
 description: CI's required `🦋 Changeset` check fails a PR without one; a PR that ships nothing adds `pnpm changeset --empty`, and the version PR, which is exempt, has its CI run approved by hand before it merges.
-tags: [ci, releases]
+tags:
+  - changesets
+  - ci
+  - github-actions
+  - pull-requests
+  - releases
+  - rulesets
 sources:
   - id: changesets-empty
     resource: https://github.com/changesets/changesets/blob/main/docs/command-line-options.md
     title: Changesets, command line options
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
 verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 

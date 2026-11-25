@@ -2,7 +2,13 @@
 type: Decision
 title: How changelog lines are built
 description: "`scripts/changelog.ts` prefixes each changeset's summary with the gitmoji and scope of the squash commit that added it, under changesets' own bump-type headings; it's tested but never published, and runs under Node's type stripping."
-tags: [releases]
+tags:
+  - changelog
+  - changesets
+  - commits
+  - node
+  - releases
+  - typescript
 sources:
   - id: changesets-changelog
     resource: https://github.com/changesets/changesets/blob/main/docs/modifying-changelog-format.md
@@ -10,8 +16,8 @@ sources:
   - id: node-type-stripping
     resource: https://nodejs.org/api/typescript.html
     title: Node.js, modules and TypeScript
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
 verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 

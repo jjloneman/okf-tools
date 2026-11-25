@@ -2,7 +2,13 @@
 type: Decision
 title: Which OKF spec okf-tools follows
 description: okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.2 text at `0b87c52`; every spec link points to the pin, and adopting v0.3 is a PR of its own.
-tags: [spec]
+tags:
+  - links
+  - spec
+  - spec-watch
+  - status
+  - upstream
+  - verification
 sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
@@ -14,7 +20,7 @@ sources:
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:20:42Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
 ---
 
 # Which OKF spec okf-tools follows
