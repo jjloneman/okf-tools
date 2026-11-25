@@ -5,17 +5,19 @@
  *   `[okf-verify]`, so its output is traceable in a log or an agent's
  *   transcript.
  *
- * - Data for a program to read, such as `okf status --format json`, is the
- *   exception: a prefix would stop it parsing.
+ * - Text printed to be read as it is is the exception: a prefix would stop
+ *   a program parsing `okf status --format json`, and break the Markdown
+ *   `okf guide` prints.
  */
 
 /**
- * Where a run prints its non-prompt lines, every line prefixed but the data a
- * program reads.
+ * Where a run prints its non-prompt lines, every line prefixed but the text
+ * printed to be read as it is.
  */
 export type Output = {
   /**
-   * Print data for a program to read to stdout, as it is, with no prefix.
+   * Print text to be read as it is to stdout, with no prefix: data for a
+   * program, or the Markdown guide.
    *
    * @example `output.data(JSON.stringify(report))`
    */

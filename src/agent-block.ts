@@ -9,6 +9,8 @@
  *   indented code block is never taken for one.
  */
 
+import { RECORD_RULES, RECORDS_INTRO } from "./guide.ts";
+
 /** Where a file's block is, or why the file has none that can be rewritten. */
 export type BlockSearch =
   | {
@@ -101,26 +103,20 @@ export const BLOCK_END = "<!-- okf:end -->";
 /**
  * The lines between the markers, with `\n` line breaks.
  *
- * - The README's Agents section quotes them, and a test keeps the two the
- *   same, so the rules are written once.
+ * - The intro and the rules come from `guide.ts`, which `okf guide` prints
+ *   too, and the README's Agents section quotes the block, with a test
+ *   keeping the two the same, so the rules are written once.
  *
  * - Prettier leaves them as they are, so a formatted repo still passes
  *   `okf init --check`.
  */
-export const AGENT_BLOCK = `<!-- Written by \`okf init\` from @jjloneman/okf-tools. Run it again to refresh this block, and keep the repo's own rules outside it. -->
-
-## OKF records
-
-The Markdown files in the bundles that \`okf.bundles\` lists in \`package.json\` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.
-
-- **Write a new record as \`status: draft\`**, and name yourself in \`generated\` as \`<producer>/<version>\`, such as \`claude-code/2.1.316\`, with the UTC time you wrote it.
-- **When you edit a record, re-stamp \`generated\`** (\`by\` and \`at\`), and set a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
-- **Never add or change a \`verified\` entry yourself.** Signing a record off is the person's call.
-- **Verify only when the person asks you to**, with \`okf verify --yes <record>...\`, naming the files they approved.
-  - Pass \`--changed\` instead only when they asked for every changed record.
-  - Never verify a record as a side effect of drafting or editing it.
-- **Write \`tags\` as a block list**, one \`- tag\` per line, sorted, in kebab-case.
-  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.`;
+export const AGENT_BLOCK: string = [
+  "<!-- Written by `okf init` from @jjloneman/okf-tools. Run it again to refresh this block, and keep the repo's own rules outside it. -->",
+  "## OKF records",
+  RECORDS_INTRO,
+  RECORD_RULES,
+  "Run `okf guide` through the repo's package manager, such as `pnpm exec okf guide`, for every okf-tools command and when you may run each, printed from the installed version.",
+].join("\n\n");
 
 /** The whole block, markers included, with `\n` line breaks. */
 const FULL_BLOCK = `${BLOCK_START}\n${AGENT_BLOCK}\n\n${BLOCK_END}`;

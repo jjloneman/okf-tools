@@ -4,6 +4,7 @@ import {
   parseCliArgs,
   parseCommand,
   parseDiffArgs,
+  parseGuideArgs,
   parseInitArgs,
   parseStatusArgs,
 } from "./options.ts";
@@ -165,6 +166,11 @@ describe("parseCommand", () => {
       description: "status, with the arguments after it",
       expected: { args: ["--draft"], kind: "status" },
     },
+    {
+      args: ["guide"],
+      description: "guide, with no arguments",
+      expected: { args: [], kind: "guide" },
+    },
   ])("reads $description", ({ args, expected }) => {
     // Given/When/Then - the command and its arguments, or why there's none
     expect(parseCommand(args)).toStrictEqual(expected);
@@ -226,6 +232,37 @@ describe("parseDiffArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // Given/When/Then - a usage error saying why
     expect(parseDiffArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseGuideArgs", () => {
+  test.each([
+    { args: [], description: "no arguments", expected: { kind: "guide" } },
+    { args: ["--help"], description: "--help", expected: { kind: "help" } },
+    {
+      args: ["-h", "--bogus"],
+      description: "-h beside an unknown flag",
+      expected: { kind: "help" },
+    },
+    {
+      args: ["--bogus"],
+      description: "an unknown flag",
+      expected: {
+        kind: "invalid",
+        message: expect.stringContaining("--bogus") as unknown as string,
+      },
+    },
+    {
+      args: ["verify"],
+      description: "a positional argument",
+      expected: {
+        kind: "invalid",
+        message: "okf guide takes no arguments, but was given verify.",
+      },
+    },
+  ])("reads $description", ({ args, expected }) => {
+    // Given/When/Then - the guide, help, or why the arguments can't run
+    expect(parseGuideArgs(args)).toStrictEqual(expected);
   });
 });
 
