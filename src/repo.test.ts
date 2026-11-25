@@ -1,5 +1,5 @@
 import fc from "fast-check";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -217,6 +217,42 @@ describe("loadCandidates, given a layout the edits refuse", () => {
           "docs/decisions/a.md: `verified` holds a single value, not an entry or a list; edit the record by hand",
       },
     ]);
+  });
+});
+
+describe("loadCandidates, given a generated.at ahead of the clock", () => {
+  test("reports the record instead of listing it as verified", () => {
+    // Given - a record signed off, then regenerated with a time still to come
+    repo.write(
+      "docs/decisions/a.md",
+      record([
+        "type: Decision",
+        "status: stable",
+        "generated: { by: claude-code/model, at: 2099-11-25T20:00:00Z }",
+        `verified: { by: "${VERIFIED_BY}", at: 2026-11-01T10:00:00Z }`,
+      ])
+    );
+
+    // When - loading the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - nothing listed, and the record reported with the fix
+    expect({ candidates, skipped }).toStrictEqual({
+      candidates: [],
+      skipped: [
+        {
+          filePath: "docs/decisions/a.md",
+          reason:
+            "docs/decisions/a.md: generated.at is ahead of the clock; fix its time zone",
+        },
+      ],
+    });
   });
 });
 
@@ -503,5 +539,31 @@ describe("writeRecords", () => {
       ) as unknown,
     });
     expect(repo.read("docs/a.md")).toBe("old a\n");
+  });
+
+  test("never writes through a record that has become a symlink", () => {
+    // Given - a record, then a second one replaced by a link to other text
+    repo.write("docs/a.md", "old a\n");
+    repo.write("drafts/real.md", "other\n");
+    symlinkSync("../drafts/real.md", path.join(repo.root, "docs/b.md"));
+
+    // When - writing both
+    const result = writeRecords({
+      edits: [
+        { filePath: "docs/a.md", originalText: "old a\n", text: "new a\n" },
+        { filePath: "docs/b.md", originalText: "old b\n", text: "new b\n" },
+      ],
+      repoRoot: repo.root,
+    });
+
+    // Then - the link's write fails, and neither file is left changed
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^Couldn't write docs\/b\.md: .*ELOOP[\s\S]*No files changed\.$/u
+      ) as unknown,
+    });
+    expect(repo.read("docs/a.md")).toBe("old a\n");
+    expect(repo.read("drafts/real.md")).toBe("other\n");
   });
 });

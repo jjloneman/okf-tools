@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: How okf-verify writes and commits records
-description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
+description: Edits only an allowlist of layouts, never through a symlink; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T16:09:03Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:17:13Z }
 verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
@@ -32,6 +32,11 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
   - A record that isn't valid UTF-8 can't be read: it's skipped in the checklist and fails a `--yes` run, with a line naming it.
   - The rollback writes back the text the record was read as, which is its original bytes.
   - The re-read before writing compares bytes, so a record saved since in another encoding counts as changed on disk, and nothing is written.
+- **Never through a symlink:** as of 2026-11-25, a record is edited only at its own path: one whose real path differs, because it or a folder above it in the repo is a symlink, is refused with a reason naming where it leads (issue #28).
+  - A linked record is skipped in the checklist and fails a `--yes` run, wherever the link leads, even to another record in the same bundle.
+  - A bundle directory reached through a symlink fails the run before any record is read.
+  - The re-read before writing counts a record replaced by a symlink since it was listed as changed on disk, so nothing is written through it.
+  - Each write opens the record with `O_NOFOLLOW`, so a symlink swapped in at the record's own name after that re-read fails the write, and the others roll back, rather than edit the file it points to. A folder above it swapped for a symlink in that window isn't caught.
 - **All or nothing before writing:** if any chosen record refuses the edit, nothing is written.
   - As of 2026-11-12, a record the edits would refuse is reported when the records are listed and left out of the selection, so it can't hold the others back; the write-time refusal still guards a record changed on disk since.
 - **Re-read before writing:** each record is read again just before the write; if one changed on disk since it was listed, such as an edit saved while the prompt was open, nothing is written.
@@ -56,6 +61,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 
 - A record that's half-verified, or verified with text the person never saw, is worse than one left as a draft; each guard keeps the result to "all verified as reviewed" or "nothing changed".
 - A lossy decode turned each byte it couldn't read into U+FFFD, so verifying a Latin-1 record rewrote bytes in its body, and a rollback wrote that damage back while saying no files changed. The OKF spec requires UTF-8, so refusing such a record costs nothing a valid one needs (issue #27).
+- Writing through a symlink rewrote whatever it pointed at, a file outside the repo included, while git committed the link itself, so the sign-off was left uncommitted or the commit failed (issue #28). A repo that links records on purpose is refused with the reason, since no write through the link can be committed at the record's path.
 - Hooks are the repo's own checks, so a sign-off goes through them like any other commit; pushing stays the person's step.
 - These guards came from two `/code-review` passes and PR review on PR #2.
 - A sign-off left on disk after a failed commit used to be stranded: a re-run skipped the record as already verified and exited `2` (issue #29). Git's known refusals are now caught before anything is written, and the re-run finishes the rest.

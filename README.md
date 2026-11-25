@@ -33,6 +33,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
 - it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end;
 - it refuses a record that isn't valid UTF-8, as the OKF spec requires, rather than rewrite the bytes it can't read;
+- it refuses a record or bundle reached through a symlink, since git commits the link, not the file it points to;
 - it edits only the layouts below, and refuses any other with a reason, for a hand edit.
 
 The layouts it edits:
@@ -95,6 +96,7 @@ pnpm okf:verify --yes --changed
 - `--yes` alone is a usage error: it needs `--changed` or record paths, so nothing is ever verified by accident.
 - A named record that's already verified, and unchanged since, is skipped, unless that sign-off isn't committed yet, as after a hook rejected the commit: then the same command commits it as it is.
 - "Where you run it" is the folder you call `pnpm` from, when that's in the package's repo. With `pnpm --dir <package>` or `npm --prefix <package>` from another repo or no repo, paths resolve from the package root instead.
+- A record whose `generated.at` is ahead of the clock, as a wrong time zone writes it, fails the run until its time is fixed.
 - Exit codes: `0` worked, `1` failed, `2` nothing needed verifying.
 
 ### 🏳️ Flags
@@ -158,7 +160,7 @@ import {
 - A refusal has a `kind` to switch on, one of `REFUSAL_KINDS` (`invalidParams`, `invalidYaml`, `noFrontmatter`, `unsupportedLayout`), beside its `reason` in words.
 - `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, and `findEditProblem` says why `verifyRecord` would refuse a record.
 - A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
-- `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`).
+- `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`), and never reads the clock: a `generated.at` ahead of it is judged like any other.
 
 `run` is the CLI itself, for calling it in-process; it never throws and resolves to the exit code.
 

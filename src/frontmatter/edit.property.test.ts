@@ -325,6 +325,9 @@ const LATER_AT = "2026-10-03T08:15:00Z";
 const OLD_ATS = ["2026-09-01T00:00:00Z", "2026-09-28T09:00:00Z"];
 const RUN_OPTIONS = { numRuns: 400, seed: 13 };
 
+/** Ten years in milliseconds, the most the clock lags a generation by. */
+const TEN_YEARS_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
 /** Names that are safe unquoted, in flow and block context alike. */
 /** The comment line that trails an inline entry, in the generated layouts. */
 const TRAILING_COMMENT = "  # theirs";
@@ -1130,15 +1133,17 @@ describe("the state right after a sign-off", () => {
     noInvalidDate: true,
   });
 
-  test("is verified, for any record and any clock", () => {
+  test("is verified, for any record the listing accepts", () => {
     fc.assert(
       fc.property(
         RECORD_ARB,
         timeArb,
-        timeArb,
+        fc.integer({ max: TEN_YEARS_MS, min: 0 }),
         fc.boolean(),
-        (model, generatedAt, now, isBlock) => {
-          // Given - a record generated at any time, and the clock at any other
+        (model, generatedAt, lagMs, isBlock) => {
+          // Given - a record generated at any time, and the clock no earlier,
+          // since the listing refuses a record ahead of it
+          const now = new Date(generatedAt.getTime() + lagMs);
           const generated: FieldModel = {
             key: "generated",
             keyProperty: "",
@@ -1246,14 +1251,8 @@ describe("the state right after a sign-off", () => {
   test("is verified, for any timestamp it accepts", () => {
     fc.assert(
       fc.property(RECORD_ARB, atArb, (model, at) => {
-        // Given - any record, any timestamp, and a clock past every one, so
-        // none is judged by being ahead of it
+        // Given - any record and any timestamp
         const text = `${render(model).lines.join("")}${BODY}`;
-
-        vi.useFakeTimers({
-          now: DateTime.fromISO("9999-12-31T23:59:59Z").toJSDate(),
-          toFake: ["Date"],
-        });
 
         // When - signing it off at that timestamp
         const result = verifyRecord({
