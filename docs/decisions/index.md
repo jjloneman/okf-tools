@@ -20,6 +20,7 @@ okf_version: "0.2"
 - [Which actors can sign a record](actor.md) - `okf.verifiedBy` or `--by` must be an OKF actor YAML reads back as a plain string: it starts with a letter, has a `:` or `/` after it, and holds no whitespace, quotes, `#`, or flow indicators; there is no default.
 - [Which files in a bundle are records](bundle-contents.md) - Every `.md` file at any depth under a configured bundle is a record, other than `index.md` and `log.md` at every level and the paths `okf.exclude` matches; a bundle inside another counts each record once, and a symlink to a folder is never followed.
 - [Which OKF spec okf-tools follows](spec-pin.md) - okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.2 text at `0b87c52`; every spec link points to the pin, and adopting v0.3 is a PR of its own.
+- [Who owns the spec rules `okf check` runs](spec-rules.md) - okf-tools builds the spec rules into `okf check` itself, on the frontmatter reader `okf verify` uses; a trial of okfit, okf-lint and okf-kit on a fabricated bundle rejected adopting any of them, and adopting one is revisited if v0.3 grows the spec rules well past what okf-tools reads.
 - [Who verifies a record](who-verifies.md) - Verification is the person's call, but not only a terminal prompt may record it; an agent verifies with `--yes` when the person asks, naming the files and signing as the person.
 - [Why every PR adds a changeset](changeset-every-pr.md) - CI's required `🦋 Changeset` check fails a PR without one; a PR that ships nothing adds `pnpm changeset --empty`, and the version PR, which is exempt, has its CI run approved by hand before it merges.
 
@@ -75,6 +76,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - `change-detection` — How the tool decides which records changed.
 - `changelog` — How `CHANGELOG.md` lines are built.
 - `changesets` — Changeset files and the `changeset` commands.
+- `checks` — The rules `okf check` runs, and who owns them.
 - `ci` — CI jobs and required checks.
 - `cli` — The command line: flags, selections, and output.
 - `commits` — The git commits the tool or the release flow makes.
