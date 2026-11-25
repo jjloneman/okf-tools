@@ -189,6 +189,7 @@ describe("okf status", () => {
             "staleAfter": null,
             "state": "changed",
             "status": "draft",
+            "tier": "unverified",
             "title": "A changed record",
             "type": "Decision",
             "verifiedAt": "2026-10-02T13:30:00Z",
@@ -201,6 +202,7 @@ describe("okf status", () => {
             "staleAfter": "2026-10-10T00:00:00Z",
             "state": "verified",
             "status": "stable",
+            "tier": "human-reviewed",
             "title": null,
             "type": "Decision",
             "verifiedAt": "2026-10-02T13:30:00Z",
@@ -216,6 +218,56 @@ describe("okf status", () => {
         "verifiedBy": "human:jjloneman",
       }
     `);
+  });
+
+  test("reports each record's trust tier from every actor's current events", async () => {
+    // Given - a record for each tier, and sign-offs that don't count
+    repo.write("docs/decisions/human.md", signedRecord());
+    repo.write(
+      "docs/decisions/team.md",
+      record([
+        "type: Decision",
+        `generated: { by: claude-code/model, at: ${GENERATED} }`,
+        `verified: { by: team:finance, at: ${SIGNED} }`,
+      ])
+    );
+    repo.write(
+      "docs/decisions/older.md",
+      record([
+        "type: Decision",
+        "generated: { by: claude-code/model, at: 2026-10-05T09:00:00Z }",
+        "verified:",
+        `  - { by: ${VERIFIED_BY}, at: ${SIGNED} }`,
+        "  - { by: process:nightly, at: 2026-10-06T02:00:00Z }",
+      ])
+    );
+    repo.write(
+      "docs/decisions/other-signer.md",
+      verifiedRecord({ by: "human:someone", title: "Someone else's" })
+    );
+    repo.write("docs/decisions/never.md", draftRecord("Never signed"));
+
+    // When - listing them as JSON
+    await runStatus(["--format", "json"]);
+
+    // Then - each tier by OKF v0.3's rules, beside the signer's state
+    const report = JSON.parse(infos.join("")) as {
+      records: { path: string; state: string; tier: string }[];
+    };
+
+    expect(
+      report.records.map(({ path: filePath, state, tier }) => [
+        path.basename(filePath),
+        state,
+        tier,
+      ])
+    ).toStrictEqual([
+      ["human.md", "verified", "human-reviewed"],
+      ["never.md", "unverified", "unverified"],
+      ["older.md", "changed", "machine-confirmed"],
+      ["other-signer.md", "unverified", "human-reviewed"],
+      ["team.md", "unverified", "machine-confirmed"],
+    ]);
   });
 
   test.each([

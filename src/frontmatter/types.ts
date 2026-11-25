@@ -54,6 +54,40 @@ export type RefusalKind = (typeof REFUSAL_KINDS)[keyof typeof REFUSAL_KINDS];
 /** An ISO 8601 timestamp as a record writes it: `2026-10-02T13:30:00Z`. */
 export type Timestamp = string;
 
+/** OKF v0.3's trust tiers, by the names it gives them. */
+export const TRUST_TIERS = {
+  humanReviewed: "human-reviewed",
+  machineConfirmed: "machine-confirmed",
+  unverified: "unverified",
+} as const;
+
+/**
+ * How far a consumer can trust a record, as OKF v0.3 calculates it from the
+ * `verified` events at or after `generated.at`.
+ *
+ * - `unverified`: no such event.
+ * - `machine-confirmed`: such events, none from a `human:` actor.
+ * - `human-reviewed`: such an event from a `human:` actor.
+ */
+export type TrustTier = (typeof TRUST_TIERS)[keyof typeof TRUST_TIERS];
+
+/** One `verified` event: who or what confirmed the record, and when. */
+export type Verification = {
+  /**
+   * When, as written.
+   *
+   * @example "2026-10-02T13:30:00Z"
+   */
+  at: Timestamp;
+
+  /**
+   * The actor, as written.
+   *
+   * @example "human:jjloneman"
+   */
+  by: string;
+};
+
 /** What `verifyRecord` needs: the record, who signs it, and when. */
 export type VerifyRecordParams = {
   /**

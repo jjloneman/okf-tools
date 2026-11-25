@@ -113,6 +113,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - `symlinks` — How the tool treats symbolic links in and out of a bundle.
 - `tags` — How a record's `tags` are written and read.
 - `timestamps` — How `generated.at` and `verified.at` are written and compared.
+- `trust-tiers` — OKF v0.3's trust tiers, and how a record's are calculated.
 - `typescript` — TypeScript features and type stripping.
 - `upstream` — The OKF spec's repositories and where it lives.
 - `validation` — How the tool checks values before using them.

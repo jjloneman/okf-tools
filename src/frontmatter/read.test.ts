@@ -7,6 +7,7 @@ import { NEAR_MISSES, VERIFIED_BY } from "#test/repo";
 import {
   findFrontmatterProblem,
   getRecordState,
+  getTrustTier,
   isGeneratedAhead,
   isStale,
   isVerifiedAhead,
@@ -161,6 +162,7 @@ describe("readRecordSummary", () => {
       tags: [],
       title: "What every export promises",
       type: "Decision",
+      verifications: [{ at: "2026-09-28T09:00:00Z", by: VERIFIED_BY }],
       verifiedAt: "2026-09-28T09:00:00Z",
       writtenStatus: "draft",
     });
@@ -463,6 +465,7 @@ describe("readRecordSummary", () => {
       tags: [],
       title: "What every export promises",
       type: "Decision",
+      verifications: [],
       verifiedAt: undefined,
       writtenStatus: "draft",
     });
@@ -608,6 +611,7 @@ describe("readRecordSummary", () => {
       tags: [],
       title: undefined,
       type: undefined,
+      verifications: [],
       verifiedAt: undefined,
       writtenStatus: "draft",
     });
@@ -831,6 +835,138 @@ describe("getRecordState", () => {
   });
 });
 
+describe("getTrustTier", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test.each([
+    {
+      description: "no verified events",
+      expected: "unverified",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [],
+    },
+    {
+      description: "a summary built without its events",
+      expected: "unverified",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: undefined,
+    },
+    {
+      description: "a human sign-off after the generation",
+      expected: "human-reviewed",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [{ at: AT, by: "human:someone" }],
+    },
+    {
+      description: "a human sign-off in the second it was generated",
+      expected: "human-reviewed",
+      generatedAt: "2026-10-01T15:00:00.900Z",
+      verifications: [{ at: "2026-10-01T15:00:00Z", by: "human:someone" }],
+    },
+    {
+      description: "a human sign-off older than the generation",
+      expected: "unverified",
+      generatedAt: "2026-10-05T09:00:00Z",
+      verifications: [{ at: AT, by: "human:someone" }],
+    },
+    {
+      description: "a team sign-off after the generation",
+      expected: "machine-confirmed",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [{ at: AT, by: "team:finance" }],
+    },
+    {
+      description: "a process check, and an older human sign-off",
+      expected: "machine-confirmed",
+      generatedAt: "2026-10-05T09:00:00Z",
+      verifications: [
+        { at: AT, by: "human:someone" },
+        { at: "2026-10-06T02:00:00Z", by: "process:nightly" },
+      ],
+    },
+    {
+      description: "a tool's check, and a current human sign-off",
+      expected: "human-reviewed",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [
+        { at: AT, by: "okf-tools/0.1.0" },
+        { at: AT, by: "human:someone" },
+      ],
+    },
+    {
+      description: "a human scheme with no id",
+      expected: "machine-confirmed",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [{ at: AT, by: "human:" }],
+    },
+    {
+      description: "a human sign-off at an unreadable time",
+      expected: "unverified",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [{ at: "not a date", by: "human:someone" }],
+    },
+    {
+      description: "a human sign-off ahead of the clock",
+      expected: "unverified",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [{ at: "2026-11-20T12:00:01Z", by: "human:someone" }],
+    },
+    {
+      description: "a human sign-off at an unreadable time, never generated",
+      expected: "human-reviewed",
+      generatedAt: undefined,
+      verifications: [{ at: "not a date", by: "human:someone" }],
+    },
+    {
+      description:
+        "an older human sign-off, and a later one ahead of the clock",
+      expected: "unverified",
+      generatedAt: "2026-10-01T15:00:00Z",
+      verifications: [
+        { at: AT, by: "human:someone" },
+        { at: "2027-01-01T00:00:00Z", by: "human:someone" },
+      ],
+    },
+    {
+      description:
+        "an older human sign-off, and a later one by the same person",
+      expected: "human-reviewed",
+      generatedAt: "2026-10-05T09:00:00Z",
+      verifications: [
+        { at: "2026-10-06T09:00:00Z", by: "human:someone" },
+        { at: AT, by: "human:someone" },
+      ],
+    },
+    {
+      description: "a human sign-off with no generation time",
+      expected: "human-reviewed",
+      generatedAt: undefined,
+      verifications: [{ at: AT, by: "human:someone" }],
+    },
+    {
+      description: "a human sign-off with an unreadable generation time",
+      expected: "human-reviewed",
+      generatedAt: "yesterday",
+      verifications: [{ at: AT, by: "human:someone" }],
+    },
+  ])("is $expected for $description", ({ expected, ...summary }) => {
+    // Given - the clock on a fixed day
+    vi.useFakeTimers({
+      now: DateTime.fromISO(NOW).toJSDate(),
+      toFake: ["Date"],
+    });
+
+    // When - calculating the tier
+    const tier = getTrustTier(summary);
+
+    // Then - only each actor's latest event counts, when current, and only a
+    // person reviews
+    expect(tier).toBe(expected);
+  });
+});
+
 describe("isGeneratedAhead", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -1014,5 +1150,62 @@ describe("readStatusText", () => {
   ])("reads $description", ({ expected, text }) => {
     // When/Then - the status as written, or nothing
     expect(readStatusText(text)).toBe(expected);
+  });
+});
+
+describe("readRecordSummary's verifications", () => {
+  test.each([
+    {
+      description: "a list of events, in order",
+      expected: [
+        { at: AT, by: "human:someone" },
+        { at: "2026-10-03T02:00:00Z", by: "process:nightly" },
+      ],
+      lines: [
+        "verified:",
+        `  - { by: human:someone, at: ${AT} }`,
+        "  - by: process:nightly",
+        "    at: 2026-10-03T02:00:00Z",
+      ],
+    },
+    {
+      description: "a bare mapping, as one event",
+      expected: [{ at: AT, by: "team:finance" }],
+      lines: [`verified: { by: team:finance, at: ${AT} }`],
+    },
+    {
+      description: "an event through an alias",
+      expected: [{ at: AT, by: "human:someone" }],
+      lines: [
+        `checked: &check { by: human:someone, at: ${AT} }`,
+        "verified:",
+        "  - *check",
+      ],
+    },
+    {
+      description: "events missing a by or an at, left out",
+      expected: [{ at: AT, by: "human:someone" }],
+      lines: [
+        "verified:",
+        `  - { at: ${AT} }`,
+        "  - { by: human:nobody, at: ~ }",
+        "  - not an event",
+        `  - { by: human:someone, at: ${AT} }`,
+      ],
+    },
+    {
+      description: "no verified",
+      expected: [],
+      lines: [],
+    },
+  ])("reads $description", ({ expected, lines }) => {
+    // Given - a record with those verified events
+    const text = record([...DRAFT_LINES, ...lines]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - every event with both keys, by any actor
+    expect(summary?.verifications).toStrictEqual(expected);
   });
 });

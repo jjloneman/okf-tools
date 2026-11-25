@@ -7,6 +7,7 @@
  */
 import type { ExitCode } from "./exit-codes.ts";
 import type { RecordState } from "./frontmatter/read.ts";
+import type { TrustTier } from "./frontmatter/types.ts";
 import type { StatusFilter, StatusOptions } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
 import type { Candidate } from "./records.ts";
@@ -14,7 +15,7 @@ import type { LoadedRecords } from "./repo.ts";
 import type { RunContext } from "./run-context.ts";
 
 import { EXIT_CODES } from "./exit-codes.ts";
-import { isStale, readStatusText } from "./frontmatter/read.ts";
+import { getTrustTier, isStale, readStatusText } from "./frontmatter/read.ts";
 import { RECORD_STATUSES } from "./frontmatter/types.ts";
 import { toTerminalLine } from "./output.ts";
 import {
@@ -89,6 +90,15 @@ export type StatusRecord = {
    * @example "draft"
    */
   status: null | string;
+
+  /**
+   * Its trust tier, as OKF v0.3 calculates it from every actor's current
+   * `verified` events, not only the signer's: `unverified`,
+   * `machine-confirmed`, or `human-reviewed`.
+   *
+   * @example "human-reviewed"
+   */
+  tier: TrustTier;
 
   /**
    * Its `title`, or `null`.
@@ -459,6 +469,7 @@ function toStatusRecord(candidate: Candidate): StatusRecord {
     staleAfter: summary.staleAfter ?? null,
     state,
     status: status === undefined || status === "" ? null : status,
+    tier: getTrustTier(summary),
     title: summary.title ?? null,
     type: summary.type ?? null,
     verifiedAt: summary.verifiedAt ?? null,
