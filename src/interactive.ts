@@ -25,9 +25,9 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
-import { listChangedPaths, toPathKey } from "./git.ts";
+import { toPathKey } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
-import { loadCandidates } from "./repo.ts";
+import { listBundleChanges, loadCandidates } from "./repo.ts";
 
 /*
  * Ctrl-D's byte, which clack doesn't treat as a cancel.
@@ -52,7 +52,7 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
   updateSettings({ aliases: { [END_OF_TRANSMISSION]: "cancel" } });
   intro(`Verify records in ${bundleDirs.join(", ")}`);
 
-  const changes = listChangedPaths({ bundleDirs, repoRoot });
+  const changes = listBundleChanges({ bundleDirs, repoRoot });
 
   if (!changes.isOk) {
     cancel(changes.reason);

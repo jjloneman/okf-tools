@@ -24,6 +24,7 @@ import {
 import type { Outcome } from "./outcome.ts";
 
 import {
+  listBundleChanges,
   loadCandidate,
   loadCandidates,
   loadCandidatesAt,
@@ -44,6 +45,104 @@ function unwrap<T>(outcome: Outcome<T>): T {
 
   return outcome.value;
 }
+
+describe("listBundleChanges", () => {
+  test("lists the bundles' changes as git prints them", () => {
+    // Given - a committed record, edited since, and a new one
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.commitAll("add a");
+    repo.write("docs/decisions/a.md", `${draftRecord("A")}\nMore.\n`);
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+
+    // When - listing the changes in the bundle
+    const changes = listBundleChanges({
+      bundleDirs: ["docs/decisions"],
+      repoRoot: repo.root,
+    });
+
+    // Then - both, and the edited one as a status path
+    expect(unwrap(changes)).toMatchObject({
+      paths: new Set(["docs/decisions/a.md", "docs/decisions/b.md"]),
+      statusPaths: new Set(["docs/decisions/a.md"]),
+    });
+  });
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "finds new records in folders renamed only in case on disk",
+    () => {
+      // Given - a bundle folder, and a folder in it, renamed only in case on
+      // disk, with a new record in each and an edited one
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+      repo.write("docs/decisions/sub/c.md", draftRecord("C"));
+      repo.commitAll("add records");
+      renameSync(
+        path.join(repo.root, "docs/decisions"),
+        path.join(repo.root, "docs/Decisions")
+      );
+      renameSync(
+        path.join(repo.root, "docs/Decisions/sub"),
+        path.join(repo.root, "docs/Decisions/Sub")
+      );
+      repo.write("docs/Decisions/a.md", `${draftRecord("A")}\nMore.\n`);
+      repo.write("docs/Decisions/b.md", draftRecord("B"));
+      repo.write("docs/Decisions/Sub/d.md", draftRecord("D"));
+
+      // When - listing the changes in the bundle, as git's index spells it
+      const changes = listBundleChanges({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+      });
+
+      // Then - every one, in the index's spelling of each folder
+      expect(unwrap(changes)).toMatchObject({
+        paths: new Set([
+          "docs/decisions/a.md",
+          "docs/decisions/b.md",
+          "docs/decisions/sub/d.md",
+        ]),
+        statusPaths: new Set(["docs/decisions/a.md"]),
+      });
+    }
+  );
+
+  test("fails naming a bundle that can't be listed any more", () => {
+    // Given - a bundle that's gone
+
+    // When - listing its changes
+    const changes = listBundleChanges({
+      bundleDirs: ["docs/gone"],
+      repoRoot: repo.root,
+    });
+
+    // Then - refused, naming it
+    expect(changes).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^docs\/gone can't be listed: .*ENOENT/u
+      ) as unknown,
+    });
+  });
+
+  test("fails with git's reason when git status fails", () => {
+    // Given - a bundle, and an index git can't read
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write(".git/index", "garbage\n");
+
+    // When - listing its changes
+    const changes = listBundleChanges({
+      bundleDirs: ["docs/decisions"],
+      repoRoot: repo.root,
+    });
+
+    // Then - git's failure, naming the bundle
+    expect(changes).toStrictEqual({
+      isOk: false,
+      reason: expect.stringContaining(
+        "Couldn't read git status for docs/decisions"
+      ) as unknown,
+    });
+  });
+});
 
 describe("loadCandidate", () => {
   test("explains a record that can't be read", () => {

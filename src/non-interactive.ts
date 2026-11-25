@@ -12,9 +12,10 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
-import { listChangedPaths, listDirtyPaths, toPathKey } from "./git.ts";
+import { listDirtyPaths, toPathKey } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
 import {
+  listBundleChanges,
   loadCandidate,
   loadCandidatesAt,
   orderRecordPaths,
@@ -205,7 +206,7 @@ function applySelection(params: {
 /** Load every changed record in the bundles. */
 function loadChanged(context: RunContext): LoadResult {
   const { bundleDirs, excludeGlobs, output, repoRoot, verifiedBy } = context;
-  const changes = listChangedPaths({ bundleDirs, repoRoot });
+  const changes = listBundleChanges({ bundleDirs, repoRoot });
 
   if (!changes.isOk) {
     return changes;

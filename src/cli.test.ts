@@ -1587,6 +1587,32 @@ describe.each(INVOCATIONS)("as $command", (current) => {
       }
     );
 
+    test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+      "finds a new record in a bundle folder renamed only in case on disk",
+      async () => {
+        // Given - the bundle's folder renamed only in case on disk, and a new
+        // draft in it
+        repo.write("docs/decisions/a.md", draftRecord("A"));
+        repo.commitAll("add a");
+        renameSync(
+          path.join(repo.root, "docs/decisions"),
+          path.join(repo.root, "docs/Decisions")
+        );
+        repo.write("docs/Decisions/b.md", draftRecord("B"));
+
+        // When - verifying every changed record
+        const code = await runIn(["--yes", "--changed"]);
+
+        // Then - found, signed and committed under git's spelling of the
+        // folder
+        expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+        expect(repo.git("status", "--porcelain")).toBe("");
+        expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+          "docs/decisions/b.md\n"
+        );
+      }
+    );
+
     test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
       "finds a changed record in a bundle whose folder is decomposed",
       async () => {

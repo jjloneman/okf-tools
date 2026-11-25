@@ -23,7 +23,8 @@ export type ChangedPaths = {
   hasBranchDiff: boolean;
 
   /**
-   * Paths from the repo root, as git prints them: the branch diff and the
+   * Paths from the repo root, as git prints them, or as git's index spells
+   * them when `listBundleChanges` returns them: the branch diff and the
    * working tree together.
    *
    * @example `new Set(["docs/decisions/package-promise.md"])`

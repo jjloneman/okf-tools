@@ -20,6 +20,7 @@ import path from "node:path";
 import picomatch from "picomatch";
 
 import type { RecordState, RecordTimes } from "./frontmatter/read.ts";
+import type { ChangedPaths } from "./git.ts";
 import type { Outcome } from "./outcome.ts";
 import type { Candidate, RecordEdit } from "./records.ts";
 
@@ -31,7 +32,12 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
-import { listIgnoredFolders, listIndexPaths, toPathKey } from "./git.ts";
+import {
+  listChangedPaths,
+  listIgnoredFolders,
+  listIndexPaths,
+  toPathKey,
+} from "./git.ts";
 import { describeError } from "./output.ts";
 
 /** A path read as a record: the record, or why it isn't one. */
@@ -189,6 +195,61 @@ export function isRecordUnchanged(params: {
 }
 
 /**
+ * List the changed files under the bundles, from the branch diff and the
+ * working tree, each spelled as git's index spells it (see `spellForGit`).
+ *
+ * - `git status` matches a pathspec byte for byte, and prints a file it
+ *   doesn't track as the disk spells it, so each bundle is also asked for as
+ *   the disk spells it, which differs only after a rename of a folder in
+ *   case or Unicode form that git wasn't told about.
+ *
+ * - Fails when a bundle can't be listed any more, since then its disk spelling
+ *   is unknown.
+ */
+export function listBundleChanges(params: {
+  bundleDirs: readonly string[];
+  repoRoot: string;
+}): Outcome<ChangedPaths> {
+  const { bundleDirs, repoRoot } = params;
+  const pathspecs = new Set(bundleDirs);
+
+  for (const bundleDir of bundleDirs) {
+    try {
+      pathspecs.add(readDiskSpelling({ filePath: bundleDir, repoRoot }));
+    } catch (error) {
+      return {
+        isOk: false,
+        reason: `${bundleDir} can't be listed: ${describeError(error)}`,
+      };
+    }
+  }
+
+  const changes = listChangedPaths({ bundleDirs: [...pathspecs], repoRoot });
+
+  if (!changes.isOk) {
+    return changes;
+  }
+
+  const index = readGitIndex(repoRoot);
+
+  // Name by name, so a record in a folder renamed only in case matches the
+  // path `loadCandidates` and `resolveRecordPaths` give it.
+  const spell = (filePath: string): string =>
+    spellListedPath({ filePath, index, repoRoot });
+
+  return {
+    isOk: true,
+    value: {
+      ...changes.value,
+      paths: new Set([...changes.value.paths].map(spell)),
+      statusPaths: new Set(
+        [...changes.value.statusPaths].map((key) => toPathKey(spell(key)))
+      ),
+    },
+  };
+}
+
+/**
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
  *
  * - A sign-off whose `verified.at` is ahead of the clock counts as `changed`,
@@ -324,12 +385,7 @@ export function loadCandidates(params: {
       // the name git prints.
       filePaths.push(
         ...listedPaths.map((filePath) =>
-          spellForGit({
-            filePath,
-            index,
-            readName: (givenPath) => path.posix.basename(givenPath),
-            repoRoot,
-          })
+          spellListedPath({ filePath, index, repoRoot })
         )
       );
     } catch (error) {
@@ -868,6 +924,25 @@ function matchExcluded(
 }
 
 /**
+ * Read the disk's spelling of a path from the repo root, every name in it, in
+ * case and Unicode form, resolving it through the disk from the repo root's
+ * real path.
+ *
+ * - Throws when the path is gone.
+ */
+function readDiskSpelling(params: {
+  filePath: string;
+  repoRoot: string;
+}): string {
+  const { filePath, repoRoot } = params;
+  const realRoot = realpathSync.native(repoRoot);
+
+  return toPosixPath(
+    path.relative(realRoot, realpathSync.native(path.join(realRoot, filePath)))
+  );
+}
+
+/**
  * Read git's index as a tree, in one `git ls-files` call; empty when git
  * can't be asked, so every path is spelled as the disk spells it.
  */
@@ -961,10 +1036,11 @@ function restoreRecords(params: {
  * - Name by name, so a record git doesn't know yet, in a folder renamed only
  *   in case on disk, takes the index's spelling of the folder.
  *
- * - The path must exist. `readName` gives the disk's spelling of a name the
- *   index doesn't hold: `readRealName` for a path typed by hand, which must
- *   not be reached through a symlink, so resolving it changes only its
- *   spelling; the name as given for one listed from the disk.
+ * - `readName` gives the disk's spelling of a name the index doesn't hold:
+ *   `readRealName` for a path typed by hand, which must exist and must not
+ *   be reached through a symlink, so resolving it changes only its spelling;
+ *   the name as given for one listed from the disk or printed by git (see
+ *   `spellListedPath`), which may be gone, as a deleted file is.
  */
 function spellForGit(params: {
   filePath: string;
@@ -985,6 +1061,21 @@ function spellForGit(params: {
   }
 
   return spelled;
+}
+
+/**
+ * Spell a path listed from the disk or printed by git as git will match it
+ * (see `spellForGit`), keeping as given each name the index doesn't hold.
+ */
+function spellListedPath(params: {
+  filePath: string;
+  index: GitIndex;
+  repoRoot: string;
+}): string {
+  return spellForGit({
+    ...params,
+    readName: (givenPath) => path.posix.basename(givenPath),
+  });
 }
 
 /**
