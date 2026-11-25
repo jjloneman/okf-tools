@@ -1,8 +1,8 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) (OKF) bundles. Today that's one command, `okf-verify`, which signs records off.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles. Today that's one command, `okf-verify`, which signs records off.
 
-It follows OKF v0.2 as of upstream commit [`62432a0`](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) (2026-08-21), and every spec link in this repo points to that commit.
+It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
 
 ## 📖 Table of contents
 

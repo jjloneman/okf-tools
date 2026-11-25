@@ -2,10 +2,16 @@
 type: Decision
 title: What the library accepts, and how it refuses
 description: "`verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; and a summary's `writtenStatus` tells an absent status from one OKF doesn't define."
-tags: [frontmatter]
+tags:
+  - api
+  - frontmatter
+  - refusals
+  - status
+  - timestamps
+  - validation
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T16:07:01Z }
-verified: { by: human:jjloneman, at: 2026-11-25T16:26:24Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # What the library accepts, and how it refuses

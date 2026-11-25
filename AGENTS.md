@@ -4,13 +4,13 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 ## 🎯 Purpose of this repo
 
-`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) bundles. Today it ships `okf-verify`, which signs records off (see [README.md](README.md)).
+`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundles. Today it ships `okf-verify`, which signs records off (see [README.md](README.md)).
 
 - **Interactive by default.** Without `--yes`, it prompts in a terminal and refuses to start without one.
 - **`--yes` runs without prompts**, but only against an explicit selection: `--changed`, or named record paths. `--yes` alone is a usage error.
 - **Verification is the person's call.** An agent runs `--yes` only when the person has asked it to verify those records, naming the files rather than passing `--changed` unless they asked for all of them. Never verify a record as a side effect of drafting or editing it.
 - **It never pushes and never passes `--no-verify`** to git, in either mode.
-- **Spec links are permalinks to commit `62432a0`**, the v0.2 text okf-tools was written against, which the README names. Never link the spec by branch, since it has moved homes; a new pin changes every link at once.
+- **Spec links are permalinks to commit `0b87c52` of `open-knowledge-format/open-knowledge-format`**, the v0.2 text okf-tools was written against, which the README names. Never link the spec by branch, since it has moved homes twice; a new pin changes every link at once.
 
 ## 🗂️ Project layout
 
@@ -114,6 +114,7 @@ The OKF spec has no releases or tags, so `spec-watch.yml` checks it daily agains
 - **It opens one issue per run**, titled with the short SHA of the newest commit to the spec, listing only what no earlier spec-watch issue reported, open or closed. Each issue records its findings' keys in a `<!-- spec-watch: … -->` marker, so keep that line when editing one.
 - **It sends an ntfy push** to the topic in the `NTFY_TOPIC` Actions secret; without the secret it sends none. The topic is its only access control, so never echo it or write it in the repo.
 - **The PR that closes its issue bumps the pin:** set `sha` and `version` to the commit okf-tools now follows, and re-pin every spec link to the same commit (see [Purpose of this repo](#-purpose-of-this-repo)). To stop watching a candidate, or to watch the spec's new home, edit `candidates` or `repo` and `path`.
+- **When the spec moves homes, move the pin first, to the same text at the new home**, re-pinning every link; adopting a newer version is a PR of its own (see [Which OKF spec okf-tools follows](docs/decisions/spec-pin.md)).
 - **Try it without writing anything:** run it from the Actions tab with `dry-run`, or locally with `GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=jjloneman/okf-tools SPEC_WATCH_DRY_RUN=true node scripts/spec-watch/bin.ts`. The `sha` input (`SPEC_WATCH_SHA` locally) compares against an older commit instead of the pin; without `dry-run` that opens a real issue, whose findings later runs count as reported.
 - **GitHub disables a scheduled workflow after 60 days without repo activity**, and emails the owner first; re-enable it from the Actions tab.
 
@@ -151,7 +152,7 @@ Releases use [changesets](https://github.com/changesets/changesets), and the pac
 
 ## 📚 Design decisions
 
-Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) v0.2 bundle that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
+Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 bundle that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
 
 - One Markdown file per decision, listed in [docs/decisions/index.md](docs/decisions/index.md), with tags from its vocabulary.
 - **Base a record on the code and the closed threads**, not on memory: re-read the code before stating a flag, an exit code, or a fallback order, and date-stamp facts that can drift ("as of 2026-11-11").
@@ -160,7 +161,8 @@ Why the package works the way it does is recorded in [docs/decisions/](docs/deci
 - **Check a record's `verified` before changing the behavior it describes:**
   - any `verified` entry means someone signed it off (usually `human:jjloneman`, the owner) — change the behavior only with the owner's agreement;
   - no `verified` means it is an unreviewed draft;
-  - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again.
+  - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again;
+  - set a signed-off record you edit back to `status: draft`, even for a link-only edit, keeping its `verified` entry; `okf-verify` sets it to `stable` again on sign-off.
 
 ## 🛑 Deleting things
 

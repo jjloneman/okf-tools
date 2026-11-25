@@ -12,12 +12,13 @@ okf_version: "0.2"
 - [What a record counts as changed against](base-ref.md) - The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 - [What the library accepts, and how it refuses](library.md) - `verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; and a summary's `writtenStatus` tells an absent status from one OKF doesn't define.
 - [Which actors can sign a record](actor.md) - `okf.verifiedBy` or `--by` must be an OKF actor YAML reads back as a plain string: it starts with a letter, has a `:` or `/` after it, and holds no whitespace, quotes, `#`, or flow indicators; there is no default.
+- [Which OKF spec okf-tools follows](spec-pin.md) - okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.2 text at `0b87c52`; every spec link points to the pin, and adopting v0.3 is a PR of its own.
 - [Who verifies a record](who-verifies.md) - Verification is the person's call, but not only a terminal prompt may record it; an agent verifies with `--yes` when the person asks, naming the files and signing as the person.
 - [Why every PR adds a changeset](changeset-every-pr.md) - CI's required `🦋 Changeset` check fails a PR without one; a PR that ships nothing adds `pnpm changeset --empty`, and the version PR, which is exempt, has its CI run approved by hand before it merges.
 
 # About this bundle
 
-This directory is an [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title.
+This directory is an [Open Knowledge Format v0.2](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case.
 
 Each decision opens with YAML frontmatter:
 
@@ -26,10 +27,15 @@ Each decision opens with YAML frontmatter:
 type: Decision
 title: Who verifies a record
 description: Verification is the person's call; an agent verifies only when asked.
-tags: [agents, verification]
+tags:
+  - actors
+  - agents
+  - cli
+  - selection
+  - verification
 sources:
   - id: okf-spec
-    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification
 status: stable
 generated: { by: <agent>/<model-id>, at: 2026-11-11T12:00:00Z }
@@ -38,8 +44,9 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 ```
 
 - **`type`** — always `Decision`.
-- **`tags`** — one to four words from the vocabulary below, as a flow-style list right after `description`.
+- **`tags`** — every subject the decision covers, usually 5 to 10, from the vocabulary below, as a block list right after `description`, one `- tag` per line (see [How a record's tags are laid out](tags-layout.md)).
   - Lowercase kebab-case, sorted alphabetically.
+  - Add a tag to the vocabulary before using it.
 - **`sources`** — the external material a decision rests on, such as a spec or a tool's docs, when there is any.
   - The body cites each one with a footnote keyed to its `id`.
 - **`status`** — the decision's lifecycle:
@@ -55,12 +62,43 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 
 ## Tag vocabulary
 
+- `actors` — Who can sign or write a record: OKF actor strings such as `human:<id>`.
 - `agents` — How coding agents use the tool.
+- `api` — The library's exported functions and types.
+- `change-detection` — How the tool decides which records changed.
+- `changelog` — How `CHANGELOG.md` lines are built.
+- `changesets` — Changeset files and the `changeset` commands.
 - `ci` — CI jobs and required checks.
-- `cli` — The command line: flags, selections, exit codes, and config.
+- `cli` — The command line: flags, selections, and output.
+- `commits` — The git commits the tool or the release flow makes.
+- `config` — The `okf` block in `package.json`.
+- `dependencies` — How consumers depend on the package.
 - `distribution` — How the package is published and installed.
+- `encoding` — How record bytes are read and written, such as UTF-8 and line endings.
+- `exit-codes` — What each exit code means.
+- `formatting` — How formatters such as Prettier treat records.
 - `frontmatter` — What the tool reads from and writes into a record's frontmatter.
 - `git` — How the tool reads and changes the repo through git.
-- `releases` — Changesets, the changelog, and publishing.
+- `github-actions` — Workflows and how their runs are approved.
+- `links` — How docs and records link to the spec and to each other.
+- `node` — Node.js versions and features the tool relies on.
+- `npm` — The npm registry and package metadata.
+- `paths` — How record paths are resolved and matched.
+- `pull-requests` — What every pull request must carry.
+- `refusals` — When the tool refuses a record or a value, and how it says so.
+- `releases` — Versioning and publishing.
+- `rollback` — Undoing a partial write.
+- `rulesets` — The branch rules that protect `main`.
 - `safety` — Guards against half-written records or unintended commits.
+- `selection` — Which records a run acts on.
+- `spec` — Which OKF spec text the tool follows.
+- `spec-watch` — How the tool watches the upstream spec for changes.
+- `status` — A record's `status` lifecycle: `draft`, `stable`, `deprecated`.
+- `symlinks` — How the tool treats symbolic links in and out of a bundle.
+- `tags` — How a record's `tags` are written and read.
+- `timestamps` — How `generated.at` and `verified.at` are written and compared.
+- `typescript` — TypeScript features and type stripping.
+- `upstream` — The OKF spec's repositories and where it lives.
+- `validation` — How the tool checks values before using them.
 - `verification` — Who signs a record off, and what that means.
+- `yaml` — How YAML is parsed and what it reads back.

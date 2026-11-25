@@ -1,7 +1,7 @@
 {
-  "candidates": ["open-knowledge-format/open-knowledge-format"],
-  "path": "okf/SPEC.md",
-  "repo": "GoogleCloudPlatform/knowledge-catalog",
-  "sha": "62432a095456147ee71e70ac6e4dc0d2dea3ac30",
+  "candidates": [],
+  "path": "SPEC.md",
+  "repo": "open-knowledge-format/open-knowledge-format",
+  "sha": "0b87c52c6ef999286c745e19998fdfcd03d5dbee",
   "version": "0.2"
 }

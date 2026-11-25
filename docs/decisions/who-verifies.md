@@ -2,14 +2,19 @@
 type: Decision
 title: Who verifies a record
 description: Verification is the person's call, but not only a terminal prompt may record it; an agent verifies with `--yes` when the person asks, naming the files and signing as the person.
-tags: [agents, verification]
+tags:
+  - actors
+  - agents
+  - cli
+  - selection
+  - verification
 sources:
   - id: okf-spec
-    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:18:43Z }
-verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # Who verifies a record
