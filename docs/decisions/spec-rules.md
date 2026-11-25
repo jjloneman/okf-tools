@@ -20,8 +20,9 @@ sources:
   - id: okf-kit
     resource: https://www.npmjs.com/package/okf-kit/v/0.22.0
     title: okf-kit 0.22.0 on npm
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:25:28Z }
+verified: { by: human:jjloneman, at: 2026-11-25T21:48:46Z }
 ---
 
 # Who owns the spec rules `okf check` runs
