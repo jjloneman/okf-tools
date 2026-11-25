@@ -6,12 +6,19 @@ import { DateTime } from "luxon";
 import { isNode, isScalar, isSeq } from "yaml";
 
 import type { Frontmatter } from "./shared.ts";
-import type { RecordStatus, Timestamp, VerifyRecordParams } from "./types.ts";
+import type {
+  RecordStatus,
+  Timestamp,
+  TrustTier,
+  Verification,
+  VerifyRecordParams,
+} from "./types.ts";
 
 import {
   describeYamlErrors,
   ENTRY_KEYS,
   findFenceProblem,
+  findLatestIndex,
   findOwnEntry,
   FRONTMATTER_KEYS,
   isNullScalar,
@@ -25,6 +32,7 @@ import {
   resolveAlias,
   splitFrontmatter,
 } from "./shared.ts";
+import { TRUST_TIERS } from "./types.ts";
 
 /** What `readRecordSummary` needs: the record, and whose sign-off counts. */
 export type ReadRecordSummaryParams = Pick<
@@ -110,6 +118,17 @@ export type RecordSummary = {
   type: string | undefined;
 
   /**
+   * Every `verified` event with both a `by` and an `at`, by any actor, in
+   * the order the record lists them; OKF ignores an event without both.
+   *
+   * - Optional, so a summary built before it existed still type-checks;
+   *   `readRecordSummary` always sets it.
+   *
+   * @example `[{ at: "2026-10-02T13:30:00Z", by: "human:jjloneman" }]`
+   */
+  verifications?: readonly Verification[] | undefined;
+
+  /**
    * When `verifiedBy` last signed the record off, if they did.
    *
    * @example "2026-10-02T13:30:00Z"
@@ -130,6 +149,12 @@ export type RecordSummary = {
 
 /** The timestamps the state is judged by, out of a `RecordSummary`. */
 export type RecordTimes = Pick<RecordSummary, "generatedAt" | "verifiedAt">;
+
+/** What the trust tier is judged by, out of a `RecordSummary`. */
+export type TrustTimes = Pick<RecordSummary, "generatedAt" | "verifications">;
+
+/** The actor scheme that alone earns the `human-reviewed` tier. */
+const HUMAN_SCHEME = "human:";
 
 /**
  * Check that a record's frontmatter is valid YAML, in a block whose fences
@@ -166,32 +191,48 @@ export function findFrontmatterProblem(text: string): string | undefined {
  *   `isVerifiedAhead`.
  */
 export function getRecordState(summary: RecordTimes): RecordState {
-  if (summary.verifiedAt === undefined) {
+  const { generatedAt, verifiedAt } = summary;
+
+  if (verifiedAt === undefined) {
     return "unverified";
   }
 
-  if (summary.generatedAt === undefined) {
-    return "verified";
-  }
-
-  const generatedTime = readTime(summary.generatedAt);
-
-  // An unreadable generation time can't be compared, and treating it as
-  // "changed" would ask for a sign-off no sign-off could satisfy.
-  if (!generatedTime.isValid) {
-    return "verified";
-  }
-
-  const verifiedTime = readTime(summary.verifiedAt);
-
-  // An unreadable sign-off time reads as "changed", so it's signed again.
-  if (!verifiedTime.isValid) {
-    return "changed";
-  }
-
-  return toSeconds(generatedTime) <= toSeconds(verifiedTime)
+  return isAtOrAfterGeneration({ at: verifiedAt, generatedAt })
     ? "verified"
     : "changed";
+}
+
+/**
+ * Calculate a record's trust tier as OKF v0.3 does, from its current
+ * `verified` events, by any actor.
+ *
+ * - Each actor's latest event counts, as `findOwnEntry` picks the signer's,
+ *   so the signer's part agrees with `getRecordState` whenever each of its
+ *   events has an `at`.
+ *
+ * - That event is current when `getRecordState` would call it `verified`:
+ *   at or after `generated.at`, to the whole second, or with a missing or
+ *   unreadable `generated.at`.
+ *
+ * - One ahead of the clock isn't current, as a listing treats such a
+ *   sign-off as `changed`; so, like `isStale`, it reads the clock.
+ *
+ * - Only a `human:<id>` actor earns `human-reviewed`; any other, `team:`
+ *   included, earns `machine-confirmed`.
+ */
+export function getTrustTier(summary: TrustTimes): TrustTier {
+  const { generatedAt, verifications = [] } = summary;
+  const current = readLatestByActor(verifications).filter(
+    ({ at }) => !isAhead(at) && isAtOrAfterGeneration({ at, generatedAt })
+  );
+
+  if (current.length === 0) {
+    return TRUST_TIERS.unverified;
+  }
+
+  return current.some(({ by }) => isHumanActor(by))
+    ? TRUST_TIERS.humanReviewed
+    : TRUST_TIERS.machineConfirmed;
 }
 
 /**
@@ -301,6 +342,7 @@ export function readRecordSummary(
     type: readString(
       readField({ doc, key: FRONTMATTER_KEYS.type, map: contents })
     ),
+    verifications: readVerifications(doc),
     verifiedAt: readTimestamp(
       readField({ doc, key: ENTRY_KEYS.at, map: ownEntry })
     ),
@@ -354,6 +396,59 @@ function isAhead(timestamp: Timestamp | undefined): boolean {
 }
 
 /**
+ * Whether a sign-off at `at` still holds against the generation time.
+ *
+ * - A missing or unreadable generation time can't be compared, and treating
+ *   it as later would ask for a sign-off no sign-off could satisfy.
+ *
+ * - An unreadable sign-off time doesn't hold, so it's signed again.
+ *
+ * - Times are compared at whole seconds, since a sign-off is stamped to the
+ *   second.
+ */
+function isAtOrAfterGeneration(params: {
+  at: Timestamp;
+  generatedAt: Timestamp | undefined;
+}): boolean {
+  const { at, generatedAt } = params;
+  const generatedTime =
+    generatedAt === undefined ? undefined : readTime(generatedAt);
+
+  if (generatedTime?.isValid !== true) {
+    return true;
+  }
+
+  const time = readTime(at);
+
+  return time.isValid && toSeconds(generatedTime) <= toSeconds(time);
+}
+
+/** Whether an actor is a person: `human:` with an id after it. */
+function isHumanActor(by: string): boolean {
+  return by.startsWith(HUMAN_SCHEME) && by.length > HUMAN_SCHEME.length;
+}
+
+/**
+ * Keep each actor's latest event, in the order each actor first appears:
+ * the one whose `at` is latest once read, as `findLatestIndex` picks it.
+ */
+function readLatestByActor(
+  verifications: readonly Verification[]
+): Verification[] {
+  const byActor = new Map<string, Verification[]>();
+
+  for (const event of verifications) {
+    byActor.set(event.by, [...(byActor.get(event.by) ?? []), event]);
+  }
+
+  return [...byActor.values()].flatMap((events) => {
+    const latestIndex = findLatestIndex(events.map(({ at }) => at));
+
+    return events.filter((_event, index) => index === latestIndex);
+  });
+}
+
+/**
  * Read a `tags` list: each item a non-empty string, each once, in the order
  * listed, or none when it isn't a list.
  */
@@ -369,6 +464,28 @@ function readTags(params: { doc: Frontmatter; node: unknown }): string[] {
     .filter((tag): tag is string => tag !== undefined && tag !== "");
 
   return [...new Set(tags)];
+}
+
+/**
+ * Read every `verified` event that has both a `by` and an `at`, aliases
+ * resolved by `readField`; a bare mapping is one event, as OKF reads it.
+ */
+function readVerifications(doc: Frontmatter): Verification[] {
+  const verified = readField({
+    doc,
+    key: FRONTMATTER_KEYS.verified,
+    map: doc.contents,
+  });
+  const entries: unknown[] = isSeq(verified) ? verified.items : [verified];
+
+  return entries.flatMap((map) => {
+    // `readTimestamp` reads any single non-null, non-empty value, a `by`
+    // too.
+    const by = readTimestamp(readField({ doc, key: ENTRY_KEYS.by, map }));
+    const at = readTimestamp(readField({ doc, key: ENTRY_KEYS.at, map }));
+
+    return by === undefined || at === undefined ? [] : [{ at, by }];
+  });
 }
 
 /** Read a time as whole seconds since the epoch, dropping any fraction. */

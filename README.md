@@ -231,6 +231,7 @@ pnpm okf status
       "staleAfter": null,
       "state": "changed",
       "status": "draft",
+      "tier": "unverified",
       "title": "What every export promises",
       "type": "Decision",
       "verifiedAt": "2026-10-02T13:30:00Z"
@@ -246,6 +247,10 @@ pnpm okf status
 - **`group`** is one of `changed`, `draft`, `unverified` (never signed off), `stale`, or `settled`.
 - **`state`** is where the record stands with the signer's sign-off: `changed`, `unverified`, or `verified`, as `getRecordState` judges it, except that a `verified.at` ahead of the clock counts as `changed`, as it does for `okf verify`.
 - **`isStale`** is whether the record is past its `staleAfter`, whatever its group.
+- **`tier`** is the record's trust tier as OKF v0.3 names and calculates it, so a tool that reads v0.3's tiers needn't translate:
+  - it counts each actor's latest `verified` event, not only the signer's, when it's at or after `generated.at`, compared to the second;
+  - `human-reviewed` when one of them is from a `human:` actor, `machine-confirmed` when they're all from other actors, `team:` included, and `unverified` when there are none;
+  - an event ahead of the clock doesn't count, a missing or unreadable `generated.at` lets every other event count, and otherwise one whose `at` can't be read doesn't, as `state` judges them.
 - **`status`** is the `status` as written, even one OKF doesn't define; `null` means none, which OKF reads as `stable`. Every other field the record doesn't have is `null` too.
 - **`skipped`** lists the files it couldn't read, and is never filtered, since their state can't be known.
 - **The shape is public API.** A change to it bumps `schemaVersion`, and ships as a breaking change; a program should check it. Its TypeScript type is exported as `StatusReport`.
@@ -400,6 +405,7 @@ import {
 - `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, or when a block is almost right, and `findEditProblem` says why `verifyRecord` would refuse a record.
 - A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
 - `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`), and never reads the clock: a `generated.at` ahead of it is judged like any other.
+- `getTrustTier` calculates a record's tier, one of `TRUST_TIERS` (`unverified`, `machine-confirmed`, `human-reviewed`), from a summary's `generatedAt` and `verifications` (`TrustTimes`), every `verified` event with a `by` and an `at`; it reads the clock, so a sign-off ahead of it doesn't count.
 
 - A summary's `staleAfter` is the record's `stale_after` as written, or `undefined`; its `description` is the record's `description`, and its `tags` the record's tags, each once, whatever the list's layout.
 - `StatusReport`, with `StatusRecord`, `StatusGroup`, and `StatusSkipped`, types what `okf status --format json` prints.

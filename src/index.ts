@@ -17,10 +17,12 @@ export type {
   RecordState,
   RecordSummary,
   RecordTimes,
+  TrustTimes,
 } from "./frontmatter/read.ts";
 export {
   findFrontmatterProblem,
   getRecordState,
+  getTrustTier,
   readRecordSummary,
 } from "./frontmatter/read.ts";
 export type {
@@ -28,12 +30,15 @@ export type {
   RecordStatus,
   RefusalKind,
   Timestamp,
+  TrustTier,
+  Verification,
   VerifyRecordParams,
 } from "./frontmatter/types.ts";
 export {
   ENTRY_STYLES,
   RECORD_STATUSES,
   REFUSAL_KINDS,
+  TRUST_TIERS,
 } from "./frontmatter/types.ts";
 export type { Program } from "./output.ts";
 export type {
