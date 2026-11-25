@@ -122,8 +122,10 @@ export function findFrontmatterProblem(text: string): string | undefined {
  * - Times are compared at whole seconds, since a sign-off is stamped to the
  *   second.
  *
- * - It never reads the clock: a `generated.at` ahead of it is judged like any
- *   other, and `isGeneratedAhead` is how a listing refuses such a record.
+ * - It never reads the clock: a `generated.at` or `verified.at` ahead of it
+ *   is judged like any other. A listing refuses the first with
+ *   `isGeneratedAhead`, and treats the second as `changed` with
+ *   `isVerifiedAhead`.
  */
 export function getRecordState(summary: RecordTimes): RecordState {
   if (summary.verifiedAt === undefined) {
@@ -162,16 +164,19 @@ export function getRecordState(summary: RecordTimes): RecordState {
  *   would be older than it, and one made later would hide a regeneration.
  */
 export function isGeneratedAhead(summary: RecordTimes): boolean {
-  if (summary.generatedAt === undefined) {
-    return false;
-  }
+  return isAhead(summary.generatedAt);
+}
 
-  const generatedTime = readTime(summary.generatedAt);
-
-  return (
-    generatedTime.isValid &&
-    toSeconds(generatedTime) > toSeconds(DateTime.utc())
-  );
+/**
+ * Whether the signer's latest `verified.at` is later than now, to the second,
+ * as a wrong time zone writes it.
+ *
+ * - A listing treats such a record as `changed`, since a sign-off still to
+ *   come would hide every regeneration until the clock passed it; signing it
+ *   again renews that entry with a real time.
+ */
+export function isVerifiedAhead(summary: RecordTimes): boolean {
+  return isAhead(summary.verifiedAt);
 }
 
 /**
@@ -265,6 +270,17 @@ export function readStatusText(text: string): string | undefined {
   return isScalar(node)
     ? readString(node)
     : block.text.slice(node.range?.[0], readNodeEnd(node));
+}
+
+/** Whether a readable timestamp is later than now, to the second. */
+function isAhead(timestamp: Timestamp | undefined): boolean {
+  if (timestamp === undefined) {
+    return false;
+  }
+
+  const time = readTime(timestamp);
+
+  return time.isValid && toSeconds(time) > toSeconds(DateTime.utc());
 }
 
 /** Read a time as whole seconds since the epoch, dropping any fraction. */

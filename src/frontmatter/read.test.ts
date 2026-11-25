@@ -8,6 +8,7 @@ import {
   findFrontmatterProblem,
   getRecordState,
   isGeneratedAhead,
+  isVerifiedAhead,
   readRecordSummary,
   readStatusText,
 } from "./read.ts";
@@ -771,6 +772,50 @@ describe("isGeneratedAhead", () => {
     const isAhead = isGeneratedAhead({ generatedAt, verifiedAt: undefined });
 
     // Then - only a time in a later second is
+    expect(isAhead).toBe(shouldBeAhead);
+  });
+});
+
+describe("isVerifiedAhead", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test.each([
+    {
+      description: "no sign-off",
+      shouldBeAhead: false,
+      verifiedAt: undefined,
+    },
+    {
+      description: "an unreadable one",
+      shouldBeAhead: false,
+      verifiedAt: "soon",
+    },
+    {
+      description: "one later in the same second",
+      shouldBeAhead: false,
+      verifiedAt: "2026-11-20T12:00:00.900Z",
+    },
+    {
+      description: "one in the next second",
+      shouldBeAhead: true,
+      verifiedAt: "2026-11-20T12:00:01Z",
+    },
+  ])("is $shouldBeAhead for $description", ({ shouldBeAhead, verifiedAt }) => {
+    // Given - the clock on a fixed day
+    vi.useFakeTimers({
+      now: DateTime.fromISO(NOW).toJSDate(),
+      toFake: ["Date"],
+    });
+
+    // When - asking whether the sign-off time is ahead of it
+    const isAhead = isVerifiedAhead({
+      generatedAt: "2099-01-01T00:00:00Z",
+      verifiedAt,
+    });
+
+    // Then - only a time in a later second is, whatever the generation time
     expect(isAhead).toBe(shouldBeAhead);
   });
 });

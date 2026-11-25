@@ -12,7 +12,11 @@ import type { Candidate } from "./records.ts";
 import type { RunContext } from "./run-context.ts";
 
 import { verifyRecord } from "./frontmatter/edit.ts";
-import { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
+import {
+  getRecordState,
+  isVerifiedAhead,
+  readRecordSummary,
+} from "./frontmatter/read.ts";
 import {
   checkCommittable,
   commitFiles,
@@ -251,6 +255,8 @@ export function describeDirtyPaths(dirtyPaths: readonly string[]): string {
  *
  * - A verified record counts when `HEAD` lacks it, `HEAD`'s copy still needs
  *   a sign-off, or the sign-off on disk is later than the one `HEAD` holds.
+ *   When `HEAD`'s sign-off is ahead of the clock, only `HEAD`'s text with the
+ *   sign-off renewed counts.
  *   So a committed sign-off, or an older one restored over it, is never
  *   committed as a new one.
  *
@@ -291,20 +297,26 @@ export function findUncommittedSignOffs(params: {
         ? undefined
         : readRecordSummary({ text: headText, verifiedBy });
 
+    const isSignOffOnly =
+      headText !== undefined &&
+      isSignOffOf({ at: verifiedAt, headText, text, verifiedBy });
+
+    // A sign-off in HEAD dated ahead of the clock is later than any made now,
+    // so only a renewal of HEAD's own text counts as a new one, never an
+    // older revision restored over it.
     if (
       headSummary !== undefined &&
       getRecordState(headSummary) === "verified" &&
-      !isLater({ earlier: headSummary, later: verifiedAt })
+      (isVerifiedAhead(headSummary)
+        ? !isSignOffOnly
+        : !isLater({ earlier: headSummary, later: verifiedAt }))
     ) {
       return;
     }
 
     filePaths.push(filePath);
 
-    if (
-      headText !== undefined &&
-      isSignOffOf({ at: verifiedAt, headText, text, verifiedBy })
-    ) {
+    if (isSignOffOnly) {
       signOffOnlyPaths.add(filePath);
     }
   });

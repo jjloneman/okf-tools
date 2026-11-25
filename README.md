@@ -97,6 +97,7 @@ pnpm okf:verify --yes --changed
 - A named record that's already verified, and unchanged since, is skipped, unless that sign-off isn't committed yet, as after a hook rejected the commit: then the same command commits it as it is.
 - "Where you run it" is the folder you call `pnpm` from, when that's in the package's repo. With `pnpm --dir <package>` or `npm --prefix <package>` from another repo or no repo, paths resolve from the package root instead.
 - A record whose `generated.at` is ahead of the clock, as a wrong time zone writes it, fails the run until its time is fixed.
+- A sign-off whose `verified.at` is ahead of the clock counts as changed, so the record is offered again, and signing it renews that entry with the real time.
 - Exit codes: `0` worked, `1` failed, `2` nothing needed verifying.
 
 ### 🏳️ Flags
