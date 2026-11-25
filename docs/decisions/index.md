@@ -16,7 +16,7 @@ okf_version: "0.2"
 
 # About this bundle
 
-This directory is an [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title.
+This directory is an [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title.
 
 Each decision opens with YAML frontmatter:
 
@@ -28,7 +28,7 @@ description: Verification is the person's call; an agent verifies only when aske
 tags: [agents, verification]
 sources:
   - id: okf-spec
-    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
+    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md
     title: Open Knowledge Format specification
 status: stable
 generated: { by: <agent>/<model-id>, at: 2026-11-11T12:00:00Z }

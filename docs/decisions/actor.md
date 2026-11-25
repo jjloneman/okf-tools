@@ -5,13 +5,13 @@ description: "`okf.verifiedBy` or `--by` must be an OKF actor YAML reads back as
 tags: [cli, frontmatter]
 sources:
   - id: okf-spec
-    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
+    resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md
     title: Open Knowledge Format specification
   - id: yaml-spec
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-11T23:36:00Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:18:43Z }
 verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
 ---
 
