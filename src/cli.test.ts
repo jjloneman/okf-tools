@@ -73,6 +73,16 @@ function runIn(args: string[], directory = "."): Promise<number> {
   });
 }
 
+/** A Decision record generated in October and signed off at `at`. */
+function signedRecord(at: string): string {
+  return record([
+    "type: Decision",
+    "status: stable",
+    "generated: { by: claude-code/model, at: 2026-10-01T10:00:00Z }",
+    `verified: { by: human:jjloneman, at: ${at} }`,
+  ]);
+}
+
 describe("run, before any records are read", () => {
   test("prints the usage for --help", async () => {
     // When - asking for help
@@ -329,6 +339,89 @@ describe("run --yes", () => {
       "docs/decisions/a.md: generated.at is ahead of the clock; fix its time zone"
     );
     expect(infos.join("\n")).not.toContain("already verified");
+  });
+
+  test.each([
+    { args: ["--changed"], description: "--changed" },
+    { args: ["docs/decisions/a.md"], description: "a named path" },
+  ])(
+    "$description signs again a record whose sign-off is ahead of the clock",
+    async ({ args }) => {
+      // Given - a sign-off dated 2099, then a regeneration before it
+      repo.write(
+        "docs/decisions/a.md",
+        record([
+          "type: Decision",
+          "status: stable",
+          "generated: { by: claude-code/model, at: 2026-11-20T10:00:00Z }",
+          "verified: { by: human:jjloneman, at: 2099-01-01T00:00:00Z }",
+        ])
+      );
+      repo.commitAll("regenerate");
+
+      // When - verifying it
+      const code = await runIn(["--yes", "--no-commit", ...args]);
+
+      // Then - signed off now, renewing the entry dated 2099
+      const text = repo.read("docs/decisions/a.md");
+
+      expect(code).toBe(0);
+      expect(infos).toContain("[okf-verify] verified docs/decisions/a.md");
+      expect(text).not.toContain("2099");
+      expect(text.match(/by: human:jjloneman/gu)).toHaveLength(1);
+    }
+  );
+
+  test("commits a fresh sign-off over an uncommitted one ahead of the clock", async () => {
+    // Given - a committed sign-off, and a later one dated 2099 left on disk
+    repo.write("docs/decisions/a.md", signedRecord("2026-11-01T10:00:00Z"));
+    repo.commitAll("sign off");
+    repo.write("docs/decisions/a.md", signedRecord("2099-01-01T00:00:00Z"));
+
+    // When - verifying it by name
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - signed again and committed, never as an uncommitted sign-off
+    expect(code).toBe(0);
+    expect(infos.join("\n")).not.toContain("not yet committed");
+    expect(repo.git("show", "HEAD:docs/decisions/a.md")).not.toContain("2099");
+  });
+
+  test("commits a renewal left uncommitted over a sign-off ahead of the clock", async () => {
+    // Given - a committed sign-off dated 2099, renewed on disk but not committed
+    repo.write("docs/decisions/a.md", signedRecord("2099-01-01T00:00:00Z"));
+    repo.commitAll("sign off");
+    await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+    infos.length = 0;
+
+    // When - running the committing command again
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - the renewal committed as it is
+    expect(code).toBe(0);
+    expect(infos).toContain(
+      "[okf-verify] committing docs/decisions/a.md: already verified, not yet committed"
+    );
+    expect(repo.git("show", "HEAD:docs/decisions/a.md")).not.toContain("2099");
+  });
+
+  test("skips an older revision restored over a sign-off ahead of the clock", async () => {
+    // Given - an older signed revision restored over a committed 2099 sign-off
+    const older = `${signedRecord("2026-11-01T10:00:00Z")}\nOlder.\n`;
+
+    repo.write("docs/decisions/a.md", signedRecord("2099-01-01T00:00:00Z"));
+    repo.commitAll("sign off");
+    repo.write("docs/decisions/a.md", older);
+
+    // When - verifying it by name
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - skipped as verified, never committed as a new sign-off
+    expect(code).toBe(2);
+    expect(infos).toContain(
+      "[okf-verify] skipped docs/decisions/a.md: already verified, unchanged"
+    );
+    expect(repo.read("docs/decisions/a.md")).toBe(older);
   });
 
   test("--changed fails on a changed record that can't be read", async () => {

@@ -18,6 +18,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
+import type { RecordState, RecordTimes } from "./frontmatter/read.ts";
 import type { Outcome } from "./outcome.ts";
 import type { Candidate, RecordEdit } from "./records.ts";
 
@@ -26,6 +27,7 @@ import {
   findFrontmatterProblem,
   getRecordState,
   isGeneratedAhead,
+  isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
 import { describeError } from "./output.ts";
@@ -151,6 +153,9 @@ export function isRecordUnchanged(params: {
 /**
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
  *
+ * - A sign-off whose `verified.at` is ahead of the clock counts as `changed`,
+ *   so the record is offered again and a fresh sign-off renews it.
+ *
  * @returns the candidate, or why it isn't one: it can't be read, it's
  * reached through a symlink, its frontmatter block is a near miss, such as
  * one with no closing fence, its frontmatter isn't valid YAML or is in a
@@ -216,7 +221,7 @@ export function loadCandidate(params: {
     : {
         candidate: {
           filePath,
-          state: getRecordState(summary),
+          state: readListedState(summary),
           summary,
           text,
         },
@@ -538,6 +543,17 @@ function isRecordPath(params: {
   const { filePath, repoRoot } = params;
 
   return isRecordName(params) && isFile(path.join(repoRoot, filePath));
+}
+
+/**
+ * Judge a listed record's state, reading the clock as `getRecordState` never
+ * does.
+ *
+ * - A sign-off still to come would hide every regeneration until the clock
+ *   passed it, so it counts as `changed`, whatever the generation time.
+ */
+function readListedState(summary: RecordTimes): RecordState {
+  return isVerifiedAhead(summary) ? "changed" : getRecordState(summary);
 }
 
 /**

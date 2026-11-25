@@ -257,6 +257,44 @@ describe("loadCandidates, given a generated.at ahead of the clock", () => {
   });
 });
 
+describe("loadCandidates, given a verified.at ahead of the clock", () => {
+  test.each([
+    {
+      description: "regenerated since",
+      generated: [
+        "generated: { by: claude-code/model, at: 2026-11-20T10:00:00Z }",
+      ],
+    },
+    { description: "with no generation time", generated: [] },
+  ])("lists the record $description as changed", ({ generated }) => {
+    // Given - a record whose sign-off is a typo for a date to come
+    repo.write(
+      "docs/decisions/a.md",
+      record([
+        "type: Decision",
+        "status: stable",
+        ...generated,
+        `verified: { by: "${VERIFIED_BY}", at: 2099-01-01T00:00:00Z }`,
+      ])
+    );
+
+    // When - loading the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - listed as changed, so it's offered for a fresh sign-off
+    expect({
+      skipped,
+      states: candidates.map(({ state }) => state),
+    }).toStrictEqual({ skipped: [], states: ["changed"] });
+  });
+});
+
 describe("loadCandidates", () => {
   test("reports a record that can't be read instead of listing it", () => {
     // Given - two records, the first with no read permission
