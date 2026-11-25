@@ -1,4 +1,8 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { useTestRepo } from "#test/repo";
 
 import { run } from "./cli.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
@@ -7,8 +11,11 @@ vi.mock(import("./cli.ts"), () => ({
   run: vi.fn(() => Promise.resolve(EXIT_CODES.nothingToVerify)),
 }));
 
+const { repo } = useTestRepo();
+
 afterEach(() => {
   process.exitCode = undefined;
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   vi.resetModules();
   vi.mocked(run).mockClear();
@@ -43,9 +50,12 @@ async function loadBin(isTerminal: boolean): Promise<void> {
 
 describe("bin", () => {
   test("runs from INIT_CWD in a pnpm script, in a terminal, and keeps the exit code", async () => {
-    // Given - pnpm's INIT_CWD, in the package root it started
-    vi.stubEnv("INIT_CWD", "/where/pnpm/was/run");
-    vi.stubEnv("npm_package_json", `${process.cwd()}/package.json`);
+    // Given - pnpm's INIT_CWD, a subfolder of the package root it started in
+    const initCwd = path.join(repo.root, "docs");
+    mkdirSync(initCwd);
+    vi.spyOn(process, "cwd").mockReturnValue(repo.root);
+    vi.stubEnv("INIT_CWD", initCwd);
+    vi.stubEnv("npm_package_json", path.join(repo.root, "package.json"));
 
     // When - loading the entry point in a terminal
     await loadBin(true);
@@ -53,7 +63,7 @@ describe("bin", () => {
     // Then - run called with the arguments after the script
     expect(run).toHaveBeenCalledWith({
       args: process.argv.slice(2),
-      cwd: "/where/pnpm/was/run",
+      cwd: initCwd,
       isInteractive: true,
     });
     expect(process.exitCode).toBe(2);

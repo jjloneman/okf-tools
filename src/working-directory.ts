@@ -1,6 +1,8 @@
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
+import { findRepoRoot } from "./git.ts";
+
 /**
  * Pick the directory relative paths are resolved from.
  *
@@ -13,8 +15,13 @@ import path from "node:path";
  *   folder of `npm_package_json`); a script that changed directory first uses
  *   its own cwd.
  *
- * - The two paths are compared resolved, so a symlink or a different spelling
- *   of the same folder still matches.
+ * - `pnpm --dir <package>` and `npm --prefix <package>` set `INIT_CWD` to the
+ *   caller's folder, which can be another repo, so it's trusted only when it's
+ *   in the same repo as the package. A subfolder and a monorepo root running
+ *   the script with a filter both are.
+ *
+ * - The package root is compared resolved, so a symlink or a different
+ *   spelling of the same folder still matches; git resolves the repo roots.
  */
 export function resolveWorkingDirectory(params: {
   cwd: string;
@@ -27,7 +34,22 @@ export function resolveWorkingDirectory(params: {
     packageJsonPath !== undefined &&
     toRealPath(path.dirname(packageJsonPath)) === toRealPath(cwd);
 
-  return isInPackageRoot ? (initCwd ?? cwd) : cwd;
+  if (!isInPackageRoot || initCwd === undefined) {
+    return cwd;
+  }
+
+  return isInSameRepo({ cwd, initCwd }) ? initCwd : cwd;
+}
+
+/** Whether `initCwd` is in the same git repo as `cwd`; false outside any. */
+function isInSameRepo(params: { cwd: string; initCwd: string }): boolean {
+  const { cwd, initCwd } = params;
+  const cwdRoot = findRepoRoot(cwd);
+  const initCwdRoot = findRepoRoot(initCwd);
+
+  return (
+    cwdRoot.isOk && initCwdRoot.isOk && cwdRoot.value === initCwdRoot.value
+  );
 }
 
 /** Resolve a path through symlinks, or keep it as given when it can't be. */
