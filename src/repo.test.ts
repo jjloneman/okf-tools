@@ -1,5 +1,5 @@
 import fc from "fast-check";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -503,5 +503,31 @@ describe("writeRecords", () => {
       ) as unknown,
     });
     expect(repo.read("docs/a.md")).toBe("old a\n");
+  });
+
+  test("never writes through a record that has become a symlink", () => {
+    // Given - a record, then a second one replaced by a link to other text
+    repo.write("docs/a.md", "old a\n");
+    repo.write("drafts/real.md", "other\n");
+    symlinkSync("../drafts/real.md", path.join(repo.root, "docs/b.md"));
+
+    // When - writing both
+    const result = writeRecords({
+      edits: [
+        { filePath: "docs/a.md", originalText: "old a\n", text: "new a\n" },
+        { filePath: "docs/b.md", originalText: "old b\n", text: "new b\n" },
+      ],
+      repoRoot: repo.root,
+    });
+
+    // Then - the link's write fails, and neither file is left changed
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^Couldn't write docs\/b\.md: .*ELOOP[\s\S]*No files changed\.$/u
+      ) as unknown,
+    });
+    expect(repo.read("docs/a.md")).toBe("old a\n");
+    expect(repo.read("drafts/real.md")).toBe("other\n");
   });
 });

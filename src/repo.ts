@@ -5,9 +5,14 @@
  */
 import { isUtf8 } from "node:buffer";
 import {
+  closeSync,
+  constants,
   existsSync,
+  lstatSync,
+  openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -44,11 +49,12 @@ export type LoadedRecord =
   | {
       /**
        * What the path turned out to be: a file whose frontmatter isn't valid
-       * YAML, one with no frontmatter block, or one that can't be read.
+       * YAML, one reached through a symlink, one with no frontmatter block, or
+       * one that can't be read.
        *
        * @example "unreadable"
        */
-      kind: "invalid" | "notRecord" | "unreadable";
+      kind: "invalid" | "linked" | "notRecord" | "unreadable";
 
       /**
        * Why it isn't a record, naming the path.
@@ -57,6 +63,10 @@ export type LoadedRecord =
        */
       reason: string;
     };
+
+/** Why okf-verify edits a file only at its own path. */
+const LINK_EXPLANATION =
+  "okf-verify edits records only at their own path, since git commits a symlink, not the file it points to.";
 
 /** The records read from a set of paths, and the ones left out. */
 export type LoadedRecords = {
@@ -97,11 +107,24 @@ export type SkippedRecord = {
 const INDEX_FILE = "index.md";
 
 /**
+ * How a record is opened for writing: never through a symlink at its own
+ * name, so one swapped in after the re-read fails the write instead.
+ */
+const WRITE_FLAGS =
+  constants.O_WRONLY |
+  constants.O_CREAT |
+  constants.O_TRUNC |
+  constants.O_NOFOLLOW;
+
+/**
  * Whether a record's bytes on disk are still the text it was listed with.
  *
  * - Bytes are compared, since `readRecordText` decodes only valid UTF-8,
  *   which re-encodes exactly: a record saved since in another encoding
  *   differs.
+ *
+ * - A record replaced since by a symlink differs too, even to the same
+ *   bytes, since the write would go through it.
  *
  * - A record that can't be read any more, such as one deleted since,
  *   throws, for `applyVerification` to report.
@@ -113,15 +136,18 @@ export function isRecordUnchanged(params: {
 }): boolean {
   const { filePath, repoRoot, text } = params;
 
-  return readFileSync(path.join(repoRoot, filePath)).equals(Buffer.from(text));
+  return (
+    findLinkedPath({ filePath, repoRoot }) === undefined &&
+    readFileSync(path.join(repoRoot, filePath)).equals(Buffer.from(text))
+  );
 }
 
 /**
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
  *
- * @returns the candidate, or why it isn't one: it can't be read, its
- * frontmatter isn't valid YAML or is in a layout the edits refuse, or it has
- * none.
+ * @returns the candidate, or why it isn't one: it can't be read, it's
+ * reached through a symlink, its frontmatter isn't valid YAML or is in a
+ * layout the edits refuse, or it has none.
  */
 export function loadCandidate(params: {
   filePath: string;
@@ -132,6 +158,15 @@ export function loadCandidate(params: {
   let text: string;
 
   try {
+    const realPath = findLinkedPath({ filePath, repoRoot });
+
+    if (realPath !== undefined) {
+      return {
+        kind: "linked",
+        reason: `${filePath} is a symlink, or inside one, to ${realPath}. ${LINK_EXPLANATION}`,
+      };
+    }
+
     text = readRecordText({ filePath, repoRoot });
   } catch (error) {
     return {
@@ -179,9 +214,9 @@ export function loadCandidate(params: {
  * - Only files count: `index.md`, a folder named `*.md`, and files without
  *   frontmatter aren't records, so they're left out.
  *
- * - A record that can't be read, isn't valid YAML, or has a layout the edits
- *   refuse is left out too, but reported, so the caller can say so rather
- *   than skip it unseen.
+ * - A record that can't be read, is reached through a symlink, isn't valid
+ *   YAML, or has a layout the edits refuse is left out too, but reported, so
+ *   the caller can say so rather than skip it unseen.
  *
  * - A bundle that can't be listed fails the whole load, naming the bundle,
  *   since its records can't even be counted as skipped.
@@ -220,8 +255,8 @@ export function loadCandidates(params: {
  * - Keeps only `.md` files directly inside a bundle, other than `index.md`,
  *   that have a frontmatter block; anything else is skipped.
  *
- * - A record that can't be read, isn't valid YAML, or has a layout the edits
- *   refuse is reported in `skipped` instead.
+ * - A record that can't be read, is reached through a symlink, isn't valid
+ *   YAML, or has a layout the edits refuse is reported in `skipped` instead.
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];
@@ -278,7 +313,8 @@ export function readRecordText(params: {
  *
  * - The same directory given twice is kept once.
  *
- * - Fails on the first directory that is missing or outside the repo.
+ * - Fails on the first directory that is missing, outside the repo, or
+ *   reached through a symlink, since git won't commit a path beyond one.
  */
 export function resolveBundleDirs(params: {
   bundleDirs: readonly string[];
@@ -299,6 +335,15 @@ export function resolveBundleDirs(params: {
 
     if (!isDirectory(absoluteDir)) {
       return { isOk: false, reason: `No bundle directory at ${absoluteDir}.` };
+    }
+
+    const realPath = findLinkedPath({ filePath: relativeDir, repoRoot });
+
+    if (realPath !== undefined) {
+      return {
+        isOk: false,
+        reason: `The bundle ${absoluteDir} is a symlink, or inside one, to ${realPath}. ${LINK_EXPLANATION}`,
+      };
     }
 
     if (!resolved.includes(relativeDir)) {
@@ -356,6 +401,9 @@ export function resolveRecordPaths(params: {
  *   original text back, so no record is left half-verified. That text was
  *   read as strict UTF-8, so it re-encodes to the original bytes.
  *
+ * - A record that has become a symlink since it was read fails its write,
+ *   rather than edit the file the link points to.
+ *
  * - That rollback is best effort, and covers the record whose write failed
  *   too, since a failed write can leave it truncated: a record it can't
  *   restore is named, so the person knows which are left changed.
@@ -369,7 +417,10 @@ export function writeRecords(params: {
 
   for (const edit of edits) {
     try {
-      writeFileSync(path.join(repoRoot, edit.filePath), edit.text);
+      writeRecordFile({
+        filePath: path.join(repoRoot, edit.filePath),
+        text: edit.text,
+      });
     } catch (error) {
       const unrestored = restoreRecords({
         edits: [...written, edit],
@@ -393,7 +444,28 @@ export function writeRecords(params: {
   return { isOk: true, value: undefined };
 }
 
-/** Whether a file can be read and holds the given text. */
+/**
+ * Find where a path from the repo root really leads, when a symlink in the
+ * repo, at the path or any folder above it, sends it elsewhere.
+ *
+ * @returns the real path, or `undefined` when it's the path itself.
+ */
+function findLinkedPath(params: {
+  filePath: string;
+  repoRoot: string;
+}): string | undefined {
+  const { filePath, repoRoot } = params;
+  const realPath = realpathSync(path.join(repoRoot, filePath));
+
+  return realPath === path.join(realpathSync(repoRoot), filePath)
+    ? undefined
+    : realPath;
+}
+
+/**
+ * Whether a record needs no restoring: it's a symlink, which no write went
+ * through, or it can be read and holds the given text.
+ */
 function holdsText(params: {
   filePath: string;
   originalText: string;
@@ -401,7 +473,10 @@ function holdsText(params: {
   const { filePath, originalText } = params;
 
   try {
-    return readFileSync(filePath, "utf8") === originalText;
+    return (
+      lstatSync(filePath).isSymbolicLink() ||
+      readFileSync(filePath, "utf8") === originalText
+    );
   } catch {
     return false;
   }
@@ -449,7 +524,8 @@ function isRecordPath(params: {
  * Write each record's original text back, unless it already holds it.
  *
  * - A record already holding its original text is left alone, so one whose
- *   write was refused before it opened isn't reported as unrestored.
+ *   write was refused before it opened isn't reported as unrestored; so is
+ *   a symlink, whose write `O_NOFOLLOW` refused.
  *
  * @returns why each record that couldn't be restored wasn't, naming it.
  */
@@ -466,7 +542,10 @@ function restoreRecords(params: {
     }
 
     try {
-      writeFileSync(path.join(repoRoot, filePath), originalText);
+      writeRecordFile({
+        filePath: path.join(repoRoot, filePath),
+        text: originalText,
+      });
     } catch (error) {
       unrestored.push(`${filePath}: ${describeError(error)}`);
     }
@@ -500,4 +579,19 @@ function toRepoPath(params: {
   return relativePath === ""
     ? "."
     : relativePath.split(path.sep).join(path.posix.sep);
+}
+
+/**
+ * Write a record's text in place, refusing a symlink at its name, which
+ * fails with `ELOOP` rather than edit the file the link points to.
+ */
+function writeRecordFile(params: { filePath: string; text: string }): void {
+  const { filePath, text } = params;
+  const descriptor = openSync(filePath, WRITE_FLAGS);
+
+  try {
+    writeFileSync(descriptor, text);
+  } finally {
+    closeSync(descriptor);
+  }
 }

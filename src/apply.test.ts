@@ -1,4 +1,11 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -138,5 +145,45 @@ describe("applyVerification", () => {
       )
     );
     expect(existsSync(path.join(repo.root, "docs/decisions/a.md"))).toBe(false);
+  });
+});
+
+describe("applyVerification, given a record replaced by a symlink", () => {
+  test("writes nothing through a link swapped in after listing", () => {
+    // Given - a listed draft, since replaced by a link to the same text
+    repo.write("drafts/real.md", draftRecord("A"));
+    mkdirSync(path.join(repo.root, "docs/decisions"), { recursive: true });
+    symlinkSync(
+      "../../drafts/real.md",
+      path.join(repo.root, "docs/decisions/a.md")
+    );
+
+    const candidates = [
+      toCandidate({ filePath: "docs/decisions/a.md", text: draftRecord("A") }),
+    ];
+
+    // When - applying the plan
+    const outcome = applyVerification({
+      context: {
+        repoRoot: repo.root,
+        shouldCommit: false,
+        verifiedBy: VERIFIED_BY,
+      },
+      plan: {
+        candidates,
+        dirtyPaths: [],
+        filePaths: ["docs/decisions/a.md"],
+        message: "docs(okf): ✅ verify 1 record",
+        uncommitted: [],
+      },
+    });
+
+    // Then - counted as changed, and the linked file left alone
+    expect(outcome).toStrictEqual({
+      kind: "notWritten",
+      message:
+        "docs/decisions/a.md changed on disk since it was read; nothing written.",
+    });
+    expect(repo.read("drafts/real.md")).toBe(draftRecord("A"));
   });
 });
