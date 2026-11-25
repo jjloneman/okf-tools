@@ -31,7 +31,7 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
-import { isKnownToGit, listIgnoredFolders, toPathKey } from "./git.ts";
+import { listIgnoredFolders, listIndexPaths, toPathKey } from "./git.ts";
 import { describeError } from "./output.ts";
 
 /** A path read as a record: the record, or why it isn't one. */
@@ -69,6 +69,27 @@ export type LoadedRecord =
        */
       reason: string;
     };
+
+/**
+ * git's index as a tree, for spelling a path as the index does: every path
+ * it holds, folders included, and each folder's entries.
+ */
+type GitIndex = {
+  /**
+   * Each folder's entries, as paths from the repo root, by the folder's path;
+   * the root is `.`.
+   *
+   * @example `new Map([[".", ["docs"]], ["docs", ["docs/a.md"]]])`
+   */
+  entries: Map<string, string[]>;
+
+  /**
+   * Every file the index holds, and every folder above one.
+   *
+   * @example `new Set(["docs", "docs/a.md"])`
+   */
+  paths: Set<string>;
+};
 
 /** Why a file is edited only at its own path. */
 const LINK_EXPLANATION =
@@ -278,6 +299,7 @@ export function loadCandidates(params: {
   const { bundleDirs, excludeGlobs, repoRoot } = params;
   const isExcluded = matchExcluded(excludeGlobs);
   const filePaths: string[] = [];
+  const index = readGitIndex(repoRoot);
 
   for (const bundleDir of bundleDirs) {
     const ignored = listIgnoredFolders({ bundleDir, repoRoot });
@@ -289,15 +311,26 @@ export function loadCandidates(params: {
     const ignoredFolders = ignored.value;
 
     try {
+      const listedPaths = listFiles({
+        folder: bundleDir,
+        isExcluded,
+        isSkipped: (folder) =>
+          ignoredFolders.has(toPathKey(folder)) ||
+          existsSync(path.join(repoRoot, folder, ".git")),
+        repoRoot,
+      });
+
+      // As git's index spells them, so a record renamed only in case matches
+      // the name git prints.
       filePaths.push(
-        ...listFiles({
-          folder: bundleDir,
-          isExcluded,
-          isSkipped: (folder) =>
-            ignoredFolders.has(toPathKey(folder)) ||
-            existsSync(path.join(repoRoot, folder, ".git")),
-          repoRoot,
-        })
+        ...listedPaths.map((filePath) =>
+          spellForGit({
+            filePath,
+            index,
+            readName: (givenPath) => path.posix.basename(givenPath),
+            repoRoot,
+          })
+        )
       );
     } catch (error) {
       return {
@@ -433,6 +466,7 @@ export function resolveBundleDirs(params: {
 }): Outcome<string[]> {
   const { bundleDirs, repoRoot } = params;
   const resolved: string[] = [];
+  const index = readGitIndex(repoRoot);
 
   for (const absoluteDir of bundleDirs) {
     const relativeDir = toRepoPath({ absolutePath: absoluteDir, repoRoot });
@@ -457,7 +491,12 @@ export function resolveBundleDirs(params: {
       };
     }
 
-    const bundleDir = spellForGit({ filePath: relativeDir, repoRoot });
+    const bundleDir = spellForGit({
+      filePath: relativeDir,
+      index,
+      readName: (givenPath) => readRealName({ filePath: givenPath, repoRoot }),
+      repoRoot,
+    });
 
     if (!includesPath({ filePath: bundleDir, filePaths: resolved })) {
       resolved.push(bundleDir);
@@ -491,6 +530,7 @@ export function resolveRecordPaths(params: {
   const { bundleDirs, cwd, excludeGlobs, recordPaths, repoRoot } = params;
   const isExcluded = matchExcluded(excludeGlobs);
   const resolved: string[] = [];
+  const index = readGitIndex(repoRoot);
 
   for (const recordPath of recordPaths) {
     const absolutePath = path.resolve(cwd, recordPath);
@@ -499,7 +539,13 @@ export function resolveRecordPaths(params: {
       typedPath !== undefined &&
       isFile(absolutePath) &&
       findLinkedPath({ filePath: typedPath, repoRoot }) === undefined
-        ? spellForGit({ filePath: typedPath, repoRoot })
+        ? spellForGit({
+            filePath: typedPath,
+            index,
+            readName: (givenPath) =>
+              readRealName({ filePath: givenPath, repoRoot }),
+            repoRoot,
+          })
         : typedPath;
 
     if (filePath === undefined || !isRecordName({ bundleDirs, filePath })) {
@@ -579,6 +625,41 @@ export function writeRecords(params: {
 }
 
 /**
+ * Find how git's index spells a path from the repo root, when the disk
+ * resolves that spelling to the same file.
+ *
+ * - The path as given, when the index holds that spelling.
+ *
+ * - Otherwise an entry in the same folder that differs from it only in case
+ *   or Unicode form and that the disk resolves to it (see `isDiskSpelling`),
+ *   as after a rename only in case that git wasn't told about. Case only
+ *   narrows the search; the disk decides, so a case-sensitive disk keeps two
+ *   such names apart.
+ *
+ * @returns the index's spelling, or `undefined` when it holds none.
+ */
+function findIndexSpelling(params: {
+  filePath: string;
+  index: GitIndex;
+  repoRoot: string;
+}): string | undefined {
+  const { filePath, index, repoRoot } = params;
+
+  if (index.paths.has(filePath)) {
+    return filePath;
+  }
+
+  const key = toFoldKey(filePath);
+  const entries = index.entries.get(path.posix.dirname(filePath)) ?? [];
+
+  return entries.find(
+    (entry) =>
+      toFoldKey(entry) === key &&
+      isDiskSpelling({ filePath, indexPath: entry, repoRoot })
+  );
+}
+
+/**
  * Find where a path from the repo root really leads, when a symlink in the
  * repo, at the path or any folder above it, sends it elsewhere.
  *
@@ -633,6 +714,44 @@ function includesPath(params: {
 /** Whether a path exists and is a directory. */
 function isDirectory(directory: string): boolean {
   return existsSync(directory) && statSync(directory).isDirectory();
+}
+
+/**
+ * Whether the disk resolves an index entry's spelling to the file at
+ * `filePath`, both paths from the repo root, without listing that spelling as
+ * a name of its own, as a case- or normalization-insensitive disk does.
+ *
+ * - Not following a symlink at either, and false when either can't be read.
+ *
+ * - A name of its own in the folder is a separate path to git, even a hard
+ *   link to the same file, or one on a mount whose inode numbers are all
+ *   alike.
+ */
+function isDiskSpelling(params: {
+  filePath: string;
+  indexPath: string;
+  repoRoot: string;
+}): boolean {
+  const { filePath, indexPath, repoRoot } = params;
+
+  try {
+    const fileStats = lstatSync(path.join(repoRoot, filePath), {
+      bigint: true,
+    });
+    const indexStats = lstatSync(path.join(repoRoot, indexPath), {
+      bigint: true,
+    });
+
+    return (
+      fileStats.dev === indexStats.dev &&
+      fileStats.ino === indexStats.ino &&
+      !readdirSync(path.join(repoRoot, path.posix.dirname(indexPath))).includes(
+        path.posix.basename(indexPath)
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Whether a path exists and is a file. */
@@ -749,6 +868,33 @@ function matchExcluded(
 }
 
 /**
+ * Read git's index as a tree, in one `git ls-files` call; empty when git
+ * can't be asked, so every path is spelled as the disk spells it.
+ */
+function readGitIndex(repoRoot: string): GitIndex {
+  const entries = new Map<string, string[]>();
+  const paths = new Set<string>();
+
+  for (const indexPath of listIndexPaths(repoRoot)) {
+    // Each folder is added with its first file, so it's listed once.
+    for (
+      let entry = indexPath;
+      entry !== "." && !paths.has(entry);
+      entry = path.posix.dirname(entry)
+    ) {
+      const folder = path.posix.dirname(entry);
+      const folderEntries = entries.get(folder) ?? [];
+
+      paths.add(entry);
+      folderEntries.push(entry);
+      entries.set(folder, folderEntries);
+    }
+  }
+
+  return { entries, paths };
+}
+
+/**
  * Judge a listed record's state, reading the clock as `getRecordState` never
  * does.
  *
@@ -757,6 +903,16 @@ function matchExcluded(
  */
 function readListedState(summary: RecordTimes): RecordState {
   return isVerifiedAhead(summary) ? "changed" : getRecordState(summary);
+}
+
+/**
+ * Read the disk's spelling of a path's last name, in case and Unicode form,
+ * resolving it through the disk.
+ */
+function readRealName(params: { filePath: string; repoRoot: string }): string {
+  const { filePath, repoRoot } = params;
+
+  return path.basename(realpathSync.native(path.join(repoRoot, filePath)));
 }
 
 /**
@@ -795,28 +951,50 @@ function restoreRecords(params: {
 
 /**
  * Spell a path from the repo root as git will match it, since git compares
- * paths byte for byte: as given when git's index holds that spelling, else as
- * the disk spells it, in case and Unicode form.
+ * paths byte for byte: each name in it, folders first, as git's index spells
+ * it when the disk resolves that spelling to the same file (see
+ * `findIndexSpelling`), else as the disk spells it, in case and Unicode form.
  *
  * - The index wins, since after a rename only in case it can differ from the
  *   disk, and git matches the index.
  *
- * - The path must exist and not be reached through a symlink, so resolving
- *   it changes only its spelling, never the file it names.
+ * - Name by name, so a record git doesn't know yet, in a folder renamed only
+ *   in case on disk, takes the index's spelling of the folder.
+ *
+ * - The path must exist. `readName` gives the disk's spelling of a name the
+ *   index doesn't hold: `readRealName` for a path typed by hand, which must
+ *   not be reached through a symlink, so resolving it changes only its
+ *   spelling; the name as given for one listed from the disk.
  */
-function spellForGit(params: { filePath: string; repoRoot: string }): string {
-  const { filePath, repoRoot } = params;
+function spellForGit(params: {
+  filePath: string;
+  index: GitIndex;
+  readName: (givenPath: string) => string;
+  repoRoot: string;
+}): string {
+  const { filePath, index, readName, repoRoot } = params;
+  let spelled = ".";
 
-  if (isKnownToGit({ filePath, repoRoot })) {
-    return filePath;
+  // The repo root, `.`, has no names to spell.
+  for (const name of filePath.split("/").filter((part) => part !== ".")) {
+    const givenPath = path.posix.join(spelled, name);
+
+    spelled =
+      findIndexSpelling({ filePath: givenPath, index, repoRoot }) ??
+      path.posix.join(spelled, readName(givenPath));
   }
 
-  return toPosixPath(
-    path.relative(
-      realpathSync.native(repoRoot),
-      realpathSync.native(path.join(repoRoot, filePath))
-    )
-  );
+  return spelled;
+}
+
+/**
+ * The key two spellings of a name share when they differ only in case or
+ * Unicode form, for narrowing which index entries to compare on disk.
+ *
+ * - Upper case first, so a final sigma and a medial one share a key.
+ */
+function toFoldKey(filePath: string): string {
+  return toPathKey(filePath).toUpperCase().toLowerCase();
 }
 
 /**

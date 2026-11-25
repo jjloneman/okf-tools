@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, test } from "vitest";
 
 import { useTestRepo } from "#test/repo";
@@ -8,6 +9,7 @@ import {
   findRepoRoot,
   listChangedPaths,
   listDirtyPaths,
+  listIndexPaths,
   readBaseRef,
   readCommittedText,
   readGitFailure,
@@ -390,6 +392,56 @@ describe("listChangedPaths", () => {
       paths: ["docs/a.md", "docs/b.md"],
       statusPaths: ["docs/a.md"],
     });
+  });
+});
+
+describe("listIndexPaths", () => {
+  test("lists every path the index holds, spelled as it is", () => {
+    // Given - a committed file, a staged one whose name starts with a space,
+    // and an untracked one
+    repo.write("docs/a.md", "a\n");
+    repo.commitAll("add a");
+    repo.write(" b.md", "b\n");
+    repo.git("add", "--", " b.md");
+    repo.write("c.md", "c\n");
+
+    // When - listing the index
+    const indexPaths = listIndexPaths(repo.root);
+
+    // Then - the committed and the staged ones, untrimmed
+    expect(indexPaths).toStrictEqual([" b.md", "docs/a.md", "package.json"]);
+  });
+
+  test("lists an index larger than Node's default output buffer", () => {
+    // Given - more than 1 MiB of long paths staged, all for one blob
+    const blob = repo.git("hash-object", "-w", "--", "package.json").trim();
+    const folder = "x".repeat(200);
+    const indexInfo = Array.from(
+      { length: 6000 },
+      (_, position) => `100644 ${blob}\t${folder}/${position}.md\n`
+    ).join("");
+
+    execFileSync("git", ["update-index", "--index-info"], {
+      cwd: repo.root,
+      input: indexInfo,
+    });
+
+    // When - listing the index
+    const indexPaths = listIndexPaths(repo.root);
+
+    // Then - every path
+    expect(indexPaths).toHaveLength(6001);
+  });
+
+  test("is empty when git can't read the index", () => {
+    // Given - an index git can't read
+    repo.write(".git/index", "garbage\n");
+
+    // When - listing the index
+    const indexPaths = listIndexPaths(repo.root);
+
+    // Then - nothing
+    expect(indexPaths).toStrictEqual([]);
   });
 });
 

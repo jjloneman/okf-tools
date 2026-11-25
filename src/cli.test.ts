@@ -1477,6 +1477,54 @@ describe.each(INVOCATIONS)("as $command", (current) => {
       }
     );
 
+    test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+      "commits a record named as the disk spells it after a rename in case",
+      async () => {
+        // Given - a committed draft renamed only in case on disk
+        repo.write("docs/decisions/a.md", draftRecord("A"));
+        repo.commitAll("add a");
+        renameSync(
+          path.join(repo.root, "docs/decisions/a.md"),
+          path.join(repo.root, "docs/decisions/A.md")
+        );
+
+        // When - naming it as the disk spells it
+        const code = await runIn(["--yes", "docs/decisions/A.md"]);
+
+        // Then - signed and committed at the path git knows
+        expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+        expect(repo.git("status", "--porcelain")).toBe("");
+        expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+          "docs/decisions/a.md\n"
+        );
+      }
+    );
+
+    test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+      "commits a new record in a bundle folder renamed only in case on disk",
+      async () => {
+        // Given - the bundle's folder renamed only in case on disk, and a new
+        // draft in it
+        repo.write("docs/decisions/a.md", draftRecord("A"));
+        repo.commitAll("add a");
+        renameSync(
+          path.join(repo.root, "docs/decisions"),
+          path.join(repo.root, "docs/Decisions")
+        );
+        repo.write("docs/Decisions/b.md", draftRecord("B"));
+
+        // When - naming it as the disk spells it
+        const code = await runIn(["--yes", "docs/Decisions/b.md"]);
+
+        // Then - signed and committed under git's spelling of the folder
+        expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+        expect(repo.git("status", "--porcelain")).toBe("");
+        expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+          "docs/decisions/b.md\n"
+        );
+      }
+    );
+
     test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
       "finds a changed record in a bundle whose folder is decomposed",
       async () => {
@@ -1538,10 +1586,11 @@ describe.each(INVOCATIONS)("as $command", (current) => {
       // When - naming it again, as the disk spells it
       const code = await runIn(["--yes", DECOMPOSED]);
 
-      // Then - the sign-off is committed as it is
+      // Then - the sign-off is committed as it is, named as git's index
+      // spells it, which git on macOS composes
       expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
       expect(infos[0]).toBe(
-        `${invocation.prefix} committing ${DECOMPOSED}: already verified, not yet committed`
+        `${invocation.prefix} committing ${repo.git("-c", "core.quotePath=false", "ls-files", DECOMPOSED).trim()}: already verified, not yet committed`
       );
       expect(repo.git("status", "--porcelain")).toBe("");
     });
