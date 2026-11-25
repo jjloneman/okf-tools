@@ -50,6 +50,7 @@ describe("applyVerification", () => {
       context: {
         repoRoot: repo.root,
         shouldCommit: false,
+        staleIn: undefined,
         style: "match",
         verifiedBy: VERIFIED_BY,
       },
@@ -90,6 +91,7 @@ describe("applyVerification", () => {
       context: {
         repoRoot: repo.root,
         shouldCommit: false,
+        staleIn: undefined,
         style: "match",
         verifiedBy: VERIFIED_BY,
       },
@@ -128,6 +130,7 @@ describe("applyVerification", () => {
       context: {
         repoRoot: repo.root,
         shouldCommit: false,
+        staleIn: undefined,
         style: "match",
         verifiedBy: VERIFIED_BY,
       },
@@ -171,6 +174,7 @@ describe("applyVerification, given a record replaced by a symlink", () => {
       context: {
         repoRoot: repo.root,
         shouldCommit: false,
+        staleIn: undefined,
         style: "match",
         verifiedBy: VERIFIED_BY,
       },

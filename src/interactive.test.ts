@@ -94,6 +94,7 @@ function context(overrides: Partial<RunContext> = {}): RunContext {
     output: createOutput("okf"),
     repoRoot: repo.root,
     shouldCommit: true,
+    staleIn: undefined,
     style: "match",
     verifiedBy: VERIFIED_BY,
     ...overrides,

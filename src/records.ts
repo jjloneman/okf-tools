@@ -1,11 +1,14 @@
-import { DateTime } from "luxon";
+import { DateTime, Duration } from "luxon";
 import path from "node:path";
 
+import type { RecordVerification } from "./frontmatter/edit.ts";
 import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
-import type { EntryStyle } from "./frontmatter/types.ts";
+import type { EntryStyle, Timestamp } from "./frontmatter/types.ts";
 
 import { verifyRecord } from "./frontmatter/edit.ts";
+import { writeFields } from "./frontmatter/fields.ts";
 import { readStatusText } from "./frontmatter/read.ts";
+import { FRONTMATTER_KEYS } from "./frontmatter/shared.ts";
 import { findBundleDir } from "./repo.ts";
 
 /** A record in a bundle that could be verified. */
@@ -155,16 +158,23 @@ export function needsSignOff(candidate: Candidate): boolean {
 export function prepareEdits(params: {
   at: string;
   candidates: readonly Candidate[];
+  staleIn: string | undefined;
   style: EntryStyle;
   verifiedBy: string;
 }): PreparedEdits {
-  const { at, candidates, style, verifiedBy } = params;
+  const { at, candidates, staleIn, style, verifiedBy } = params;
+  const staleAfter =
+    staleIn === undefined ? undefined : addDuration({ at, duration: staleIn });
 
   const edits: RecordEdit[] = [];
   const failures: string[] = [];
 
   candidates.forEach(({ filePath, text }) => {
-    const result = verifyRecord({ at, style, text, verifiedBy });
+    const verified = verifyRecord({ at, style, text, verifiedBy });
+    const result =
+      verified.isOk && staleAfter !== undefined
+        ? writeStaleAfter({ staleAfter, text: verified.text })
+        : verified;
 
     if (result.isOk) {
       edits.push({ filePath, originalText: text, text: result.text });
@@ -174,6 +184,40 @@ export function prepareEdits(params: {
   });
 
   return { edits, failures };
+}
+
+/**
+ * Write a signed-off record's `stale_after`, replacing any it holds, after
+ * its `verified`, where a sign-off has just put one.
+ */
+export function writeStaleAfter(params: {
+  staleAfter: Timestamp;
+  text: string;
+}): RecordVerification {
+  const { staleAfter, text } = params;
+
+  return writeFields({
+    fields: [
+      {
+        after: FRONTMATTER_KEYS.verified,
+        key: FRONTMATTER_KEYS.staleAfter,
+        value: staleAfter,
+      },
+    ],
+    text,
+  });
+}
+
+/**
+ * Add an ISO 8601 duration, which `--stale-in` checked, to a sign-off time,
+ * in UTC to the second.
+ */
+function addDuration(params: { at: Timestamp; duration: string }): Timestamp {
+  const { at, duration } = params;
+
+  return DateTime.fromISO(at, { zone: "utc" })
+    .plus(Duration.fromISO(duration))
+    .toFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
 }
 
 /**
