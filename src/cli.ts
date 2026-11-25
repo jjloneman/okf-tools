@@ -1,32 +1,45 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import type { OkfConfig } from "./config.ts";
 import type { ExitCode } from "./exit-codes.ts";
 import type { CliOptions } from "./options.ts";
+import type { Outcome } from "./outcome.ts";
 import type { Output, Program } from "./output.ts";
-import type { RunContext } from "./run-context.ts";
+import type { BundleContext, RunContext } from "./run-context.ts";
 
-import { readOkfConfig, resolveSettings } from "./config.ts";
+import {
+  describeNoBundles,
+  readOkfConfig,
+  resolveSettings,
+  selectBundleDirs,
+} from "./config.ts";
 import { runDiff } from "./diff.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { findRepoRoot } from "./git.ts";
 import { runGuide } from "./guide.ts";
+import { runIndex } from "./index-command.ts";
 import { runInit } from "./init.ts";
 import { runInteractive } from "./interactive.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
   DIFF_USAGE,
   formatVerifyUsage,
+  INDEX_USAGE,
   OKF_USAGE,
   parseCliArgs,
   parseCommand,
   parseDiffArgs,
+  parseIndexArgs,
   parseStatusArgs,
+  parseTagsArgs,
   STATUS_USAGE,
+  TAGS_USAGE,
 } from "./options.ts";
 import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
 import { runStatus } from "./status.ts";
+import { runTags } from "./tags.ts";
 import { spellLikeRepoRoot } from "./working-directory.ts";
 
 /** What a run of the CLI is given by the process that starts it. */
@@ -66,7 +79,8 @@ export type RunParams = {
 
 /**
  * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
- * `okf diff`, `okf guide`, `okf init`, `okf status`, or `okf verify`.
+ * `okf diff`, `okf guide`, `okf index`, `okf init`, `okf status`, `okf tags`,
+ * or `okf verify`.
  *
  * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
  *   own name.
@@ -113,7 +127,64 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runStatusCommand({ args: parsed.args, cwd, output });
   }
 
+  if (parsed.kind === "index") {
+    return runIndexCommand({ args: parsed.args, cwd, output });
+  }
+
+  if (parsed.kind === "tags") {
+    return runTagsCommand({ args: parsed.args, cwd, output });
+  }
+
   return runVerify({ args: parsed.args, cwd, isInteractive, output, program });
+}
+
+/**
+ * Resolve the repo and bundles a command that reads them works with, with no
+ * one's sign-off: `okf index` and `okf tags`.
+ */
+function buildBundleContext(params: {
+  bundles: readonly string[];
+  cwd: string;
+  output: Output;
+}): Outcome<BundleContext> {
+  const { bundles, output } = params;
+  const repo = readRepo(params.cwd);
+
+  if (!repo.isOk) {
+    return repo;
+  }
+
+  const { config, cwd, repoRoot } = repo.value;
+  const bundleDirs = selectBundleDirs({
+    config,
+    cwd,
+    options: { bundles },
+    repoRoot,
+  });
+
+  if (bundleDirs.length === 0) {
+    return {
+      isOk: false,
+      reason: describeNoBundles(path.join(repoRoot, "package.json")),
+    };
+  }
+
+  const resolved = resolveBundleDirs({ bundleDirs, repoRoot });
+
+  if (!resolved.isOk) {
+    return resolved;
+  }
+
+  return {
+    isOk: true,
+    value: {
+      bundleDirs: resolved.value,
+      cwd,
+      excludeGlobs: config.exclude ?? [],
+      output,
+      repoRoot,
+    },
+  };
 }
 
 /** Resolve the repo, config, bundles, and actor a run works with. */
@@ -123,28 +194,16 @@ function buildContext(params: {
   output: Output;
 }): { isOk: false; reason: string } | { isOk: true; value: RunContext } {
   const { options, output } = params;
-  const root = findRepoRoot(params.cwd);
+  const repo = readRepo(params.cwd);
 
-  if (!root.isOk) {
-    return root;
+  if (!repo.isOk) {
+    return repo;
   }
 
-  const repoRoot = root.value;
-  const cwd = spellLikeRepoRoot({ cwd: params.cwd, repoRoot });
-  const packageJsonPath = path.join(repoRoot, "package.json");
-
-  const config = readOkfConfig(
-    existsSync(packageJsonPath)
-      ? readFileSync(packageJsonPath, "utf8")
-      : undefined
-  );
-
-  if (!config.isOk) {
-    return config;
-  }
+  const { config, cwd, repoRoot } = repo.value;
 
   const settings = resolveSettings({
-    config: config.config,
+    config,
     cwd,
     options,
     repoRoot,
@@ -174,6 +233,36 @@ function buildContext(params: {
       verifiedBy,
     },
   };
+}
+
+/**
+ * Find the repo the command was run in, spell the directory as its root
+ * does, and read the `okf` block of its `package.json`.
+ */
+function readRepo(
+  runFrom: string
+): Outcome<{ config: OkfConfig; cwd: string; repoRoot: string }> {
+  const root = findRepoRoot(runFrom);
+
+  if (!root.isOk) {
+    return root;
+  }
+
+  const repoRoot = root.value;
+  const cwd = spellLikeRepoRoot({ cwd: runFrom, repoRoot });
+  const packageJsonPath = path.join(repoRoot, "package.json");
+
+  const config = readOkfConfig(
+    existsSync(packageJsonPath)
+      ? readFileSync(packageJsonPath, "utf8")
+      : undefined
+  );
+
+  if (!config.isOk) {
+    return config;
+  }
+
+  return { isOk: true, value: { config: config.config, cwd, repoRoot } };
 }
 
 /**
@@ -227,6 +316,53 @@ function runDiffCommand(params: {
 }
 
 /**
+ * Run `okf index`: read its arguments and config, then sync each index, or
+ * with `--check` report the ones out of date.
+ */
+function runIndexCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseIndexArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(INDEX_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${INDEX_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runIndex({ context: context.value, isCheck: options.isCheck });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
  * Run `okf status`: read its arguments and config, then print the report.
  *
  * - Exits `0` whatever the records hold; only a usage error, a config it
@@ -269,6 +405,53 @@ function runStatusCommand(params: {
     }
 
     return runStatus({ context: context.value, options });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
+ * Run `okf tags`: read its arguments and config, then print every tag with
+ * its record count.
+ */
+function runTagsCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseTagsArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(TAGS_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${TAGS_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runTags({ context: context.value, format: options.format });
   } catch (error) {
     output.error(describeError(error));
 

@@ -6,6 +6,7 @@ import {
   BLOCK_END,
   BLOCK_START,
   findBlock,
+  findMarkedBlock,
   writeBlock,
 } from "./agent-block.ts";
 
@@ -101,6 +102,65 @@ describe("findBlock", () => {
   ])("calls $description malformed", ({ problem, text }) => {
     // When/Then - malformed, saying why
     expect(findBlock(text)).toStrictEqual({ kind: "malformed", problem });
+  });
+});
+
+describe("findMarkedBlock", () => {
+  const START = "<!-- tag-index:start -->";
+  const END = "<!-- tag-index:end -->";
+
+  test("finds the block between other markers", () => {
+    // Given - a block between other markers, beside an okf block
+    const text = `${BLOCK_START}\n${BLOCK_END}\n# Tags\n${START}\n- a\n${END}\n`;
+
+    // When - finding the block between the other markers
+    const search = findMarkedBlock({
+      endMarker: END,
+      startMarker: START,
+      text,
+    });
+
+    // Then - from the start marker's line to past the end's break
+    expect(search).toStrictEqual({
+      end: text.length,
+      kind: "found",
+      start: text.indexOf(START),
+    });
+  });
+
+  test("finds no block without either marker", () => {
+    // When/Then - no block
+    expect(
+      findMarkedBlock({ endMarker: END, startMarker: START, text: "# Tags\n" })
+    ).toStrictEqual({ kind: "absent" });
+  });
+
+  test.each([
+    {
+      description: "a start marker alone",
+      problem: "has a tag-index:start marker but no tag-index:end",
+      text: `${START}\n`,
+    },
+    {
+      description: "an end marker alone",
+      problem: "has a tag-index:end marker but no tag-index:start",
+      text: `${END}\n`,
+    },
+    {
+      description: "two end markers",
+      problem: "has 2 tag-index:end markers",
+      text: `${START}\n${END}\n${END}\n`,
+    },
+    {
+      description: "the end before the start",
+      problem: "has its tag-index:end marker before tag-index:start",
+      text: `${END}\n${START}\n`,
+    },
+  ])("names the markers when $description", ({ problem, text }) => {
+    // When/Then - malformed, naming the markers by the text in their comments
+    expect(
+      findMarkedBlock({ endMarker: END, startMarker: START, text })
+    ).toStrictEqual({ kind: "malformed", problem });
   });
 });
 

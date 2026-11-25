@@ -471,6 +471,30 @@ export function loadCandidatesAt(params: {
 }
 
 /**
+ * Build a test of whether a path from the repo root is excluded: it, or a
+ * folder above it, matches one of the globs.
+ *
+ * - Matching a folder excludes everything in it, so `docs/drafts` needs no
+ *   `/**`.
+ *
+ * - Globs match dot files too, and compare by `toPathKey`, since git's
+ *   spelling of a name can differ from the disk's in Unicode form.
+ */
+export function matchExcluded(
+  excludeGlobs: readonly string[]
+): (filePath: string) => boolean {
+  const isMatch = picomatch(excludeGlobs.map(toPathKey), { dot: true });
+
+  return (filePath) => {
+    const segments = toPathKey(filePath).split("/");
+
+    return segments.some((_, index) =>
+      isMatch(segments.slice(0, index + 1).join("/"))
+    );
+  };
+}
+
+/**
  * Order paths from the repo root as records are listed: by the first bundle
  * that holds each, in bundle order, then by path in code-unit order.
  *
@@ -922,30 +946,6 @@ function listFiles(params: {
         ? []
         : listFiles({ ...params, folder: filePath });
     });
-}
-
-/**
- * Build a test of whether a path from the repo root is excluded: it, or a
- * folder above it, matches one of the globs.
- *
- * - Matching a folder excludes everything in it, so `docs/drafts` needs no
- *   `/**`.
- *
- * - Globs match dot files too, and compare by `toPathKey`, since git's
- *   spelling of a name can differ from the disk's in Unicode form.
- */
-function matchExcluded(
-  excludeGlobs: readonly string[]
-): (filePath: string) => boolean {
-  const isMatch = picomatch(excludeGlobs.map(toPathKey), { dot: true });
-
-  return (filePath) => {
-    const segments = toPathKey(filePath).split("/");
-
-    return segments.some((_, index) =>
-      isMatch(segments.slice(0, index + 1).join("/"))
-    );
-  };
 }
 
 /**

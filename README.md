@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions current; and `okf status`, which reports where every record stands. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; and `okf tags`, which lists every tag with its record count. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
 
@@ -16,8 +16,11 @@ It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-f
   - [🔍 Diff](#-diff)
 - [📋 Status](#-status)
   - [🧾 JSON](#-json)
+- [🗂️ Index](#️-index)
+  - [🔖 Tag index](#-tag-index)
 - [🧭 Agents](#-agents)
 - [🏷️ Writing tags](#️-writing-tags)
+  - [🔢 Listing tags](#-listing-tags)
 - [📚 Library](#-library)
 - [🛠️ Development](#️-development)
 - [📄 License](#-license)
@@ -94,7 +97,7 @@ Node 22 or later, and git, are required.
 
 ## 🚀 Usage
 
-- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), and `okf status --help` prints the ones in [Status](#-status).
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), and `okf tags --help` the ones in [Listing tags](#-listing-tags).
 - `okf guide` prints the guidance for agents (see [Agents](#-agents)).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
@@ -247,6 +250,58 @@ pnpm okf status
 - **`skipped`** lists the files it couldn't read, and is never filtered, since their state can't be known.
 - **The shape is public API.** A change to it bumps `schemaVersion`, and ships as a breaking change; a program should check it. Its TypeScript type is exported as `StatusReport`.
 
+## 🗂️ Index
+
+```sh
+# Rewrite each index.md's record lines from the records
+pnpm okf index
+
+# In CI: fail when an index is out of date
+pnpm okf index --check
+```
+
+An `index.md` line repeats its record's title and description, so the two drift apart. `okf index` rewrites those lines from each record's frontmatter.
+
+- **A record line is a top-level list item that opens with a link to a record:** `- [Title](file.md) - description`.
+  - The link text becomes the record's `title`, escaped, or its file name when it has none.
+  - What follows becomes the `description`, on one line, after the separator the line already uses, such as `-` or `—`.
+  - The link's target, and anything indented under the line, are kept.
+- **Each run of record lines is sorted by title, ignoring case**, so a grouped index keeps each record under the heading it's already in.
+- **A record no line lists is added** to the first run, or under the first heading when the index has none.
+  - The index that lists a record is the nearest `index.md` in its folder or a folder above it, inside the bundle.
+  - A record another list line already links to, nested, numbered, or in another case, isn't added again.
+- **A line linking to a Markdown file in the index's folder that's gone is dropped**, since its record was removed, even from a committed index that no longer lists any record; one with lines indented under it is kept, since those are yours.
+- **Everything else is kept as written:** the frontmatter, such as a root index's `okf_version`, headings, prose, fenced code, and list lines that link to anything but a record.
+- **It edits only `index.md` files that exist**, and never writes an index's own prose or headings.
+- **An index listing a record it can't read is refused**, with why, since its line can't be written; so is a symlinked index.
+- **`--check` writes nothing**, and exits `1` when an index is out of date, for CI.
+
+### 🔖 Tag index
+
+Between two marker lines, `okf index` also keeps a list of every tag the index's records carry, each with the records that carry it:
+
+```md
+<!-- tag-index:start -->
+
+- `cli` — The command line: flags, selections, and output.
+  - [How okf-tools lays out its commands](command-layout.md)
+- `json` — Output for programs to read.
+  - _No records yet._
+
+<!-- tag-index:end -->
+```
+
+- **Tags are sorted, and each one's records by title.**
+- **A tag's meaning is kept** from the line already there: write it after the tag and a dash, and later runs leave it.
+- **A tag no record carries any longer stays**, with a placeholder line, so the vocabulary never loses a tag unseen; delete its line to drop it.
+- **Markers that aren't one start before one end refuse the index**; markers quoted in fenced code don't count.
+
+| Flag             | Does                                                             |
+| ---------------- | ---------------------------------------------------------------- |
+| `--bundle <dir>` | A bundle to sync, relative to where you run it; repeat for more. |
+| `--check`        | Write nothing; exit `1` when an index is out of date.            |
+| `--help`, `-h`   | Print the usage.                                                 |
+
 ## 🧭 Agents
 
 Much OKF authoring now happens in a chat with a coding agent, and the non-interactive mode exists for that:
@@ -271,6 +326,7 @@ The Markdown files in the bundles that `okf.bundles` lists in `package.json` are
   - Never verify a record as a side effect of drafting or editing it.
 - **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case.
   - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.
+  - List the tags the bundles already use with `okf tags`, which reads every layout, rather than `grep`.
 
 Run `okf guide` through the repo's package manager, such as `pnpm exec okf guide`, for every okf-tools command and when you may run each, printed from the installed version.
 ```
@@ -296,6 +352,34 @@ tags:
 
 The full reasoning is in [How a record's tags are laid out](docs/decisions/tags-layout.md).
 
+### 🔢 Listing tags
+
+```sh
+pnpm okf tags
+```
+
+`okf tags` prints every tag in the bundles with how many records carry it, one per line, sorted by name, such as `[okf] cli (8)`. It reads each record's frontmatter, so it finds a block list, a one-line flow list, and a flow list Prettier wrapped alike, which `grep '^tags:'` doesn't.
+
+- **It writes nothing**, and exits `0` whatever it finds.
+- **A file it can't read as a record** is listed under Skipped, with why, and its tags aren't counted.
+- **`--format json`** prints one JSON document to stdout, with no `[okf]` prefix:
+
+  ```json
+  {
+    "schemaVersion": 1,
+    "skipped": [],
+    "tags": [{ "count": 8, "name": "cli" }]
+  }
+  ```
+
+  - The shape is public API, typed as `TagsReport`: a change to it bumps `schemaVersion`, and ships as a breaking change.
+
+| Flag                | Does                                                             |
+| ------------------- | ---------------------------------------------------------------- |
+| `--bundle <dir>`    | A bundle to scan, relative to where you run it; repeat for more. |
+| `--format <format>` | `text`, the default, or `json`.                                  |
+| `--help`, `-h`      | Print the usage.                                                 |
+
 ## 📚 Library
 
 The frontmatter functions are exported too, for tools of your own:
@@ -317,8 +401,9 @@ import {
 - A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
 - `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`), and never reads the clock: a `generated.at` ahead of it is judged like any other.
 
-- A summary's `staleAfter` is the record's `stale_after` as written, or `undefined`.
+- A summary's `staleAfter` is the record's `stale_after` as written, or `undefined`; its `description` is the record's `description`, and its `tags` the record's tags, each once, whatever the list's layout.
 - `StatusReport`, with `StatusRecord`, `StatusGroup`, and `StatusSkipped`, types what `okf status --format json` prints.
+- `TagsReport`, with `TagCount` and `TagsSkipped`, types what `okf tags --format json` prints.
 
 `run` is the CLI itself, for calling it in-process; it never throws and resolves to the exit code. Its `program` is `okf` or `okf-verify`, which takes the command as the first argument or not, and runs as `okf-verify` when left out.
 

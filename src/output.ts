@@ -91,3 +91,15 @@ export function formatLines(params: {
     .map((line) => (line === "" ? prefix : `${prefix} ${line}`))
     .join("\n");
 }
+
+/**
+ * Make text safe as one line of a terminal: a record's own text, in a
+ * status, a tag, a path, or a YAML error's excerpt, can't break the line,
+ * send control codes, or reorder it with bidi marks.
+ *
+ * - Line and paragraph separators count too, since some terminals and
+ *   transcripts break lines on them.
+ */
+export function toTerminalLine(text: string): string {
+  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ").trimEnd();
+}

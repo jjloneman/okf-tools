@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { createOutput, describeError, formatLines } from "./output.ts";
+import {
+  createOutput,
+  describeError,
+  formatLines,
+  toTerminalLine,
+} from "./output.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -65,5 +70,25 @@ describe("createOutput", () => {
 
     // Then - it reaches stdout untouched, so it still parses
     expect(info).toHaveBeenCalledWith('{\n  "records": []\n}');
+  });
+});
+
+describe("toTerminalLine", () => {
+  test.each([
+    { description: "plain text", expected: "cli", text: "cli" },
+    {
+      description: "line breaks and control codes",
+      expected: "a b [2J c",
+      text: "a\r\nb\u001b[2J\tc",
+    },
+    {
+      description: "bidi marks and separators",
+      expected: "a b c",
+      text: "a\u202eb\u2028\u2029c",
+    },
+    { description: "a trailing control code", expected: "a", text: "a\n" },
+  ])("makes $description one safe line", ({ expected, text }) => {
+    // When/Then - each run of unsafe characters a space, none trailing
+    expect(toTerminalLine(text)).toBe(expected);
   });
 });

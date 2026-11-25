@@ -128,8 +128,50 @@ const FULL_BLOCK = `${BLOCK_START}\n${AGENT_BLOCK}\n\n${BLOCK_END}`;
  *   malformed, so a hand edit is never guessed at.
  */
 export function findBlock(text: string): BlockSearch {
-  const starts = findMarkerLines({ marker: BLOCK_START, text });
-  const ends = findMarkerLines({ marker: BLOCK_END, text });
+  return findMarkedBlock({
+    endMarker: BLOCK_END,
+    startMarker: BLOCK_START,
+    text,
+  });
+}
+
+/**
+ * Find the text between two marker lines, such as `okf init`'s block or the
+ * tag index `okf index` keeps.
+ *
+ * - Each marker must appear once, the start before the end; anything else is
+ *   malformed, so a hand edit is never guessed at.
+ *
+ * - A problem names a marker by its text inside the comment, such as
+ *   `okf:start`.
+ */
+export function findMarkedBlock(params: {
+  /**
+   * The line that closes the block.
+   *
+   * @example `"<!-- okf:end -->"`
+   */
+  endMarker: string;
+
+  /**
+   * The line that opens the block.
+   *
+   * @example `"<!-- okf:start -->"`
+   */
+  startMarker: string;
+
+  /**
+   * The file's text.
+   *
+   * @example `"# Agents\n\n<!-- okf:start -->\n…"`
+   */
+  text: string;
+}): BlockSearch {
+  const { endMarker, startMarker, text } = params;
+  const starts = findMarkerLines({ marker: startMarker, text });
+  const ends = findMarkerLines({ marker: endMarker, text });
+  const startName = nameMarker(startMarker);
+  const endName = nameMarker(endMarker);
   const [start] = starts;
   const [end] = ends;
 
@@ -140,35 +182,35 @@ export function findBlock(text: string): BlockSearch {
   if (starts.length > 1) {
     return {
       kind: "malformed",
-      problem: `has ${starts.length} okf:start markers`,
+      problem: `has ${starts.length} ${startName} markers`,
     };
   }
 
   if (ends.length > 1) {
     return {
       kind: "malformed",
-      problem: `has ${ends.length} okf:end markers`,
+      problem: `has ${ends.length} ${endName} markers`,
     };
   }
 
   if (start === undefined) {
     return {
       kind: "malformed",
-      problem: "has an okf:end marker but no okf:start",
+      problem: `has ${withArticle(endName)} marker but no ${startName}`,
     };
   }
 
   if (end === undefined) {
     return {
       kind: "malformed",
-      problem: "has an okf:start marker but no okf:end",
+      problem: `has ${withArticle(startName)} marker but no ${endName}`,
     };
   }
 
   if (end.start < start.start) {
     return {
       kind: "malformed",
-      problem: "has its okf:end marker before okf:start",
+      problem: `has its ${endName} marker before ${startName}`,
     };
   }
 
@@ -266,4 +308,14 @@ function findMarkerLines(params: {
   }
 
   return lines;
+}
+
+/** Name a marker by the text inside its comment: `okf:start`. */
+function nameMarker(marker: string): string {
+  return marker.replace(/^<!--\s*/u, "").replace(/\s*-->$/u, "");
+}
+
+/** Put "a" or "an" before a marker's name, by the sound of its first letter. */
+function withArticle(name: string): string {
+  return `${/^[aeiou]/iu.test(name) ? "an" : "a"} ${name}`;
 }

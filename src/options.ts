@@ -51,6 +51,25 @@ export type CliOptions = {
 /** The flags and record paths `okf diff` was given. */
 export type DiffOptions = Pick<CliOptions, "bundles" | "by" | "recordPaths">;
 
+/** The flags an `okf index` run was given. */
+export type IndexOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * Whether `--check` asked only to report the indexes out of date, writing
+   * nothing.
+   *
+   * @example true
+   */
+  isCheck: boolean;
+};
+
 /**
  * What a command's line asked for: help, a run, or nothing valid.
  *
@@ -119,7 +138,7 @@ export type ParsedCommand =
        *
        * @example "verify"
        */
-      kind: "diff" | "guide" | "init" | "status" | "verify";
+      kind: "diff" | "guide" | "index" | "init" | "status" | "tags" | "verify";
     }
   | {
       /**
@@ -226,6 +245,27 @@ export type StatusOptions = {
   recordPaths: readonly string[];
 };
 
+/** How `okf tags` prints its report: the formats `okf status` takes. */
+export type TagsFormat = StatusFormat;
+
+/** The flags an `okf tags` run was given. */
+export type TagsOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * How to print the report, from `--format`.
+   *
+   * @example "json"
+   */
+  format: TagsFormat;
+};
+
 /** The name the verify command is called by: under `okf`, or as its alias. */
 export type VerifyCommand = "okf-verify" | "okf verify";
 
@@ -236,9 +276,12 @@ commands:
   diff    print what changed in records since their last sign-off
   guide   print when an agent may run each command, and the rules for
           writing records
+  index   sync each index.md's record lines and tag index from the
+          records' frontmatter, or check they're current
   init    write the \`okf\` config and the agent-instructions block, or
           check the block is current
   status  list every record's trust state, writing nothing
+  tags    list every tag in the bundles with its record count
   verify  mark records \`status: stable\` with a \`verified\` entry, then
           commit just those files
 
@@ -381,6 +424,33 @@ options:
 
 Filters add up: a record that matches any of them is listed.`;
 
+/** How to call `okf index`, printed for `--help` and after a usage error. */
+export const INDEX_USAGE = `usage: okf index [options]
+
+Rewrites each list line in a bundle's index.md files that links to a record
+from that record's title and description, sorted by title, adds a line for
+each record no line lists, and drops one whose record is gone. Between
+\`<!-- tag-index:start -->\` and \`<!-- tag-index:end -->\` it lists every tag
+with its records. Everything else in the file is kept as written.
+
+options:
+  --bundle <dir>  a bundle directory to sync; repeat for more
+                  (default: \`okf.bundles\` in package.json)
+  --check         write nothing; fail when an index is out of date
+  --help, -h      print this help`;
+
+/** How to call `okf tags`, printed for `--help` and after a usage error. */
+export const TAGS_USAGE = `usage: okf tags [options]
+
+Lists every tag in the bundles with how many records carry it, read from
+each record's frontmatter. It writes nothing, and exits 0 whatever it finds.
+
+options:
+  --bundle <dir>     a bundle directory to scan; repeat for more
+                     (default: \`okf.bundles\` in package.json)
+  --format <format>  text (the default) or json
+  --help, -h         print this help`;
+
 /**
  * How to call the verify command, printed for `--help` and after a usage
  * error, under the name it was called by.
@@ -456,8 +526,10 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
   if (
     name === "diff" ||
     name === "guide" ||
+    name === "index" ||
     name === "init" ||
     name === "status" ||
+    name === "tags" ||
     name === "verify"
   ) {
     return { args: rest, kind: name };
@@ -539,6 +611,44 @@ export function parseGuideArgs(args: readonly string[]): ParsedGuideArgs {
       };
 }
 
+/** Read `okf index`'s command line into options, or say why it can't run. */
+export function parseIndexArgs(
+  args: readonly string[]
+): ParsedArgs<IndexOptions> {
+  let parsed: ReturnType<typeof parseIndexLine>;
+
+  try {
+    parsed = parseIndexLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const problem = findBundlesProblem({
+    bundles: values.bundle ?? [],
+    command: "okf index",
+    positionals,
+  });
+
+  return problem === undefined
+    ? {
+        kind: "options",
+        options: {
+          bundles: values.bundle ?? [],
+          isCheck: values.check === true,
+        },
+      }
+    : { kind: "invalid", message: problem };
+}
+
 /** Read `okf status`'s command line into options, or say why it can't run. */
 export function parseStatusArgs(
   args: readonly string[]
@@ -588,6 +698,70 @@ export function parseStatusArgs(
       recordPaths: positionals,
     },
   };
+}
+
+/** Read `okf tags`'s command line into options, or say why it can't run. */
+export function parseTagsArgs(
+  args: readonly string[]
+): ParsedArgs<TagsOptions> {
+  let parsed: ReturnType<typeof parseTagsLine>;
+
+  try {
+    parsed = parseTagsLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const bundles = values.bundle ?? [];
+  const problem = findBundlesProblem({
+    bundles,
+    command: "okf tags",
+    positionals,
+  });
+
+  if (problem !== undefined) {
+    return { kind: "invalid", message: problem };
+  }
+
+  const format = values.format ?? "text";
+
+  return isStatusFormat(format)
+    ? { kind: "options", options: { bundles, format } }
+    : {
+        kind: "invalid",
+        message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
+      };
+}
+
+/**
+ * Check the arguments of a command that takes bundles but no paths.
+ *
+ * @returns the problem, or `undefined` when there is none.
+ */
+function findBundlesProblem(params: {
+  bundles: readonly string[];
+  command: string;
+  positionals: readonly string[];
+}): string | undefined {
+  const { bundles, command, positionals } = params;
+  const [extra] = positionals;
+
+  if (extra !== undefined) {
+    return `${command} takes no paths, but was given ${extra}.`;
+  }
+
+  return bundles.includes("")
+    ? "--bundle needs a directory, not an empty string."
+    : undefined;
 }
 
 /**
@@ -768,6 +942,25 @@ export function parseInitArgs(args: readonly string[]): ParsedInitArgs {
 }
 
 /**
+ * Run `parseArgs` over `okf index`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseIndexLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      check: { type: "boolean" },
+      help: { short: "h", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/**
  * Run `parseArgs` over `okf init`'s flags.
  *
  * - It throws on an unknown flag or a missing value, which the caller turns
@@ -806,6 +999,25 @@ function parseStatusLine(args: readonly string[]) {
       format: { type: "string" },
       help: { short: "h", type: "boolean" },
       stale: { type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf tags`' flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseTagsLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      format: { type: "string" },
+      help: { short: "h", type: "boolean" },
     },
     strict: true,
   });

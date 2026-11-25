@@ -3,8 +3,9 @@
  * verified. Reading accepts any valid YAML; only editing is allowlisted.
  */
 import { DateTime } from "luxon";
-import { isNode, isScalar } from "yaml";
+import { isNode, isScalar, isSeq } from "yaml";
 
+import type { Frontmatter } from "./shared.ts";
 import type { RecordStatus, Timestamp, VerifyRecordParams } from "./types.ts";
 
 import {
@@ -21,6 +22,7 @@ import {
   readString,
   readTime,
   readTimestamp,
+  resolveAlias,
   splitFrontmatter,
 } from "./shared.ts";
 
@@ -41,6 +43,16 @@ export type RecordState = "changed" | "unverified" | "verified";
 
 /** The frontmatter fields the verify flow shows and decides on. */
 export type RecordSummary = {
+  /**
+   * The record's `description`, without its quotes.
+   *
+   * - Optional, so a summary built before it existed still type-checks;
+   *   `readRecordSummary` always sets it.
+   *
+   * @example "Every export returns a fallback instead of throwing."
+   */
+  description?: string | undefined;
+
   /**
    * When the record was last generated, if it says.
    *
@@ -68,6 +80,20 @@ export type RecordSummary = {
    * @example "draft"
    */
   status: RecordStatus | undefined;
+
+  /**
+   * The record's `tags`, in the order it lists them, each once, whatever
+   * the list's layout: block, flow, or a flow list wrapped over lines.
+   *
+   * - Empty when it has none, or `tags` isn't a list; an item that isn't a
+   *   non-empty string is left out.
+   *
+   * - Optional, so a summary built before it existed still type-checks;
+   *   `readRecordSummary` always sets it.
+   *
+   * @example `["agents", "cli"]`
+   */
+  tags?: readonly string[] | undefined;
 
   /**
    * The record's `title`, without its quotes.
@@ -255,6 +281,9 @@ export function readRecordSummary(
   const status = statusText === "" ? undefined : statusText;
 
   return {
+    description: readString(
+      readField({ doc, key: FRONTMATTER_KEYS.description, map: contents })
+    ),
     generatedAt: readTimestamp(
       readField({ doc, key: ENTRY_KEYS.at, map: generated })
     ),
@@ -262,6 +291,10 @@ export function readRecordSummary(
       readField({ doc, key: FRONTMATTER_KEYS.staleAfter, map: contents })
     ),
     status: status !== undefined && isRecordStatus(status) ? status : undefined,
+    tags: readTags({
+      doc,
+      node: readField({ doc, key: FRONTMATTER_KEYS.tags, map: contents }),
+    }),
     title: readString(
       readField({ doc, key: FRONTMATTER_KEYS.title, map: contents })
     ),
@@ -318,6 +351,24 @@ function isAhead(timestamp: Timestamp | undefined): boolean {
   const time = readTime(timestamp);
 
   return time.isValid && toSeconds(time) > toSeconds(DateTime.utc());
+}
+
+/**
+ * Read a `tags` list: each item a non-empty string, each once, in the order
+ * listed, or none when it isn't a list.
+ */
+function readTags(params: { doc: Frontmatter; node: unknown }): string[] {
+  const { doc, node } = params;
+
+  if (!isSeq(node)) {
+    return [];
+  }
+
+  const tags = node.items
+    .map((item) => readString(resolveAlias({ doc, node: item })))
+    .filter((tag): tag is string => tag !== undefined && tag !== "");
+
+  return [...new Set(tags)];
 }
 
 /** Read a time as whole seconds since the epoch, dropping any fraction. */
