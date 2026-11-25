@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; and `okf init`, which writes a repo's config and keeps a block of agent instructions current. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions current; and `okf status`, which reports where every record stands. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
 
@@ -14,6 +14,8 @@ It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-f
   - [🤖 Non-interactive](#-non-interactive)
   - [🏳️ Flags](#️-flags)
   - [🔍 Diff](#-diff)
+- [📋 Status](#-status)
+  - [🧾 JSON](#-json)
 - [🧭 Agents](#-agents)
 - [🏷️ Writing tags](#️-writing-tags)
 - [📚 Library](#-library)
@@ -92,7 +94,7 @@ Node 22 or later, and git, are required.
 
 ## 🚀 Usage
 
-- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff).
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), and `okf status --help` prints the ones in [Status](#-status).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
 - `okf-verify <args>` runs as `okf verify <args>` does, with the same exit codes.
@@ -177,6 +179,73 @@ pnpm exec okf diff docs/decisions/package-promise.md
 - The interactive `okf verify` shows the same, for each record you pick, before you confirm.
 - Exit codes: `0` worked, `1` failed.
 
+## 📋 Status
+
+```sh
+pnpm okf status
+```
+
+`okf status` lists every record's trust state in one read-only command, so you, or an agent about to change the behavior a record describes, needn't open each file to check its `verified`.
+
+- **Each record is listed under the first group that fits it**, in this order:
+  - **Changed since sign-off:** signed off, then regenerated since (its `generated.at` is later), so the sign-off no longer holds, whatever its `status`; a sign-off ahead of the clock, or one whose time can't be read, counts too;
+  - **Draft:** `status: draft`, with no sign-off it has changed since;
+  - **Never signed off:** no `verified` entry from the signer, and not a draft;
+  - **Stale:** signed off and unchanged, but past its [`stale_after`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#55-lifecycle-stale_after), the instant OKF says it goes stale;
+  - **Settled:** signed off, unchanged, and not stale.
+- **The signer is `okf.verifiedBy`**, or `--by`, as for `okf verify`: another actor's sign-off doesn't count.
+- **It writes nothing**, and exits `0` whatever it finds: it reports, it doesn't judge. Only a usage error, a config it can't use, a named path that isn't a record, or a bundle it can't list exits `1`.
+- **It reports a record `okf verify` would refuse to edit**, such as one in a layout the edits don't take, or one generated ahead of the clock, since reading it is enough.
+- **A file it can't read as a record** is listed under Skipped, with why: one that can't be read, is reached through a symlink, has a near-miss frontmatter block, or isn't valid YAML.
+
+| Flag                | Does                                                             |
+| ------------------- | ---------------------------------------------------------------- |
+| `<record>...`       | List only these records, relative to where you run it.           |
+| `--bundle <dir>`    | A bundle to scan, relative to where you run it; repeat for more. |
+| `--by <actor>`      | Whose sign-off counts, overriding `okf.verifiedBy`.              |
+| `--changed`         | Only records changed since their sign-off.                       |
+| `--draft`           | Only records with `status: draft`, changed or not.               |
+| `--stale`           | Only records past their `stale_after`, in any group.             |
+| `--format <format>` | `text`, the default, or `json`.                                  |
+| `--help`, `-h`      | Print the usage.                                                 |
+
+- **Filters add up:** `--changed --stale` lists the records that match either.
+- **`okf status --changed` is not `okf verify --changed`:** status means changed since the sign-off, and verify means changed on the branch.
+
+### 🧾 JSON
+
+`okf status --format json` prints one JSON document to stdout, with no `[okf]` prefix, for a program or an agent to read:
+
+```json
+{
+  "records": [
+    {
+      "generatedAt": "2026-10-05T09:00:00Z",
+      "group": "changed",
+      "isStale": false,
+      "path": "docs/decisions/package-promise.md",
+      "staleAfter": null,
+      "state": "changed",
+      "status": "draft",
+      "title": "What every export promises",
+      "type": "Decision",
+      "verifiedAt": "2026-10-02T13:30:00Z"
+    }
+  ],
+  "schemaVersion": 1,
+  "skipped": [{ "path": "docs/decisions/broken.md", "reason": "…" }],
+  "verifiedBy": "human:jjloneman"
+}
+```
+
+- **`records`** holds the records listed, after any filters, in the order the bundles list them; `path` is from the repo root.
+- **`group`** is one of `changed`, `draft`, `unverified` (never signed off), `stale`, or `settled`.
+- **`state`** is where the record stands with the signer's sign-off: `changed`, `unverified`, or `verified`, as `getRecordState` judges it, except that a `verified.at` ahead of the clock counts as `changed`, as it does for `okf verify`.
+- **`isStale`** is whether the record is past its `staleAfter`, whatever its group.
+- **`status`** is the `status` as written, even one OKF doesn't define; `null` means none, which OKF reads as `stable`. Every other field the record doesn't have is `null` too.
+- **`skipped`** lists the files it couldn't read, and is never filtered, since their state can't be known.
+- **The shape is public API.** A change to it bumps `schemaVersion`, and ships as a breaking change; a program should check it. Its TypeScript type is exported as `StatusReport`.
+
 ## 🧭 Agents
 
 Much OKF authoring now happens in a chat with a coding agent, and the non-interactive mode exists for that:
@@ -242,6 +311,9 @@ import {
 - `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, or when a block is almost right, and `findEditProblem` says why `verifyRecord` would refuse a record.
 - A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
 - `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`), and never reads the clock: a `generated.at` ahead of it is judged like any other.
+
+- A summary's `staleAfter` is the record's `stale_after` as written, or `undefined`.
+- `StatusReport`, with `StatusRecord`, `StatusGroup`, and `StatusSkipped`, types what `okf status --format json` prints.
 
 `run` is the CLI itself, for calling it in-process; it never throws and resolves to the exit code. Its `program` is `okf` or `okf-verify`, which takes the command as the first argument or not, and runs as `okf-verify` when left out.
 
