@@ -54,4 +54,16 @@ describe("createOutput", () => {
       expect(info).toHaveBeenCalledWith(`${prefix} good`);
     }
   );
+
+  test("prints data to stdout as it is, with no prefix", () => {
+    // Given - a spy on stdout, and okf's output
+    const info = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const output = createOutput("okf");
+
+    // When - printing JSON for a program to read
+    output.data('{\n  "records": []\n}');
+
+    // Then - it reaches stdout untouched, so it still parses
+    expect(info).toHaveBeenCalledWith('{\n  "records": []\n}');
+  });
 });

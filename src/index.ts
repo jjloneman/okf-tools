@@ -1,6 +1,7 @@
 /*
  * The package's library entry: the pure frontmatter functions `okf-verify` is
- * built on, and `run`, the CLI itself, for tools that call it in-process.
+ * built on, `run`, the CLI itself, for tools that call it in-process, and the
+ * shape `okf status --format json` prints.
  */
 export type { RunParams } from "./cli.ts";
 export { run } from "./cli.ts";
@@ -35,3 +36,9 @@ export {
   REFUSAL_KINDS,
 } from "./frontmatter/types.ts";
 export type { Program } from "./output.ts";
+export type {
+  StatusGroup,
+  StatusRecord,
+  StatusReport,
+  StatusSkipped,
+} from "./status.ts";

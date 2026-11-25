@@ -4,10 +4,23 @@
  * - Every line starts with the program's name in brackets, `[okf]` or
  *   `[okf-verify]`, so its output is traceable in a log or an agent's
  *   transcript.
+ *
+ * - Data for a program to read, such as `okf status --format json`, is the
+ *   exception: a prefix would stop it parsing.
  */
 
-/** Where a run prints its non-prompt lines, every line prefixed. */
+/**
+ * Where a run prints its non-prompt lines, every line prefixed but the data a
+ * program reads.
+ */
 export type Output = {
+  /**
+   * Print data for a program to read to stdout, as it is, with no prefix.
+   *
+   * @example `output.data(JSON.stringify(report))`
+   */
+  data: (text: string) => void;
+
   /**
    * Print a message to stderr.
    *
@@ -35,6 +48,9 @@ export function createOutput(program: Program): Output {
   const prefix = `[${program}]`;
 
   return {
+    data: (text) => {
+      console.log(text);
+    },
     error: (message) => {
       console.error(formatLines({ message, prefix }));
     },
