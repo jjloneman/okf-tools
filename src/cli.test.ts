@@ -1,5 +1,16 @@
 import { DateTime } from "luxon";
-import { chmodSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -834,5 +845,121 @@ describe("run --yes, given records that are bytes, not only text", () => {
     expect(after.startsWith("\uFEFF---\n")).toBe(true);
     expect(after).toContain("status: stable");
     expect(after.endsWith("café\n")).toBe(true);
+  });
+});
+
+describe("run --yes, given a symlink in the repo", () => {
+  /** The reason a linked path is refused, after the path it leads to. */
+  const LINK_EXPLANATION =
+    "okf-verify edits records only at their own path, since git commits a symlink, not the file it points to.";
+
+  let outsideDir: string;
+
+  beforeEach(() => {
+    outsideDir = realpathSync(mkdtempSync(path.join(tmpdir(), "okf-outside-")));
+    mkdirSync(path.join(repo.root, "docs/references"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(outsideDir, { force: true, recursive: true });
+  });
+
+  test("never writes through a record linked to a file outside the repo", async () => {
+    // Given - a record that is a symlink to a draft outside the repo
+    const outside = path.join(outsideDir, "elsewhere.md");
+
+    writeFileSync(outside, draftRecord("Elsewhere"));
+    mkdirSync(path.join(repo.root, "docs/decisions"), { recursive: true });
+    symlinkSync(outside, path.join(repo.root, "docs/decisions/link.md"));
+
+    // When - verifying it
+    const code = await runIn([
+      "--yes",
+      "--no-commit",
+      "docs/decisions/link.md",
+    ]);
+
+    // Then - refused, naming where it leads, and the file left alone
+    expect({ code, errors }).toStrictEqual({
+      code: 1,
+      errors: [
+        `[okf-verify] docs/decisions/link.md is a symlink, or inside one, to ${outside}. ${LINK_EXPLANATION}`,
+      ],
+    });
+    expect(readFileSync(outside, "utf8")).toBe(draftRecord("Elsewhere"));
+  });
+
+  test.each([
+    {
+      description: "a file elsewhere in the repo",
+      target: "../../drafts/real.md",
+      targetPath: "drafts/real.md",
+    },
+    {
+      description: "another record in the same bundle",
+      target: "b.md",
+      targetPath: "docs/decisions/b.md",
+    },
+  ])(
+    "refuses a record linked to $description, leaving it committed",
+    async ({ target, targetPath }) => {
+      // Given - a committed record that is a symlink to a committed draft
+      repo.write(targetPath, draftRecord("Real"));
+      mkdirSync(path.join(repo.root, "docs/decisions"), { recursive: true });
+      symlinkSync(target, path.join(repo.root, "docs/decisions/link.md"));
+      repo.commitAll("add a linked record");
+
+      // When - verifying the link, committing
+      const code = await runIn(["--yes", "docs/decisions/link.md"]);
+
+      // Then - refused, with nothing written
+      expect({ code, errors }).toStrictEqual({
+        code: 1,
+        errors: [
+          `[okf-verify] docs/decisions/link.md is a symlink, or inside one, to ${path.join(repo.root, targetPath)}. ${LINK_EXPLANATION}`,
+        ],
+      });
+      expect(repo.git("status", "--porcelain")).toBe("");
+    }
+  );
+
+  test("fails a --changed run that finds a linked record", async () => {
+    // Given - a new record that is a symlink to a draft
+    repo.write("drafts/real.md", draftRecord("Real"));
+    mkdirSync(path.join(repo.root, "docs/decisions"), { recursive: true });
+    symlinkSync(
+      "../../drafts/real.md",
+      path.join(repo.root, "docs/decisions/link.md")
+    );
+
+    // When - verifying every changed record
+    const code = await runIn(["--yes", "--no-commit", "--changed"]);
+
+    // Then - refused, with the draft left alone
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "docs/decisions/link.md is a symlink, or inside one"
+    );
+    expect(repo.read("drafts/real.md")).toBe(draftRecord("Real"));
+  });
+
+  test("refuses a bundle reached through a symlink", async () => {
+    // Given - a committed bundle directory that is a symlink to a folder
+    repo.write("real/a.md", draftRecord("A"));
+    mkdirSync(path.join(repo.root, "docs"), { recursive: true });
+    symlinkSync("../real", path.join(repo.root, "docs/decisions"));
+    repo.commitAll("add a behind a symlink");
+
+    // When - verifying the record through the linked bundle
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - refused before any record is read, with nothing written
+    expect({ code, errors }).toStrictEqual({
+      code: 1,
+      errors: [
+        `[okf-verify] The bundle ${path.join(repo.root, "docs/decisions")} is a symlink, or inside one, to ${path.join(repo.root, "real")}. ${LINK_EXPLANATION}`,
+      ],
+    });
+    expect(repo.git("status", "--porcelain")).toBe("");
   });
 });

@@ -8,8 +8,9 @@ import { writeRecords } from "./repo.ts";
  * What each write from the next one on does, in order; once the list runs
  * out, writes go to disk.
  *
- * - `fail` throws before touching the file, `truncate` empties it and then
- *   throws, and `unlink` deletes it and then throws.
+ * - `fail` throws without writing, after the open has already emptied the
+ *   file, `truncate` empties it and then throws, and `unlink` deletes it and
+ *   then throws.
  */
 const { writes } = vi.hoisted(() => ({
   writes: { plan: [] as ("fail" | "ok" | "truncate" | "unlink")[] },
@@ -20,17 +21,32 @@ const { writes } = vi.hoisted(() => ({
 vi.mock(import("node:fs"), async (importOriginal) => {
   const original = await importOriginal();
 
+  // Records are written through a descriptor, so `unlink` needs its path.
+  const openPaths = new Map<number, string>();
+
   return {
     ...original,
+    openSync: (...args: Parameters<typeof original.openSync>) => {
+      const descriptor = original.openSync(...args);
+
+      openPaths.set(descriptor, String(args[0]));
+
+      return descriptor;
+    },
     writeFileSync: (...args: Parameters<typeof original.writeFileSync>) => {
       const step = writes.plan.shift() ?? "ok";
+      const [target] = args;
 
       if (step === "truncate") {
-        original.writeFileSync(args[0], "");
+        original.writeFileSync(target, "");
       }
 
       if (step === "unlink") {
-        original.unlinkSync(String(args[0]));
+        original.unlinkSync(
+          typeof target === "number"
+            ? (openPaths.get(target) ?? "")
+            : String(target)
+        );
       }
 
       if (step !== "ok") {
@@ -87,13 +103,13 @@ describe("writeRecords when the disk fails mid-run", () => {
     // When - writing both, so the second write and the restore both fail
     const result = writeRecords({ edits: EDITS, repoRoot: repo.root });
 
-    // Then - the failed write and the record left changed, both named
+    // Then - the failed write and the record left emptied, both named
     expect(result).toStrictEqual({
       isOk: false,
       reason:
         "Couldn't write docs/b.md: ENOSPC: no space left on device\nThese are left changed, since restoring them failed:\ndocs/a.md: ENOSPC: no space left on device",
     });
-    expect(repo.read("docs/a.md")).toBe("new a\n");
+    expect(repo.read("docs/a.md")).toBe("");
     expect(repo.read("docs/b.md")).toBe("old b\n");
   });
 });

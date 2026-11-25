@@ -33,6 +33,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
 - it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end;
 - it refuses a record that isn't valid UTF-8, as the OKF spec requires, rather than rewrite the bytes it can't read;
+- it refuses a record or bundle reached through a symlink, since git commits the link, not the file it points to;
 - it edits only the layouts below, and refuses any other with a reason, for a hand edit.
 
 The layouts it edits:
