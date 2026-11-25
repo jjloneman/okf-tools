@@ -10,7 +10,7 @@ tags:
   - selection
   - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:42:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:52:27Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -27,6 +27,8 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
     - as of 2026-11-25, "since" is judged against the signer's latest readable `at` among their entries, comparing whole seconds, since a sign-off is stamped to the second;
     - a `generated.at` that can't be read can't be judged, so the record counts as unchanged once signed;
     - as of 2026-11-25, a `generated.at` ahead of the clock, such as one written in the wrong time zone, is judged like any other, and the record is refused when it's listed instead (issue #77);
+    - as of 2026-11-25, a latest sign-off whose `verified.at` is ahead of the clock counts as changed when the record is listed, whatever its `generated.at`, so the record is offered again and a fresh sign-off renews that entry with the real time (issue #92);
+      - **Rejected:** refusing the record until its `verified.at` is fixed by hand, like a `generated.at` ahead of the clock, since a fresh sign-off already fixes it;
   - or one or more record paths, relative to where the command runs, each an existing `.md` file directly inside a bundle, other than `index.md`.
     - As of 2026-11-25, other than `log.md` too, the other file name OKF reserves (issue #31).
     - Under pnpm or npm, that's the folder the script was called from (`INIT_CWD`) only when it's in the package's repo; otherwise, as with `pnpm --dir <package>` from another repo, it's the package root.
@@ -63,6 +65,9 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
   - A `generated.at` with milliseconds, signed in the same second, would read as later than the sign-off.
 - A `generated.at` ahead of the clock is later than any sign-off made now, so signing it can't clear it, and treating it as unchanged hides a real regeneration; refusing it until the time is fixed does neither (issue #77).
   - Refusing it in the listing, not in `getRecordState`, keeps the state independent of the clock for library callers.
+- A `verified.at` ahead of the clock is later than every regeneration until the clock passes it, so it would hide them all; unlike a future `generated.at`, signing the record now clears it, since the edit renews the signer's latest entry (issue #92).
+  - The listing judges it, like a future `generated.at`, so `getRecordState` still never reads the clock.
+  - So a run that commits never takes such a sign-off on disk for an uncommitted one, since the record needs a fresh sign-off first, and one held in `HEAD` counts as needing a sign-off, so a renewal a hook rejected is committed by the re-run.
 - A separate exit code for "nothing to verify" lets a script or workflow tell an idle run from a failed one without parsing output.
 
 ## Consequences
