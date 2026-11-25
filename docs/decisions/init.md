@@ -11,7 +11,7 @@ tags:
   - safety
   - tags
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:13:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:52:10Z }
 ---
 
 # What `okf init` writes, and how it keeps the agent block current
@@ -38,7 +38,8 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
 - **Every file is planned before any is written,** so a refusal in one writes none. Each file, `package.json` included, must resolve inside the repo, an existing one must be a file, and a missing one's nearest existing ancestor must be a folder, so a write can't fail on a known problem after others have landed. A write that fails midway names the files already written. It never commits.
 - **`okf init --check` writes nothing,** and exits `1` when a target is missing, has no block, has a stale one, or has malformed markers; it checks the blocks, not the config. `--check` takes no `--bundle` or `--by`.
 - **The block's text is one constant, `AGENT_BLOCK`,** which the README's Agents section quotes, and a test keeps the two the same, so the rules are written once.
-  - It names only commands that exist: `okf guide` (#50) and `okf tags` (#53) add their lines to it when they ship, and `okf init` then brings every repo up to date.
+  - Its intro and rules come from `src/guide.ts`, which `okf guide` prints too, and it ends with a line pointing at `okf guide` for the commands (#50); see [What `okf guide` prints](guide.md).
+  - It names only commands that exist: `okf tags` (#53) adds its line when it ships, and `okf init` then brings every repo up to date.
   - It says to write `tags` as a block list, per [How a record's tags are laid out](tags-layout.md), with 5 to 10 specific tags that reuse the bundle's existing ones (#66).
 
 ## Why
@@ -52,5 +53,6 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
 - [Issue #49](https://github.com/jjloneman/okf-tools/issues/49)
 - [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which added the tags rules to the block's plan
 - [How okf-tools lays out its commands](command-layout.md)
+- [What `okf guide` prints](guide.md)
 - [How a record's tags are laid out](tags-layout.md)
 - [Who verifies a record](who-verifies.md)

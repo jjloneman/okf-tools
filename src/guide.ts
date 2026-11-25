@@ -1,0 +1,101 @@
+/*
+ * The guidance for agents that `okf guide` prints, from the installed
+ * version, so it never goes stale in a repo.
+ *
+ * - The intro and the record rules are shared with the agent block in
+ *   `agent-block.ts`, and so with the README's Agents section, which quotes
+ *   the block; the rules are written once.
+ *
+ * - The commands, and when an agent may run each, are only here: the block
+ *   and `okf verify --help` point at `okf guide` for them.
+ */
+
+import type { ExitCode } from "./exit-codes.ts";
+import type { Output } from "./output.ts";
+
+import { EXIT_CODES } from "./exit-codes.ts";
+import { GUIDE_USAGE, parseGuideArgs } from "./options.ts";
+
+/** What the records are, the paragraph that opens the block and the guide. */
+export const RECORDS_INTRO =
+  "The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.";
+
+/** How an agent writes, edits, and verifies records, as Markdown bullets. */
+export const RECORD_RULES = `- **Write a new record as \`status: draft\`**, and name yourself in \`generated\` as \`<producer>/<version>\`, such as \`claude-code/2.1.316\`, with the UTC time you wrote it.
+- **When you edit a record, re-stamp \`generated\`** (\`by\` and \`at\`), and set a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
+- **Never add or change a \`verified\` entry yourself.** Signing a record off is the person's call.
+- **Verify only when the person asks you to**, with \`okf verify --yes <record>...\`, naming the files they approved.
+  - Pass \`--changed\` instead only when they asked for every changed record.
+  - Never verify a record as a side effect of drafting or editing it.
+- **Write \`tags\` as a block list**, one \`- tag\` per line, sorted, in kebab-case.
+  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.`;
+
+/** Each command, and when an agent may run it, as Markdown bullets. */
+const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, and writes nothing. Run it whenever you need to know which records are draft, changed, or stale; \`--format json\` prints it for a program.
+- **\`okf diff <record>...\`** prints what changed in each record since its last sign-off, and writes nothing. Run it to show the person what they would be signing off.
+- **\`okf verify --yes <record>...\`** signs records off and commits just those files, or with \`--no-commit\` leaves committing to the person. Run it only when the person asks you to, as the rules above say.
+  - It signs as the configured \`okf.verifiedBy\`, the person, since the approval is theirs; never pass \`--by\` with your own name.
+- **\`okf verify\`** without \`--yes\` asks in a terminal which records to sign off. It's for the person, not for you.
+- **\`okf init\`** writes the \`okf\` config and the agent block. Run it only when the person asks you to set up okf-tools or refresh the block.
+  - \`okf init --check\` writes nothing, so run it whenever you like.
+- **\`okf guide\`** prints this guide.`;
+
+/**
+ * The whole guide `okf guide` prints, as Markdown with `\n` line breaks.
+ *
+ * - It's the shared rules, then the commands, so an agent reading the
+ *   repo's block learns nothing here that contradicts it.
+ */
+export const GUIDE: string = [
+  "# OKF records",
+  RECORDS_INTRO,
+  "This guide comes from the version of okf-tools installed in the repo, so it matches the commands you have. Run each through the repo's package manager, such as `pnpm exec okf status`.",
+  "## Rules",
+  RECORD_RULES,
+  "## Commands",
+  COMMAND_RULES,
+  "Run `okf <command> --help` for a command's flags.",
+].join("\n\n");
+
+/**
+ * Run `okf guide`: print the guide, or its usage.
+ *
+ * - The guide prints as it is, with no `[okf]` prefix, so it reads as the
+ *   Markdown it is; its usage, for `--help` or an error, is prefixed.
+ *
+ * @returns the exit code.
+ */
+export function runGuide(params: {
+  /**
+   * The arguments after `guide`.
+   *
+   * @example `["--help"]`
+   */
+  args: readonly string[];
+
+  /**
+   * Where the guide and any error print.
+   *
+   * @example `createOutput("okf")`
+   */
+  output: Output;
+}): ExitCode {
+  const { args, output } = params;
+  const parsed = parseGuideArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(GUIDE_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${GUIDE_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  output.data(GUIDE);
+
+  return EXIT_CODES.ok;
+}

@@ -13,6 +13,7 @@ okf_version: "0.2"
 - [How product ideas are found and decided](product-review.md) - A `/product-review` skill, run only on the owner's go-ahead, opens one `💡 idea` issue of at most three ranked ideas; an ntfy push every fourth Monday says one is due, and a rejected idea gets a one-line reason, closing its issue as not planned when no idea was taken.
 - [What a re-verification shows as changed](sign-off-diff.md) - The diff from the newest commit that set the signer's current `verified.at` in a record not generated again after it, to the record on disk; with no such commit, or no sign-off, the whole record; shown before the interactive confirm and by `okf diff`.
 - [What `--yes` verifies, and how it exits](yes-selection.md) - `--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified and committed, and exits `0` worked, `1` failed, `2` nothing to verify.
+- [What `okf guide` prints, and where the agent rules are written](guide.md) - `okf guide` prints the record rules and each command with when an agent may run it, as unprefixed Markdown from the installed version; the rules are one text in `src/guide.ts`, shared with the `okf init` block and the README, and `okf verify --help` points at the guide.
 - [What `okf init` writes, and how it keeps the agent block current](init.md) - `okf init` writes the `okf` block of `package.json` and a block of agent rules between two marker lines in `AGENTS.md`, rewriting only the text between them; malformed markers are refused, and `--check` fails when a block is missing or stale.
 - [What a record counts as changed against](base-ref.md) - The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 - [What the library accepts, and how it refuses](library.md) - `verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; and a summary's `writtenStatus` tells an absent status from one OKF doesn't define.
@@ -87,6 +88,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - `git` — How the tool reads and changes the repo through git.
 - `json` — Output for programs to read, and how its shape is versioned.
 - `github-actions` — Workflows and how their runs are approved.
+- `guidance` — What `okf guide` prints for agents, and where its text comes from.
 - `instructions` — The block of agent rules `okf init` keeps in a repo's instruction files.
 - `links` — How docs and records link to the spec and to each other.
 - `node` — Node.js versions and features the tool relies on.

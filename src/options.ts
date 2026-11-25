@@ -119,7 +119,7 @@ export type ParsedCommand =
        *
        * @example "verify"
        */
-      kind: "diff" | "init" | "status" | "verify";
+      kind: "diff" | "guide" | "init" | "status" | "verify";
     }
   | {
       /**
@@ -234,6 +234,8 @@ export const OKF_USAGE = `usage: okf <command> [options]
 
 commands:
   diff    print what changed in records since their last sign-off
+  guide   print when an agent may run each command, and the rules for
+          writing records
   init    write the \`okf\` config and the agent-instructions block, or
           check the block is current
   status  list every record's trust state, writing nothing
@@ -256,6 +258,28 @@ options:
   --by <actor>    whose sign-off to diff from
                   (default: \`okf.verifiedBy\` in package.json)
   --help, -h      print this help`;
+
+/** What `okf guide`'s arguments asked for: help, the guide, or nothing valid. */
+export type ParsedGuideArgs =
+  | {
+      /**
+       * The arguments ask for the guide.
+       *
+       * @example "guide"
+       */
+      kind: "guide";
+    }
+  | Extract<ParsedArgs, { kind: "help" | "invalid" }>;
+
+/** How to call `okf guide`, printed for its `--help` and after a usage error. */
+export const GUIDE_USAGE = `usage: okf guide
+
+Prints, as Markdown, each command and when an agent may run it, and the rules
+for writing and verifying records, from the installed version. It reads and
+writes nothing.
+
+options:
+  --help, -h  print this help`;
 
 /** The flags `okf init` was given. */
 export type InitOptions = {
@@ -377,9 +401,9 @@ options:
   --no-commit     edit the files but leave committing to you
   --help, -h      print this help
 
-An agent should run --yes only when the person has asked it to verify those
-records, and should name the files rather than pass --changed unless they
-asked for all of them.`;
+An agent runs --yes only when the person asks it to, naming the files they
+approved, and passes --changed only when they asked for every changed
+record; \`okf guide\` prints the rules.`;
 }
 
 /** Read the command line into options, or say why it can't run. */
@@ -431,6 +455,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
 
   if (
     name === "diff" ||
+    name === "guide" ||
     name === "init" ||
     name === "status" ||
     name === "verify"
@@ -484,6 +509,34 @@ export function parseDiffArgs(args: readonly string[]): ParsedDiffArgs {
   return positionals.length === 0
     ? { kind: "invalid", message: "Name at least one record." }
     : { kind: "options", options };
+}
+
+/** Read `okf guide`'s arguments, or say why they can't run. */
+export function parseGuideArgs(args: readonly string[]): ParsedGuideArgs {
+  let parsed: ReturnType<typeof parseGuideCommandLine>;
+
+  try {
+    parsed = parseGuideCommandLine(args);
+  } catch (error) {
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const [extra] = positionals;
+
+  return extra === undefined
+    ? { kind: "guide" }
+    : {
+        kind: "invalid",
+        message: `okf guide takes no arguments, but was given ${extra}.`,
+      };
 }
 
 /** Read `okf status`'s command line into options, or say why it can't run. */
@@ -625,6 +678,20 @@ function parseDiffCommandLine(args: readonly string[]) {
       by: { type: "string" },
       help: { short: "h", type: "boolean" },
     },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf guide`'s one flag.
+ *
+ * - It throws on an unknown flag, which the caller turns into a usage error.
+ */
+function parseGuideCommandLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: { help: { short: "h", type: "boolean" } },
     strict: true,
   });
 }

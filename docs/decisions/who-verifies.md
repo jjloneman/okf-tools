@@ -12,8 +12,8 @@ sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:52:10Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -28,7 +28,7 @@ As of 2026-11-11, from `src/bin.ts`, `src/cli.ts`, `src/options.ts`, and the REA
 - **Verification is the person's call; how it's recorded is not restricted.**
   - The interactive mode, the default, prompts in a terminal and refuses to start without one on both stdin and stdout.
   - The non-interactive mode (`--yes`) records the same sign-off with no prompts, so an agent or a workflow can run it.
-- **What an agent should do** is guidance, not a check the tool enforces. It's in the README's Agents section, the `--help` text, and this repo's AGENTS.md:
+- **What an agent should do** is guidance, not a check the tool enforces. As of 2026-11-25 it's written once, in `src/guide.ts`: `okf guide` prints it, the block `okf init` writes into a repo's `AGENTS.md` holds it, and the README's Agents section quotes that block; `okf verify --help` points at `okf guide` (see [What `okf guide` prints](guide.md)). This repo's AGENTS.md states it for this repo too:
   - don't verify a record unless the person asks; drafting, editing, and regenerating a record never imply a sign-off;
   - name the files the person approved, rather than passing `--changed`, unless they asked for every changed record;
   - sign as the person (the configured `okf.verifiedBy`), since the approval is theirs.

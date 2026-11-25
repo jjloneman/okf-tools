@@ -95,6 +95,7 @@ Node 22 or later, and git, are required.
 ## 🚀 Usage
 
 - `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), and `okf status --help` prints the ones in [Status](#-status).
+- `okf guide` prints the guidance for agents (see [Agents](#-agents)).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
 - `okf-verify <args>` runs as `okf verify <args>` does, with the same exit codes.
@@ -270,7 +271,11 @@ The Markdown files in the bundles that `okf.bundles` lists in `package.json` are
   - Never verify a record as a side effect of drafting or editing it.
 - **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case.
   - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.
+
+Run `okf guide` through the repo's package manager, such as `pnpm exec okf guide`, for every okf-tools command and when you may run each, printed from the installed version.
 ```
+
+`okf guide` prints the same rules, then each command and when an agent may run it, from the version installed in the repo, so an agent reads guidance that matches its commands; it prints Markdown with no `[okf]` prefix, reads nothing, and exits `0`, or `1` when given any argument but `--help`.
 
 The agent signs as the person (the configured `okf.verifiedBy`), since the approval is theirs. A repo that wants a stricter rule can say so in its own agent instructions, outside the block.
 
