@@ -4,7 +4,7 @@ title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:25:09Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:21:50Z }
 verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
@@ -28,6 +28,10 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
   - A status other than `draft`, and other people's `at`, are never edited, so they may take any form.
   - The frontmatter is sliced out of the record by position, after any byte order mark, so no line ending outside an edit is rewritten, and a line an edit adds takes the line break of the line it follows.
   - Only an unquoted `~`, `null`, `Null`, `NULL`, or empty value is null, for the reads and the edits alike; a quoted `"null"` is text.
+- **Strict UTF-8 reads:** as of 2026-11-25, a record is read as bytes and decoded only when it's valid UTF-8, keeping any byte order mark, so its text re-encodes to exactly the bytes on disk (issue #27).
+  - A record that isn't valid UTF-8 can't be read: it's skipped in the checklist and fails a `--yes` run, with a line naming it.
+  - The rollback writes back the text the record was read as, which is its original bytes.
+  - The re-read before writing compares bytes, so a record saved since in another encoding counts as changed on disk, and nothing is written.
 - **All or nothing before writing:** if any chosen record refuses the edit, nothing is written.
   - As of 2026-11-12, a record the edits would refuse is reported when the records are listed and left out of the selection, so it can't hold the others back; the write-time refusal still guards a record changed on disk since.
 - **Re-read before writing:** each record is read again just before the write; if one changed on disk since it was listed, such as an edit saved while the prompt was open, nothing is written.
@@ -46,6 +50,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 ## Why
 
 - A record that's half-verified, or verified with text the person never saw, is worse than one left as a draft; each guard keeps the result to "all verified as reviewed" or "nothing changed".
+- A lossy decode turned each byte it couldn't read into U+FFFD, so verifying a Latin-1 record rewrote bytes in its body, and a rollback wrote that damage back while saying no files changed. The OKF spec requires UTF-8, so refusing such a record costs nothing a valid one needs (issue #27).
 - Hooks are the repo's own checks, so a sign-off goes through them like any other commit; pushing stays the person's step.
 - These guards came from two `/code-review` passes and PR review on PR #2.
 - A raw `ENOENT` from a deleted record, or a prompt frame left open, tells the person nothing about which record or what state the files are in; the code audit (issue #25) found the unguarded calls, and issue #34 made each return a reason that the run mode prints.
