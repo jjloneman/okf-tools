@@ -48,6 +48,9 @@ export type CliOptions = {
   shouldCommit: boolean;
 };
 
+/** The flags and record paths `okf diff` was given. */
+export type DiffOptions = Pick<CliOptions, "bundles" | "by" | "recordPaths">;
+
 /** What the command line asked for: help, a run, or nothing valid. */
 export type ParsedArgs =
   | {
@@ -108,11 +111,11 @@ export type ParsedCommand =
       args: readonly string[];
 
       /**
-       * A command was named.
+       * A command was named: the one to run.
        *
        * @example "verify"
        */
-      kind: "verify";
+      kind: "diff" | "verify";
     }
   | {
       /**
@@ -130,6 +133,47 @@ export type ParsedCommand =
       message: string;
     };
 
+/** What `okf diff`'s arguments asked for: help, a run, or nothing valid. */
+export type ParsedDiffArgs =
+  | {
+      /**
+       * `--help` was passed.
+       *
+       * @example "help"
+       */
+      kind: "help";
+    }
+  | {
+      /**
+       * The arguments can't be run.
+       *
+       * @example "invalid"
+       */
+      kind: "invalid";
+
+      /**
+       * Why, without the usage text.
+       *
+       * @example "Name at least one record."
+       */
+      message: string;
+    }
+  | {
+      /**
+       * The arguments describe a run.
+       *
+       * @example "options"
+       */
+      kind: "options";
+
+      /**
+       * The run's options.
+       *
+       * @example `{ bundles: [], by: undefined, recordPaths: ["docs/decisions/a.md"] }`
+       */
+      options: DiffOptions;
+    };
+
 /** The name the verify command is called by: under `okf`, or as its alias. */
 export type VerifyCommand = "okf-verify" | "okf verify";
 
@@ -137,11 +181,26 @@ export type VerifyCommand = "okf-verify" | "okf verify";
 export const OKF_USAGE = `usage: okf <command> [options]
 
 commands:
+  diff    print what changed in records since their last sign-off
   verify  mark records \`status: stable\` with a \`verified\` entry, then
           commit just those files
 
 Run \`okf <command> --help\` for a command's options. \`okf-verify\` is the
 same as \`okf verify\`.`;
+
+/** How to call `okf diff`, printed for its `--help` and after a usage error. */
+export const DIFF_USAGE = `usage: okf diff [options] <record>...
+
+Prints what changed in each record since the signer last signed it off: the
+diff from the commit that set their \`verified.at\` to the file on disk, or
+the whole record when no commit did. It changes nothing.
+
+options:
+  --bundle <dir>  a bundle directory the records are in; repeat for more
+                  (default: \`okf.bundles\` in package.json)
+  --by <actor>    whose sign-off to diff from
+                  (default: \`okf.verifiedBy\` in package.json)
+  --help, -h      print this help`;
 
 /**
  * How to call the verify command, printed for `--help` and after a usage
@@ -215,8 +274,8 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     return { kind: "help" };
   }
 
-  if (name === "verify") {
-    return { args: rest, kind: "verify" };
+  if (name === "diff" || name === "verify") {
+    return { args: rest, kind: name };
   }
 
   if (name === undefined) {
@@ -229,6 +288,42 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
       ? `${name} isn't a command; options follow the command, as in okf <command> ${name}.`
       : `Unknown command: ${name}.`,
   };
+}
+
+/** Read `okf diff`'s arguments into options, or say why they can't run. */
+export function parseDiffArgs(args: readonly string[]): ParsedDiffArgs {
+  let parsed: ReturnType<typeof parseDiffCommandLine>;
+
+  try {
+    parsed = parseDiffCommandLine(args);
+  } catch (error) {
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const options: DiffOptions = {
+    bundles: values.bundle ?? [],
+    by: values.by,
+    recordPaths: positionals,
+  };
+
+  if (options.bundles.includes("")) {
+    return {
+      kind: "invalid",
+      message: "--bundle needs a directory, not an empty string.",
+    };
+  }
+
+  return positionals.length === 0
+    ? { kind: "invalid", message: "Name at least one record." }
+    : { kind: "options", options };
 }
 
 /**
@@ -294,6 +389,25 @@ function parseCommandLine(args: readonly string[]) {
       help: { short: "h", type: "boolean" },
       "no-commit": { type: "boolean" },
       yes: { short: "y", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf diff`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseDiffCommandLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      by: { type: "string" },
+      help: { short: "h", type: "boolean" },
     },
     strict: true,
   });

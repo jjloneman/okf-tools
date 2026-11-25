@@ -28,6 +28,7 @@ import { EXIT_CODES } from "./exit-codes.ts";
 import { toPathKey } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
 import { listBundleChanges, loadCandidates } from "./repo.ts";
+import { describeSignOffDiff, readSignOffDiff } from "./sign-off-diff.ts";
 
 /*
  * Ctrl-D's byte, which clack doesn't treat as a cancel.
@@ -36,6 +37,13 @@ import { listBundleChanges, loadCandidates } from "./repo.ts";
  *   never settle, and Node would exit `13` on the unsettled top-level await.
  */
 const END_OF_TRANSMISSION = "\u0004";
+
+/** The color each kind of line in a hunk is shown in, by its first characters. */
+const HUNK_LINE_COLORS = [
+  { color: "cyan", prefix: "@@" },
+  { color: "green", prefix: "+" },
+  { color: "red", prefix: "-" },
+] as const;
 
 /** The checklist's legend entry for clack's toggle-all key. */
 const TOGGLE_ALL_INSTRUCTION = `${styleText("dim", "A:")} toggle all`;
@@ -125,6 +133,8 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
   if (selected === undefined) {
     return cancelRun();
   }
+
+  showSignOffDiffs({ repoRoot, selected, verifiedBy });
 
   const plan = planVerification({ context, selected, statusPaths });
   const { dirtyPaths, filePaths, message } = plan;
@@ -292,4 +302,71 @@ function reportOutcome(params: {
       return EXIT_CODES.ok;
     }
   }
+}
+
+/**
+ * Show what changed in each chosen record since the signer's last sign-off,
+ * or the whole record when no commit shows that.
+ *
+ * - A diff git can't produce is a warning, not a failure, since the person
+ *   can still read the record before confirming.
+ */
+function showSignOffDiffs(params: {
+  repoRoot: string;
+  selected: readonly Candidate[];
+  verifiedBy: string;
+}): void {
+  const { repoRoot, selected, verifiedBy } = params;
+
+  for (const { filePath, text } of selected) {
+    const diff = readSignOffDiff({ filePath, repoRoot, text, verifiedBy });
+
+    if (!diff.isOk) {
+      log.warn(`Can't show what changed: ${diff.reason}`);
+
+      continue;
+    }
+
+    const { body, heading } = describeSignOffDiff({
+      diff: diff.value,
+      filePath,
+      verifiedBy,
+    });
+
+    log.step(heading);
+
+    if (body !== "") {
+      log.message(
+        diff.value.kind === "diff" ? styleDiff(body) : body.trimEnd()
+      );
+    }
+  }
+}
+
+/**
+ * Color a diff's lines by kind, as git does in a terminal.
+ *
+ * - The header, before the first hunk, is bold, so a removed `---` fence in a
+ *   hunk is still read as a removed line.
+ */
+function styleDiff(text: string): string {
+  let isInHunk = false;
+
+  return text
+    .trimEnd()
+    .split("\n")
+    .map((line) => {
+      isInHunk ||= line.startsWith("@@");
+
+      if (!isInHunk) {
+        return styleText("bold", line);
+      }
+
+      const match = HUNK_LINE_COLORS.find(({ prefix }) =>
+        line.startsWith(prefix)
+      );
+
+      return match === undefined ? line : styleText(match.color, line);
+    })
+    .join("\n");
 }

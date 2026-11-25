@@ -7,15 +7,18 @@ import type { Output, Program } from "./output.ts";
 import type { RunContext } from "./run-context.ts";
 
 import { readOkfConfig, resolveSettings } from "./config.ts";
+import { runDiff } from "./diff.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { findRepoRoot } from "./git.ts";
 import { runInteractive } from "./interactive.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
+  DIFF_USAGE,
   formatVerifyUsage,
   OKF_USAGE,
   parseCliArgs,
   parseCommand,
+  parseDiffArgs,
 } from "./options.ts";
 import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
@@ -88,13 +91,15 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return EXIT_CODES.failure;
   }
 
-  return runVerify({ args: parsed.args, cwd, isInteractive, output, program });
+  return parsed.kind === "diff"
+    ? runDiffCommand({ args: parsed.args, cwd, output })
+    : runVerify({ args: parsed.args, cwd, isInteractive, output, program });
 }
 
 /** Resolve the repo, config, bundles, and actor a run works with. */
 function buildContext(params: {
   cwd: string;
-  options: CliOptions;
+  options: Pick<CliOptions, "bundles" | "by" | "shouldCommit">;
   output: Output;
 }): { isOk: false; reason: string } | { isOk: true; value: RunContext } {
   const { options, output } = params;
@@ -149,6 +154,56 @@ function buildContext(params: {
       verifiedBy,
     },
   };
+}
+
+/**
+ * Run the diff command: read its arguments and config, then print each
+ * record's changes since its last sign-off.
+ */
+function runDiffCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseDiffArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(DIFF_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${DIFF_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildContext({
+      cwd,
+      options: { ...options, shouldCommit: false },
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runDiff({
+      context: context.value,
+      recordPaths: options.recordPaths,
+    });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
 }
 
 /**

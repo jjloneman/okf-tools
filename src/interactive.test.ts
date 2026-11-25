@@ -43,7 +43,13 @@ vi.mock(import("@clack/prompts"), async (importOriginal) => ({
   confirm: vi.fn(),
   intro: vi.fn(),
   isCancel: (value: unknown): value is typeof CANCEL => value === CANCEL,
-  log: { ...(await importOriginal()).log, info: vi.fn(), warn: vi.fn() },
+  log: {
+    ...(await importOriginal()).log,
+    info: vi.fn(),
+    message: vi.fn(),
+    step: vi.fn(),
+    warn: vi.fn(),
+  },
   multiselect: vi.fn(),
   MULTISELECT_INSTRUCTIONS: ["Enter: confirm"],
   note: vi.fn(),
@@ -603,6 +609,110 @@ describe("runInteractive", () => {
       expect.stringContaining("the commit failed:\nhook says no")
     );
     expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
+  });
+});
+
+describe("runInteractive, before the confirm", () => {
+  /** b signed off by its own commit, after a draft, so a diff can start there. */
+  const B_SIGNED = verifiedRecord({ by: VERIFIED_BY, title: "B" });
+
+  /** b regenerated after its sign-off, so it needs a new one. */
+  const B_REGENERATED = B_SIGNED.replace(
+    "2026-10-01T15:00:00Z",
+    "2026-10-03T15:00:00Z"
+  );
+
+  /** Commit b as a draft, then as `signed`, returning the second's hash. */
+  function signB(signed: string): string {
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+    repo.commitAll("draft b");
+    repo.write("docs/decisions/b.md", signed);
+    repo.commitAll("sign b");
+
+    return repo.git("rev-parse", "--short", "HEAD").trim();
+  }
+
+  beforeEach(() => {
+    vi.mocked(select).mockResolvedValue("changed");
+    vi.mocked(confirm).mockResolvedValue(false);
+  });
+
+  test("shows the diff since the sign-off of a record changed since", async () => {
+    // Given - b signed, then regenerated with a new body
+    const signOff = signB(B_SIGNED);
+    repo.write(
+      "docs/decisions/b.md",
+      B_REGENERATED.replace("Body text.", "New body.")
+    );
+
+    // When - running and picking b alone
+    await runInteractive(context());
+
+    // Then - its diff from the sign-off commit, before the confirm
+    expect(log.step).toHaveBeenCalledWith(
+      `docs/decisions/b.md: changes since ${VERIFIED_BY}'s sign-off in ${signOff}`
+    );
+    expect(log.message).toHaveBeenCalledWith(
+      expect.stringContaining("-Body text.\n+New body.")
+    );
+    expect(vi.mocked(log.step).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(confirm).mock.invocationCallOrder[0] ?? 0
+    );
+  });
+
+  test("shows the whole record of a draft never signed off", async () => {
+    // Given - the default drafts
+    vi.mocked(select).mockResolvedValue("all");
+
+    // When - running
+    await runInteractive(context());
+
+    // Then - each draft whole, with nothing in it colored
+    expect(log.step).toHaveBeenCalledWith(
+      `docs/decisions/a.md: never signed off by ${VERIFIED_BY}, so here is the whole record`
+    );
+    expect(log.message).toHaveBeenCalledWith(draftRecord("A").trimEnd());
+  });
+
+  test("shows only the heading when the signed text is unchanged", async () => {
+    // Given - b signed off ahead of the clock, which lists it as changed
+    const signOff = signB(
+      B_SIGNED.replace("2026-10-02T13:30:00Z", "2099-01-01T00:00:00Z")
+    );
+
+    // When - running
+    await runInteractive(context());
+
+    // Then - a heading, and no diff
+    expect(log.step).toHaveBeenCalledWith(
+      `docs/decisions/b.md: unchanged since ${VERIFIED_BY}'s sign-off in ${signOff}`
+    );
+    expect(log.message).not.toHaveBeenCalled();
+  });
+
+  test("warns when the diff can't be read, and still asks to confirm", async () => {
+    // Given - b signed, regenerated, then unreadable once chosen
+    signB(B_SIGNED);
+    repo.write("docs/decisions/b.md", B_REGENERATED);
+    const filePath = path.join(repo.root, "docs/decisions/b.md");
+    vi.mocked(multiselect).mockImplementation(({ options }) => {
+      chmodSync(filePath, 0o000);
+
+      return Promise.resolve(options.map(({ value }) => value));
+    });
+
+    try {
+      // When - running
+      await runInteractive(context());
+    } finally {
+      chmodSync(filePath, 0o644);
+    }
+
+    // Then - a warning, and the confirm still asked
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^Can't show what changed: Couldn't diff /u)
+    );
+    expect(confirm).toHaveBeenCalled();
   });
 });
 
