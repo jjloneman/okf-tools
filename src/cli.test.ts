@@ -92,6 +92,20 @@ afterEach(() => {
   vi.mocked(runInteractive).mockClear();
 });
 
+/** Write the scratch repo's okf config with the given style. */
+function configureStyle(style: string): void {
+  repo.write(
+    "package.json",
+    JSON.stringify({
+      okf: {
+        bundles: ["docs/decisions", "docs/references"],
+        style,
+        verifiedBy: "human:jjloneman",
+      },
+    })
+  );
+}
+
 /** A pattern for a line that starts with the current invocation's prefix. */
 function prefixed(pattern: RegExp): RegExp {
   const prefix = invocation.prefix.replaceAll(/[[\]]/gu, String.raw`\$&`);
@@ -348,6 +362,7 @@ describe.each(INVOCATIONS)("as $command", (current) => {
         },
         repoRoot: repo.root,
         shouldCommit: false,
+        style: "match",
         verifiedBy: "human:jjloneman",
       });
     });
@@ -812,6 +827,53 @@ describe.each(INVOCATIONS)("as $command", (current) => {
       // Then - committed unchanged, with no warning about its own change
       expect(code).toBe(0);
       expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.read("docs/decisions/a.md")).toBe(signedOff);
+      expect(infos).toStrictEqual([
+        `${invocation.prefix} committing docs/decisions/a.md: already verified, not yet committed`,
+        expect.stringMatching(prefixed(/committed [0-9a-f]+$/u)),
+      ]);
+    });
+
+    test("writes and re-commits a sign-off in the configured style", async () => {
+      // Given - okf.style set to block, and a sign-off a hook rejected
+      configureStyle("block");
+      repo.commitAll("configure the style");
+      repo.installFailingHook({ output: "hook says no" });
+      await runIn(["--yes", "docs/decisions/a.md"]);
+      unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+
+      // When - running the same command again
+      const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+      // Then - a block entry, recognized as the sign-off and committed
+      expect(code).toBe(0);
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.read("docs/decisions/a.md")).toMatch(
+        /^verified:\n {2}- by: human:jjloneman\n {4}at: \S+\n/mu
+      );
+      expect(infos).toContain(
+        `${invocation.prefix} committing docs/decisions/a.md: already verified, not yet committed`
+      );
+    });
+
+    test("re-commits a sign-off left in a style since changed, as it is", async () => {
+      // Given - a block sign-off a hook rejected, then okf.style back to match
+      configureStyle("block");
+      repo.commitAll("configure the style");
+      repo.installFailingHook({ output: "hook says no" });
+      await runIn(["--yes", "docs/decisions/a.md"]);
+      unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+      configureStyle("match");
+
+      const signedOff = repo.read("docs/decisions/a.md");
+
+      infos.length = 0;
+
+      // When - running the same command again
+      const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+      // Then - committed as it is, with no warning about other changes
+      expect(code).toBe(0);
       expect(repo.read("docs/decisions/a.md")).toBe(signedOff);
       expect(infos).toStrictEqual([
         `${invocation.prefix} committing docs/decisions/a.md: already verified, not yet committed`,

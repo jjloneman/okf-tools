@@ -15,6 +15,8 @@ import { DateTime } from "luxon";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { parseDocument } from "yaml";
 
+import type { EntryStyle } from "./types.ts";
+
 import { currentTimestamp } from "../records.ts";
 import { verifyRecord } from "./edit.ts";
 import { getRecordState, readRecordSummary } from "./read.ts";
@@ -135,6 +137,13 @@ type RecordModel = {
    * @example `{ comment: true, index: 1, value }`
    */
   status: { comment: boolean; index: number; value: Scalar } | undefined;
+
+  /**
+   * The style a new entry is asked for, or none for the default.
+   *
+   * @example "block"
+   */
+  style: EntryStyle | undefined;
 
   /**
    * Where `verified` goes among the fields, and its layout.
@@ -610,6 +619,12 @@ const RECORD_ARB: fc.Arbitrary<RecordModel> = fc
         }),
         { nil: undefined }
       ),
+      style: fc.constantFrom<EntryStyle | undefined>(
+        undefined,
+        "block",
+        "inline",
+        "match"
+      ),
       verified: fc.record({
         index: fc.nat(3),
         layout: verifiedArb(verifiedBy),
@@ -666,7 +681,7 @@ function expectedMeaning(model: RecordModel): Record<string, unknown> {
   switch (layout.kind) {
     case "absent":
     case "null": {
-      meaning.verified = newEntry;
+      meaning.verified = isBlockExpected(model) ? [newEntry] : newEntry;
       break;
     }
 
@@ -681,6 +696,52 @@ function expectedMeaning(model: RecordModel): Record<string, unknown> {
   }
 
   return meaning;
+}
+
+/**
+ * The quote a new entry's `at` takes: `generated.at`'s, else the first other
+ * entry's, passing over nulls, else none.
+ */
+function expectQuote(model: RecordModel): string {
+  const timestamps = [
+    findGeneratedEntry(model)?.at,
+    ...readModelEntries(model.verified.layout).map(({ at }) => at),
+  ];
+
+  const quotes: Partial<Record<Style, string>> = { double: '"', single: "'" };
+  const first = timestamps.find(
+    (at) =>
+      at !== undefined &&
+      !(at.style === "plain" && NULL_SPELLINGS.includes(at.value))
+  );
+
+  return first === undefined ? "" : (quotes[first.style] ?? "");
+}
+
+/** The record's `generated`, when it's a `{ by, at }` mapping. */
+function findGeneratedEntry(
+  model: RecordModel
+): { at: Scalar; by: Scalar; isBlock: boolean } | undefined {
+  const field = model.fields.find(
+    ({ key, value }) => key === "generated" && "by" in value
+  );
+
+  return field !== undefined && "by" in field.value ? field.value : undefined;
+}
+
+/**
+ * Whether a new entry is written as a block mapping: asked for, or matching a
+ * block `generated`, unless it goes in an inline list.
+ */
+function isBlockExpected(model: RecordModel): boolean {
+  const { style, verified } = model;
+  const isMatched =
+    (style ?? "match") === "match" &&
+    findGeneratedEntry(model)?.isBlock === true;
+
+  return (
+    verified.layout.kind !== "flowList" && (style === "block" || isMatched)
+  );
 }
 
 /** Whether `needle` appears in `haystack` in order, with gaps allowed. */
@@ -949,6 +1010,7 @@ describe("verifyRecord over generated layouts", () => {
         // When - verifying it
         const result = verifyRecord({
           at: AT,
+          style: model.style,
           text,
           verifiedBy: model.verifiedBy,
         });
@@ -987,6 +1049,26 @@ describe("verifyRecord over generated layouts", () => {
           !isAddedBelowComment ||
             edited.indexOf(TRAILING_COMMENT) < edited.indexOf(AT)
         ).toBe(true);
+
+        // Then - a new entry quoted and laid out as the record and style say
+        const isNew =
+          findRenewedIndex({
+            entries: readModelEntries(layout),
+            verifiedBy: model.verifiedBy,
+          }) === -1;
+
+        const atLine =
+          splitLines(edited).find((line) => line.includes(AT)) ?? "";
+        const quote = expectQuote(model);
+
+        expect(
+          !isNew ||
+            (atLine.includes(`${quote}${AT}`) &&
+              !/["']$/u.test(
+                atLine.slice(0, atLine.indexOf(AT) - quote.length)
+              ) &&
+              atLine.includes("{") !== isBlockExpected(model))
+        ).toBe(true);
       }),
       RUN_OPTIONS
     );
@@ -999,6 +1081,7 @@ describe("verifyRecord over generated layouts", () => {
         const text = `${render(model).lines.join("")}${BODY}`;
         const first = verifyRecord({
           at: AT,
+          style: model.style,
           text,
           verifiedBy: model.verifiedBy,
         });
@@ -1007,11 +1090,13 @@ describe("verifyRecord over generated layouts", () => {
         // When - verifying it again, at the same time and later
         const same = verifyRecord({
           at: AT,
+          style: model.style,
           text: verified,
           verifiedBy: model.verifiedBy,
         });
         const later = verifyRecord({
           at: LATER_AT,
+          style: model.style,
           text: verified,
           verifiedBy: model.verifiedBy,
         });

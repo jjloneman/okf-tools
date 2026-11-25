@@ -28,7 +28,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 `okf verify` makes that sign-off one step:
 
 - it sets `status: draft` to `stable` (any other status is left alone);
-- it adds or renews the signer's `verified` entry with the current UTC time;
+- it adds or renews the signer's `verified` entry with the current UTC time, writing a new entry in the record's own style (see [Install](#-install));
 - it commits just those files, never pushing and never skipping hooks, and writes nothing when git would refuse that commit, such as mid-merge or for an ignored file;
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
 - it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end, and one whose block is almost right, such as one with no closing `---` or blanks around a fence, rather than take it for no frontmatter;
@@ -67,8 +67,24 @@ Then configure it in `package.json`:
 - **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files at any depth inside each, other than `index.md` and `log.md` at every level, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#31-reserved-filenames). A bundle inside another counts each record once; a folder git ignores or that holds only ignored files, `.git`, a folder holding another clone, and a symlink to a folder are never read.
 - **`okf.verifiedBy`** is the OKF actor each `verified` entry names.
 - **`okf.exclude`** (optional) lists globs, relative to the repo root, of Markdown in a bundle that isn't a record, such as `["**/README.md", "docs/decisions/drafts"]`. A glob that matches a folder excludes everything in it, `*` matches dot files too, and a glob can't start with `!` (other than an extglob such as `!(drafts)`) or `/`, or end with `/`.
+- **`okf.style`** is how a new `verified` entry is laid out, and is optional:
+  - `match`, the default, writes it as the record writes `generated`: a block when `generated` is a block mapping, else inline;
+  - `inline` always writes `{ by, at }` on one line;
+  - `block` always writes `by` and `at` on lines of their own.
 
-`okf.bundles` and `okf.verifiedBy` can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.exclude` has no flag, and applies to `--bundle` too.
+`okf.bundles` and `okf.verifiedBy` can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.exclude` and `okf.style` have no flag, and `okf.exclude` applies to `--bundle` too.
+
+A block entry goes in a `-` list, even when it's the only one, since a bare block mapping can't take a second signer's entry (see the layouts above):
+
+```yaml
+verified:
+  - by: human:jjloneman
+    at: 2026-10-02T13:30:00Z
+```
+
+- **An inline list keeps inline entries**, whatever the style, since it can't hold a block one.
+- **The new `at` is quoted as `generated.at` is**, else as the first other entry's `at`, so a record that quotes its timestamps keeps quoting them.
+- **An existing entry keeps its layout**; only its `at` changes.
 
 Node 22 or later, and git, are required.
 
@@ -163,6 +179,7 @@ import {
 } from "@jjloneman/okf-tools";
 ```
 
+- `verifyRecord` takes an optional `style`, one of `ENTRY_STYLES` (`match`, `inline`, `block`), as `okf.style` describes, `match` when not given.
 - `verifyRecord` takes the sign-off's `at` as RFC 3339 profiles ISO 8601: a date, `T`, a time to the minute or finer, and a zone, such as `2026-10-02T13:30:00Z` or `2026-10-02T15:30+02:00`. It refuses any other, so every sign-off it writes can be dated.
 - A refusal has a `kind` to switch on, one of `REFUSAL_KINDS` (`invalidParams`, `invalidYaml`, `noFrontmatter`, `unsupportedLayout`), beside its `reason` in words.
 - `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, or when a block is almost right, and `findEditProblem` says why `verifyRecord` would refuse a record.

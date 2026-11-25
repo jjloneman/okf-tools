@@ -233,6 +233,7 @@ describe("prepareEdits", () => {
     const result = prepareEdits({
       at: AT,
       candidates,
+      style: "match",
       verifiedBy: VERIFIED_BY,
     });
 
@@ -263,6 +264,7 @@ describe("prepareEdits", () => {
     const result = prepareEdits({
       at: AT,
       candidates,
+      style: "match",
       verifiedBy: VERIFIED_BY,
     });
 

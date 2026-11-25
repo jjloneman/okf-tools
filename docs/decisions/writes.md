@@ -1,9 +1,10 @@
 ---
 type: Decision
 title: How okf-verify writes and commits records
-description: Edits only an allowlist of layouts, never through a symlink; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
+description: Edits only an allowlist of layouts, writing a new entry in the record's own style, never through a symlink; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags:
   - commits
+  - config
   - encoding
   - exit-codes
   - frontmatter
@@ -15,8 +16,8 @@ tags:
   - symlinks
   - timestamps
   - verification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:07:31Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -36,6 +37,16 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
   - Also refused, anywhere in the frontmatter, before any edit is planned: a carriage return that doesn't end a line (YAML 1.2 reads it as a line break, the parser as text); an alias whose anchor isn't set before it; and two keys that mean the same, such as an alias key repeating another, `~` beside `null`, or equal collection keys.
   - A null `by` names nobody, so it never counts as the signer's entry.
   - As of 2026-11-25, when the signer has several entries, the one with the latest readable `at` is renewed, the first of any that tie, or the first entry when none reads; the reads judge the state by the same entry, so the sign-off always clears it (issue #32).
+- **A new entry in the record's own style:** as of 2026-11-25, `okf.style` in `package.json` (`style` for `verifyRecord`) lays out a new `verified` entry, and an existing entry keeps its layout, only its `at` renewed (issue #48).
+  - `match`, the default, copies the form of `generated`: a block mapping when `generated` is one, else inline.
+    - **Rejected:** matching the existing `verified` list's items instead; the issue settled on `generated`, which every record an agent writes has. `inline` and `block` ask for one form whatever `generated` is. There is no flag for it.
+  - A block entry is written as a `-` list item, even as the only entry, with `at` aligned under `by`.
+    - **Rejected:** a bare block mapping as the whole `verified` value, as the inline form is bare. The edits refuse to add a second signer to someone else's bare block mapping, since re-indenting it into a list item is a rewrite, so the first block sign-off would block every later one.
+  - An inline list keeps getting inline entries, whatever the style, since a block mapping can't go inside one.
+  - The new `at` is quoted as `generated.at` is, else as the first other entry's `at`, passing over an alias or a null, else plain, in every style.
+  - Any other `style` passed to `verifyRecord`, such as `null` from a caller without the types, is refused as `invalidParams`, as a bad `at` is.
+  - Listing records (`findEditProblem`) plans in the default style, since no refusal depends on the style.
+  - A sign-off left on disk is recognized by redoing it in every style, so one written before `okf.style` changed still counts as a sign-off on the re-run. One written unquoted by an earlier okf-tools, in a record whose timestamps are quoted, doesn't, and is committed with a warning that it has other changes.
   - The meaning check tells a null from an empty string, though the failsafe schema reads both as `""`.
   - A status other than `draft`, and other people's `at`, are never edited, so they may take any form.
   - The frontmatter is sliced out of the record by position, after any byte order mark, so no line ending outside an edit is rewritten, and a line an edit adds takes the line break of the line it follows.
@@ -81,6 +92,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - A raw `ENOENT` from a deleted record, or a prompt frame left open, tells the person nothing about which record or what state the files are in; the code audit (issue #25) found the unguarded calls, and issue #34 made each return a reason that the run mode prints.
 - The OKF spec lets a record use any YAML, so reading must accept every layout, but a writer may refuse one. Each layout the edits accepted beyond the common ones (anchors, aliases, multi-line flow collections, `?` keys) needed its own code path and drew its own review findings; an allowlist turns the unknown layouts into refusals instead of bugs, and every `verified` field in the owner's bundles as of 2026-11-12 was already a one-line `{ by, at }`.
 - The `yaml` package's CST layer (`CST.setScalarValue`) was tried for the value overwrites on 2026-11-12 and not adopted: an empty value (`at:`) has no CST token, so the range-based edit was needed anyway, and the values written (`stable`, an ISO timestamp) never need the escaping it adds. A full round-trip with `doc.toString()` was also rejected: it changed 13 of the owner's records, such as `[a, b]` to `[ a, b ]`.
+- A new entry was always written inline and unquoted, so a record that writes `generated` as a block, or quotes its timestamps, got a sign-off that didn't match the rest of it (issue #48). Matching the record avoids choosing a timestamp style for the owner, since some YAML parsers coerce an unquoted timestamp into a date (upstream issue 56).
 - Property tests with `fast-check` generate the allowed layouts and check the edits' meaning and untouched lines on each; they found the insert point after a block whose last value is empty, and, with a wider generator, after a `? generated` key with no value.
 - Reading with hand-written patterns mis-read valid YAML: reordered keys, escaped quotes, `at:` inside other values, nested lists, comments (issue #8). A parser reads every form YAML allows; it's used to find positions, not to re-serialize, so the no-reformatting rule holds.
 

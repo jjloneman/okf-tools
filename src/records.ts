@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import path from "node:path";
 
 import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
+import type { EntryStyle } from "./frontmatter/types.ts";
 
 import { verifyRecord } from "./frontmatter/edit.ts";
 import { readStatusText } from "./frontmatter/read.ts";
@@ -154,15 +155,16 @@ export function needsSignOff(candidate: Candidate): boolean {
 export function prepareEdits(params: {
   at: string;
   candidates: readonly Candidate[];
+  style: EntryStyle;
   verifiedBy: string;
 }): PreparedEdits {
-  const { at, candidates, verifiedBy } = params;
+  const { at, candidates, style, verifiedBy } = params;
 
   const edits: RecordEdit[] = [];
   const failures: string[] = [];
 
   candidates.forEach(({ filePath, text }) => {
-    const result = verifyRecord({ at, text, verifiedBy });
+    const result = verifyRecord({ at, style, text, verifiedBy });
 
     if (result.isOk) {
       edits.push({ filePath, originalText: text, text: result.text });

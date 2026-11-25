@@ -129,7 +129,7 @@ function buildContext(params: {
     return settings;
   }
 
-  const { bundleDirs, excludeGlobs, verifiedBy } = settings.settings;
+  const { bundleDirs, excludeGlobs, style, verifiedBy } = settings.settings;
   const bundles = resolveBundleDirs({ bundleDirs, repoRoot });
 
   if (!bundles.isOk) {
@@ -145,6 +145,7 @@ function buildContext(params: {
       output,
       repoRoot,
       shouldCommit: options.shouldCommit,
+      style,
       verifiedBy,
     },
   };

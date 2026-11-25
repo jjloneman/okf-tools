@@ -23,10 +23,15 @@ export {
   readRecordSummary,
 } from "./frontmatter/read.ts";
 export type {
+  EntryStyle,
   RecordStatus,
   RefusalKind,
   Timestamp,
   VerifyRecordParams,
 } from "./frontmatter/types.ts";
-export { RECORD_STATUSES, REFUSAL_KINDS } from "./frontmatter/types.ts";
+export {
+  ENTRY_STYLES,
+  RECORD_STATUSES,
+  REFUSAL_KINDS,
+} from "./frontmatter/types.ts";
 export type { Program } from "./output.ts";

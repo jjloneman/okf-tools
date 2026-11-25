@@ -6,6 +6,22 @@
  *   declarations never import the `yaml` package's types.
  */
 
+/** How `verifyRecord` lays out a new `verified` entry. */
+export const ENTRY_STYLES = {
+  block: "block",
+  inline: "inline",
+  match: "match",
+} as const;
+
+/**
+ * How `verifyRecord` lays out a new `verified` entry.
+ *
+ * - `match`: the form of the record's `generated`, else `inline`.
+ * - `inline`: one `{ by, at }` mapping on one line.
+ * - `block`: `by` and `at` on lines of their own, in a `-` list.
+ */
+export type EntryStyle = (typeof ENTRY_STYLES)[keyof typeof ENTRY_STYLES];
+
 /** The lifecycle statuses OKF defines for a record. */
 export const RECORD_STATUSES = {
   deprecated: "deprecated",
@@ -49,6 +65,15 @@ export type VerifyRecordParams = {
    * @example "2026-10-02T13:30:00Z"
    */
   at: Timestamp;
+
+  /**
+   * How a new entry is laid out; `match` when not given.
+   *
+   * - An existing entry's layout is never changed, nor are other entries'.
+   *
+   * @example "match"
+   */
+  style?: EntryStyle | undefined;
 
   /**
    * The record's text, frontmatter included.

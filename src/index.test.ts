@@ -9,6 +9,7 @@ describe("the library entry", () => {
 
     // Then - the frontmatter checks are among them
     expect(names).toStrictEqual([
+      "ENTRY_STYLES",
       "EXIT_CODES",
       "RECORD_STATUSES",
       "REFUSAL_KINDS",

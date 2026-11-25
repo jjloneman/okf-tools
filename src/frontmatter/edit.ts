@@ -11,25 +11,33 @@
  * - Nothing here touches the file system or the clock; the caller passes the
  *   timestamp in.
  */
-import type { Scalar, YAMLMap, YAMLSeq } from "yaml";
+import type { YAMLMap, YAMLSeq } from "yaml";
 
-import { stringify } from "yaml";
+import { isMap, isScalar, Scalar, stringify } from "yaml";
 
 import type { EditableLayout, Entry } from "./layout.ts";
 import type { FormatEntryParams } from "./meaning.ts";
 import type { Placed, TextParams } from "./shared.ts";
-import type { RefusalKind, Timestamp, VerifyRecordParams } from "./types.ts";
+import type {
+  EntryStyle,
+  RefusalKind,
+  Timestamp,
+  VerifyRecordParams,
+} from "./types.ts";
 
 import { readEditableLayout, readEntries } from "./layout.ts";
 import { checkMeaning, createEntry, findAmbiguity } from "./meaning.ts";
 import {
   describeYamlErrors,
   ENTRY_KEYS,
+  ENTRY_STYLE_NAMES,
   findFenceProblem,
   findLatestIndex,
   findLineEnd,
   findPair,
   FRONTMATTER_KEYS,
+  isEntryStyle,
+  isNullScalar,
   isSignersBy,
   isWritableTimestamp,
   LF,
@@ -37,11 +45,12 @@ import {
   readContentEnd,
   readIndent,
   readLineBreak,
+  readLineStart,
   readNodeEnd,
   readTimestamp,
   splitFrontmatter,
 } from "./shared.ts";
-import { RECORD_STATUSES, REFUSAL_KINDS } from "./types.ts";
+import { ENTRY_STYLES, RECORD_STATUSES, REFUSAL_KINDS } from "./types.ts";
 
 /** What a refusal of an unsupported layout tells the person to do instead. */
 const HAND_EDIT_HINT = "edit the record by hand";
@@ -49,9 +58,12 @@ const HAND_EDIT_HINT = "edit the record by hand";
 /** How far a list written under `verified` is indented past its key. */
 const LIST_INDENT = "  ";
 
+/** What starts a list item's first line, and how far its later lines go. */
+const LIST_MARKER = "- ";
+
 /**
  * The timestamp `findEditProblem` plans with; no refusal depends on it, since
- * a timestamp is always written the same way.
+ * any valid timestamp is written as one value on one line.
  */
 const LISTING_AT = "1970-01-01T00:00:00Z";
 
@@ -157,15 +169,67 @@ type ConvertToListParams = {
 /** What an edit that writes the signer's new entry needs. */
 type EntryEditParams = {
   /**
-   * The new entry, as a flow mapping.
+   * The new entry, written out.
+   *
+   * @example `formatEntry({ at, form, verifiedBy })`
+   */
+  entry: NewEntry;
+} & TextParams;
+
+/** How the signer's new entry is written, as `readEntryForm` decides it. */
+type EntryForm = {
+  /**
+   * How the new `at` is quoted, as the record's other timestamps are.
+   *
+   * @example "PLAIN"
+   */
+  atType: Scalar.Type;
+
+  /**
+   * Whether `by` and `at` go on lines of their own, in a `-` list.
+   *
+   * @example false
+   */
+  isBlock: boolean;
+};
+
+/** What `formatEntry` needs: who signs, when, and in what form. */
+type FormatNewEntryParams = {
+  /**
+   * How the entry is written.
+   *
+   * @example `{ atType: "PLAIN", isBlock: false }`
+   */
+  form: EntryForm;
+} & FormatEntryParams;
+
+/** The signer's new entry, written out. */
+type NewEntry = {
+  /**
+   * Whether it's a block mapping, written only as a `-` list item.
+   *
+   * @example false
+   */
+  isBlock: boolean;
+
+  /**
+   * Its text, unindented: one line inline, or one line each for `by` and
+   * `at`, split by `\n`, as a block.
    *
    * @example `"{ by: human:jjloneman, at: 2026-10-02T13:30:00Z }"`
    */
-  entry: string;
-} & TextParams;
+  text: string;
+};
 
 /** What `planVerifiedEdit` needs: the editable layout, who, and when. */
 type PlanVerifiedEditParams = {
+  /**
+   * How a new entry is written.
+   *
+   * @example `readEntryForm({ layout, style: "match" })`
+   */
+  form: EntryForm;
+
   /**
    * The frontmatter's `status` and `verified`, checked editable.
    *
@@ -181,6 +245,23 @@ type PlanVerifiedEditParams = {
   lineBreak: string;
 } & Pick<VerifyRecordParams, "at" | "verifiedBy"> &
   TextParams;
+
+/** What `readEntryForm` needs: the editable layout, and the style asked for. */
+type ReadEntryFormParams = {
+  /**
+   * The frontmatter's `status` and `verified`, checked editable.
+   *
+   * @example `readEditableLayout({ doc, text }).layout`
+   */
+  layout: EditableLayout;
+
+  /**
+   * The style asked for.
+   *
+   * @example "match"
+   */
+  style: EntryStyle;
+};
 
 /** What `renewOwnEntry` needs: the entry, its text, and the new timestamp. */
 type RenewOwnEntryParams = {
@@ -198,6 +279,23 @@ type RenewOwnEntryParams = {
    */
   entry: Entry;
 } & TextParams;
+
+/** What `replaceNull` needs: the null `verified`, its key, the entry. */
+type ReplaceNullParams = {
+  /**
+   * Where the `verified` key starts, so the new list is indented past it.
+   *
+   * @example 0
+   */
+  keyStart: number;
+
+  /**
+   * The null `verified` value.
+   *
+   * @example `doc.get("verified", true)`
+   */
+  node: Placed<Scalar>;
+} & EntryEditParams;
 
 /** One change to the frontmatter: a range of characters, and its new text. */
 type TextEdit = {
@@ -256,6 +354,30 @@ type TextEditResult =
       reason: string;
     };
 
+/** What `writeField` and `writeListItem` need: the entry, break, and indent. */
+type WriteFieldParams = {
+  /**
+   * The new entry.
+   *
+   * @example `formatEntry({ at, form, verifiedBy })`
+   */
+  entry: NewEntry;
+
+  /**
+   * The indent the field's key, or the list item's marker, starts at.
+   *
+   * @example ""
+   */
+  indent: string;
+
+  /**
+   * The line break a block entry's lines are split by.
+   *
+   * @example `"\n"`
+   */
+  lineBreak: string;
+};
+
 /** What `writeScalar` needs: the scalar, its text, and the new value. */
 type WriteScalarParams = {
   /**
@@ -279,6 +401,9 @@ type WriteScalarParams = {
  *
  * - It plans with a fixed, valid timestamp, so it never reports the refusal
  *   `verifyRecord` gives for a caller's own `at`.
+ *
+ * - It plans in the default style, `match`, since no refusal depends on the
+ *   style; the property tests check every style against every layout.
  *
  * @returns the refusal `verifyRecord` would give, or `undefined` when none.
  */
@@ -311,11 +436,20 @@ export function findEditProblem(
  *   is no `generated`, or at the end; `generated` may be inline or a nested
  *   block.
  *
+ * - A new entry is laid out as `style` says, `match` by default, and its `at`
+ *   quoted as `generated.at` is, else as the first other entry's `at`; see
+ *   `readEntryForm`.
+ *
  * - Everything outside the edited characters, line endings included, is kept
  *   byte for byte.
  */
 export function verifyRecord(params: VerifyRecordParams): RecordVerification {
-  const { at, text: recordText, verifiedBy } = params;
+  const {
+    at,
+    style = ENTRY_STYLES.match,
+    text: recordText,
+    verifiedBy,
+  } = params;
 
   // A name over several lines would be written as a multi-line entry, which
   // the next sign-off would then refuse.
@@ -334,6 +468,16 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
       isOk: false,
       kind: REFUSAL_KINDS.invalidParams,
       reason: `the timestamp ${JSON.stringify(at)} isn't an RFC 3339 date and time with a zone, such as 2026-10-02T13:30:00Z`,
+    };
+  }
+
+  // A caller without the types could pass any value, which would otherwise
+  // write inline without a word.
+  if (!isEntryStyle(style)) {
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.invalidParams,
+      reason: `the style ${JSON.stringify(style)} isn't one of ${ENTRY_STYLE_NAMES}`,
     };
   }
 
@@ -379,8 +523,10 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
     return refuseLayout(layout.reason);
   }
 
+  const form = readEntryForm({ layout: layout.layout, style });
   const verifiedEdit = planVerifiedEdit({
     at,
+    form,
     layout: layout.layout,
     lineBreak,
     text,
@@ -403,7 +549,13 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   const edited = applyEdits({ edits, text });
 
   const editedDoc = parseFrontmatter(edited);
-  const meaningProblem = checkMeaning({ at, doc, editedDoc, verifiedBy });
+  const meaningProblem = checkMeaning({
+    at,
+    doc,
+    editedDoc,
+    isBlock: form.isBlock,
+    verifiedBy,
+  });
 
   if (meaningProblem !== undefined) {
     return refuseLayout(meaningProblem);
@@ -453,7 +605,6 @@ function addTimestamp(params: RenewOwnEntryParams): TextEdit {
  */
 function addVerifiedField(params: AddVerifiedFieldParams): TextEdit {
   const { entry, map, text } = params;
-  const field = `${FRONTMATTER_KEYS.verified}: ${entry}`;
   const anchor =
     findPair({ key: FRONTMATTER_KEYS.generated, map }) ??
     findPair({ key: FRONTMATTER_KEYS.status, map });
@@ -469,6 +620,7 @@ function addVerifiedField(params: AddVerifiedFieldParams): TextEdit {
   });
 
   const lineBreak = readLineBreak({ index: insertAt, text });
+  const field = writeField({ entry, indent, lineBreak });
 
   return {
     end: insertAt,
@@ -490,13 +642,13 @@ function appendToSequence(params: AppendToSequenceParams): TextEdit {
       return {
         end: close - 1,
         start: open + 1,
-        text: inside === "" ? entry : ` ${entry} `,
+        text: inside === "" ? entry.text : ` ${entry.text} `,
       };
     }
 
     const insertAt = Math.max(...sequence.items.map(readNodeEnd));
 
-    return { end: insertAt, start: insertAt, text: `, ${entry}` };
+    return { end: insertAt, start: insertAt, text: `, ${entry.text}` };
   }
 
   const insertAt = findLineEnd({ index: readNodeEnd(sequence), text });
@@ -506,7 +658,7 @@ function appendToSequence(params: AppendToSequenceParams): TextEdit {
   return {
     end: insertAt,
     start: insertAt,
-    text: `${lineBreak}${indent}- ${entry}`,
+    text: writeListItem({ entry, indent, lineBreak }),
   };
 }
 
@@ -529,7 +681,7 @@ function appendVerifiedField(
   return {
     end: text.length,
     start: text.length,
-    text: `${FRONTMATTER_KEYS.verified}: ${entry}${lineBreak}`,
+    text: `${writeField({ entry, indent: "", lineBreak })}${lineBreak}`,
   };
 }
 
@@ -576,11 +728,11 @@ function convertToList(params: ConvertToListParams): TextEdit[] {
     const indent = readIndent({ index: start, text });
 
     return [
-      { end: start, start, text: "- " },
+      { end: start, start, text: LIST_MARKER },
       {
         end: insertAt,
         start: insertAt,
-        text: `${lineBreak}${indent}- ${entry}`,
+        text: writeListItem({ entry, indent, lineBreak }),
       },
     ];
   }
@@ -594,24 +746,38 @@ function convertToList(params: ConvertToListParams): TextEdit[] {
     {
       end: lineEnd,
       start: keyEnd,
-      text: `${comment}${readLineBreak({ index: lineEnd, text })}${indent}- ${value}`,
+      text: `${comment}${readLineBreak({ index: lineEnd, text })}${indent}${LIST_MARKER}${value}`,
     },
     {
       end: insertAt,
       start: insertAt,
-      text: `${lineBreak}${indent}- ${entry}`,
+      text: writeListItem({ entry, indent, lineBreak }),
     },
   ];
 }
 
-/** Write the signer's new entry as YAML, quoting `verifiedBy` if it must be. */
-function formatEntry(params: FormatEntryParams): string {
-  return stringify(createEntry(params), { lineWidth: 0 }).trimEnd();
+/**
+ * Write the signer's new entry as YAML in the form given, quoting `verifiedBy`
+ * if it must be.
+ */
+function formatEntry(params: FormatNewEntryParams): NewEntry {
+  const { at, form } = params;
+  const entry = createEntry(params);
+  const atNode = new Scalar(at);
+
+  atNode.type = form.atType;
+  entry.set(ENTRY_KEYS.at, atNode);
+  entry.flow = !form.isBlock;
+
+  return {
+    isBlock: form.isBlock,
+    text: stringify(entry, { lineWidth: 0 }).trimEnd(),
+  };
 }
 
 /** Plan the edit that adds or renews the signer's `verified` entry. */
 function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
-  const { at, layout, lineBreak, text, verifiedBy } = params;
+  const { at, form, layout, lineBreak, text, verifiedBy } = params;
   const { map, verified } = layout;
   const ownEntries = readEntries(verified).filter(
     ({ by }) => by !== undefined && isSignersBy({ by, verifiedBy })
@@ -629,7 +795,7 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
     };
   }
 
-  const entry = formatEntry({ at, verifiedBy });
+  const entry = formatEntry({ at, form, verifiedBy });
 
   switch (verified.kind) {
     case "absent": {
@@ -675,11 +841,61 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
 
     case "null": {
       return {
-        edits: [writeScalar({ node: verified.node, text, value: entry })],
+        edits: entry.isBlock
+          ? replaceNull({
+              entry,
+              keyStart: verified.key.range[0],
+              node: verified.node,
+              text,
+            })
+          : [writeScalar({ node: verified.node, text, value: entry.text })],
         isOk: true,
       };
     }
   }
+}
+
+/**
+ * Decide how the signer's new entry is written.
+ *
+ * - `block` asks for a block mapping, and `match` asks for one when
+ *   `generated` is written as a block mapping; an inline list can't hold one,
+ *   so it gets an inline entry whatever the style.
+ *
+ * - The new `at` is quoted as `generated.at` is, else as the first other
+ *   entry's `at`, so the record keeps one way of writing a timestamp; an
+ *   `at` that's an alias or null is passed over, and with none left it's
+ *   plain.
+ */
+function readEntryForm(params: ReadEntryFormParams): EntryForm {
+  const { layout, style } = params;
+  const { map, verified } = layout;
+  const generated =
+    map === undefined
+      ? undefined
+      : findPair({ key: FRONTMATTER_KEYS.generated, map })?.value;
+  const generatedMap = isMap(generated) ? generated : undefined;
+  const isInlineList = verified.kind === "list" && verified.node.flow === true;
+  const isBlockAsked =
+    style === ENTRY_STYLES.block ||
+    (style === ENTRY_STYLES.match &&
+      generatedMap !== undefined &&
+      generatedMap.flow !== true);
+
+  const timestamp = [
+    generatedMap,
+    ...readEntries(verified).map(({ node }) => node),
+  ]
+    .map((node) => node?.get(ENTRY_KEYS.at, true))
+    .find((node) => isScalar(node) && !isNullScalar(node));
+
+  return {
+    atType:
+      timestamp?.type !== undefined && QUOTE_MARKS.has(timestamp.type)
+        ? timestamp.type
+        : Scalar.PLAIN,
+    isBlock: isBlockAsked && !isInlineList,
+  };
 }
 
 /** Refuse a layout that needs a hand edit, saying so. */
@@ -698,6 +914,89 @@ function renewOwnEntry(params: RenewOwnEntryParams): TextEdit {
   return entry.at === undefined
     ? addTimestamp(params)
     : writeScalar({ node: entry.at, text, value: at });
+}
+
+/**
+ * Plan the edits that replace a null `verified` with a `-` list of the
+ * signer's block entry, on the lines after the key.
+ *
+ * - An empty null has no characters, so the key's line is left as it is.
+ *
+ * - A null on the key's line goes with the spaces before it, so a comment
+ *   after it stays on the key's line.
+ *
+ * - A null on a later line goes with its whole line when nothing else is on
+ *   it, or alone when a comment follows it, so that comment keeps its line.
+ */
+function replaceNull(params: ReplaceNullParams): TextEdit[] {
+  const { entry, keyStart, node, text } = params;
+  const [start, end] = node.range;
+  const keyEnd = readContentEnd({ index: start, text });
+  const insertAt = findLineEnd({
+    index: start === end ? keyEnd : end,
+    text,
+  });
+
+  const lineBreak = readLineBreak({ index: insertAt, text });
+  const indent = `${readIndent({ index: keyStart, text })}${LIST_INDENT}`;
+  const item = {
+    end: insertAt,
+    start: insertAt,
+    text: writeListItem({ entry, indent, lineBreak }),
+  };
+
+  if (start === end) {
+    return [item];
+  }
+
+  if (!text.slice(keyEnd, start).includes(LF)) {
+    return [{ end, start: keyEnd, text: "" }, item];
+  }
+
+  const hasComment = text.slice(end, insertAt).trim() !== "";
+  const previousLineEnd = findLineEnd({
+    index: readLineStart({ index: start, text }) - 1,
+    text,
+  });
+
+  return [
+    hasComment
+      ? { end, start, text: "" }
+      : { end: insertAt, start: previousLineEnd, text: "" },
+    item,
+  ];
+}
+
+/**
+ * Write a new `verified` field holding the entry, from the key on.
+ *
+ * - A block entry goes in a one-item list on the lines after the key, since a
+ *   bare block mapping can't take a second signer's entry.
+ */
+function writeField(params: WriteFieldParams): string {
+  const { entry, indent, lineBreak } = params;
+  const key = `${FRONTMATTER_KEYS.verified}:`;
+
+  return entry.isBlock
+    ? `${key}${writeListItem({ entry, indent: `${indent}${LIST_INDENT}`, lineBreak })}`
+    : `${key} ${entry.text}`;
+}
+
+/**
+ * Write the entry as a `-` list item, each line on a line of its own after
+ * the line break, with a block entry's later lines aligned under its first.
+ */
+function writeListItem(params: WriteFieldParams): string {
+  const { entry, indent, lineBreak } = params;
+  const continuation = " ".repeat(LIST_MARKER.length);
+
+  return entry.text
+    .split(LF)
+    .map(
+      (line, index) =>
+        `${lineBreak}${indent}${index === 0 ? LIST_MARKER : continuation}${line}`
+    )
+    .join("");
 }
 
 /**

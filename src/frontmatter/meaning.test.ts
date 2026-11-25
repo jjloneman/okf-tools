@@ -27,7 +27,12 @@ describe("checkMeaning", () => {
     const editedDoc = parseDocument(edited, { schema: "failsafe" });
 
     // When - checking the edit's meaning
-    const problem = checkMeaning({ ...VERIFY_OPTIONS, doc, editedDoc });
+    const problem = checkMeaning({
+      ...VERIFY_OPTIONS,
+      doc,
+      editedDoc,
+      isBlock: false,
+    });
 
     // Then - the difference named
     expect(problem).toBe(
@@ -44,7 +49,12 @@ describe("checkMeaning", () => {
     );
 
     // When - checking the edit's meaning
-    const problem = checkMeaning({ ...VERIFY_OPTIONS, doc, editedDoc });
+    const problem = checkMeaning({
+      ...VERIFY_OPTIONS,
+      doc,
+      editedDoc,
+      isBlock: false,
+    });
 
     // Then - the difference named, though failsafe reads both as ""
     expect(problem).toBe(
@@ -58,7 +68,12 @@ describe("checkMeaning", () => {
     const editedDoc = parseDocument("status: [stable", { schema: "failsafe" });
 
     // When - checking the edit's meaning
-    const problem = checkMeaning({ ...VERIFY_OPTIONS, doc, editedDoc });
+    const problem = checkMeaning({
+      ...VERIFY_OPTIONS,
+      doc,
+      editedDoc,
+      isBlock: false,
+    });
 
     // Then - the broken YAML named, before any comparison
     expect(problem).toBe("the edit would leave the frontmatter invalid YAML");
