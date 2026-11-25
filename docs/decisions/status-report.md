@@ -10,13 +10,14 @@ tags:
   - json
   - staleness
   - status
+  - trust-tiers
   - verification
 sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:13:06Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:56:23Z }
 ---
 
 # How okf status reports a bundle's trust state
@@ -25,7 +26,7 @@ Repos tell agents to check a record's `verified` before changing the behavior it
 
 ## Decision
 
-As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/repo.ts`, and `src/frontmatter/read.ts`:
+As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/repo.ts`, `src/frontmatter/read.ts`, and `src/frontmatter/types.ts`:
 
 - **Each record is listed under one group, the first that fits**, in this order:
   - `changed`: signed off, then regenerated since, whatever its `status`; a sign-off ahead of the clock counts, as it does for `okf verify`;
@@ -36,6 +37,13 @@ As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/rep
   - `changed` comes first, since a sign-off that no longer holds is the one an agent could mistake for agreement; a draft regenerated after its sign-off is both, and lists there.
   - **Rejected:** listing a record under every group it fits, which repeats it, and a separate flag per fact in the text, which buries the one that matters.
 - **The JSON keeps every fact beside the group**: `state`, `status`, `isStale`, and the times, so a program needn't rely on the order.
+- **Each JSON record also carries `tier`, OKF v0.3's trust tier by its own names**, `unverified`, `machine-confirmed`, or `human-reviewed`, so a tool that reads v0.3's tiers, such as upstream's `okf-consume` skill, needn't translate okf-tools' states[^okf-v03].
+  - It follows v0.3's rule: only `verified` events at or after `generated.at` count, from any actor, not only the signer; one from a `human:<id>` actor makes it `human-reviewed`, and others only, `team:` included, `machine-confirmed`.
+  - Each actor's latest event counts, as the signer's does for `state`, so the two agree about the signer's own entry whenever each of its events has an `at`.
+  - Where v0.3 leaves it open, it judges as `state` does, through the same check: times compare to the whole second, an `at` that can't be read or is ahead of the clock doesn't count, and a missing or unreadable `generated.at` lets every event count.
+  - It sits beside `state` and the groups, which stay okf-tools' own, and the text output doesn't show it.
+  - **Rejected:** renaming okf-tools' states to v0.3's tiers, since `state` answers a different question: whether the signer's sign-off still holds.
+  - It landed before `okf status` was first released, so `schemaVersion` stays `1`: no program has read a shape without it.
 - **Filters match those facts, not the group, and add up**: `--draft` is `status: draft`, `--changed` is changed since the sign-off, and `--stale` is past `stale_after`, so `--stale` finds a stale draft too; two filters list records matching either.
 - **The signer is `okf.verifiedBy` or `--by`**, as for `okf verify`, and has no default; another actor's entry doesn't count.
   - **Rejected:** counting any actor's sign-off, which would call a record settled that the person never agreed to.
@@ -57,8 +65,11 @@ As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/rep
 ## Links
 
 - [Issue #43](https://github.com/jjloneman/okf-tools/issues/43)
+- [Issue #115](https://github.com/jjloneman/okf-tools/issues/115), which added `tier`
 - [How okf-tools lays out its commands](command-layout.md)
 - [Who verifies a record](who-verifies.md)
 - [Which actors can sign a record](actor.md)
 
 [^okf-spec]: OKF v0.2 §5.5, `stale_after`: an absolute instant, stale when `now >= stale_after`.
+
+[^okf-v03]: OKF v0.3 §5.3, Trust tiers, and §7, which gives only the `human:` scheme the human-reviewed tier. okf-tools still follows v0.2, so the spec isn't linked here; a link moves with the pin.
