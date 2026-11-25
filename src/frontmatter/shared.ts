@@ -93,6 +93,9 @@ const RECORD_STATUS_VALUES: ReadonlySet<string> = new Set(
 const WRITABLE_TIMESTAMP =
   /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
 
+/** The run of YAML whitespace and line breaks that ends a string, if any. */
+const YAML_WHITESPACE_END = /[\t\n\r ]+$/u;
+
 /** A key of a `verified` or `generated` entry. */
 export type EntryKey = (typeof ENTRY_KEYS)[keyof typeof ENTRY_KEYS];
 
@@ -409,11 +412,17 @@ export function parseFrontmatter(text: string): Frontmatter {
   return parseDocument(text, { schema: "failsafe" });
 }
 
-/** Find where the content before a position ends, skipping whitespace back. */
+/**
+ * Find where the content before a position ends, skipping back over YAML's
+ * whitespace and line breaks only.
+ *
+ * - JavaScript's `trimEnd` also skips characters YAML reads as content, such
+ *   as a no-break space ending a plain scalar.
+ */
 export function readContentEnd(params: PositionParams): number {
   const { index, text } = params;
 
-  return text.slice(0, index).trimEnd().length;
+  return text.slice(0, index).replace(YAML_WHITESPACE_END, "").length;
 }
 
 /**

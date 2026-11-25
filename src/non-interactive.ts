@@ -294,6 +294,7 @@ function readChosenStatus(params: {
   const dirty = listDirtyPaths({
     filePaths: selected.map(({ filePath }) => filePath),
     repoRoot,
+    shouldSkipNew: true,
   });
 
   return dirty.isOk ? { isOk: true, value: new Set(dirty.value) } : dirty;

@@ -324,6 +324,27 @@ describe("run --yes", () => {
     );
   });
 
+  test.for([
+    { args: ["--yes", "--changed"], description: "every changed record" },
+    { args: ["--yes", "docs/decisions/new.md"], description: "a named record" },
+  ])(
+    "doesn't warn that a brand-new record has other changes, signing $description",
+    async ({ args }) => {
+      // Given - an untracked draft, the most common record to sign
+      repo.write("docs/decisions/new.md", draftRecord("New"));
+
+      // When - verifying it
+      const code = await runIn(args);
+
+      // Then - committed, with no warning about other uncommitted changes
+      expect(code).toBe(0);
+      expect(infos.join("\n")).not.toContain("other uncommitted changes");
+      expect(
+        repo.git("status", "--porcelain", "--", "docs/decisions/new.md")
+      ).toBe("");
+    }
+  );
+
   test("clears a record generated ahead of the clock, and says so", async () => {
     // Given - a draft stamped an hour ahead of now, as a wrong zone writes it
     const ahead = DateTime.utc().plus({ hours: 1 }).toISO();

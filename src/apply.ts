@@ -326,8 +326,9 @@ export function findUncommittedSignOffs(params: {
  * - Listing already left out any record the edits refuse, and
  *   `applyVerification` checks again before writing.
  *
- * - `statusPaths` is what `git status` reported for the records, read by the
- *   caller, so planning never calls git and can't fail.
+ * - `statusPaths` is what `git status` reported for the records, files new
+ *   to `HEAD` left out, read by the caller, so planning never calls git and
+ *   can't fail.
  *
  * - A record in `uncommitted.paths` is committed as it is, not edited, and is
  *   warned about only when it changed by more than the sign-off.

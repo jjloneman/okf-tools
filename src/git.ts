@@ -31,7 +31,8 @@ export type ChangedPaths = {
   paths: Set<string>;
 
   /**
-   * The working tree's share of `paths`: what `git status` reported.
+   * The working tree's share of `paths` that `HEAD` already has: what
+   * `git status` reported, files new to the repo left out.
    *
    * @example `new Set(["docs/decisions/package-promise.md"])`
    */
@@ -122,6 +123,12 @@ const REMOTE_MAIN = "origin/main";
 
 /** A porcelain status entry marked as a rename or copy, in either column. */
 const RENAME_OR_COPY = /^(?:[CR].|.[CR])/u;
+
+/**
+ * A `git status --porcelain` entry for a file `HEAD` doesn't have: untracked,
+ * added to the index, or added with intent to add.
+ */
+const NEW_FILE = /^(?:\?\?|A.|.A)/u;
 
 /** The hash a commit reports when git can't read it back. */
 const UNKNOWN_HASH = "(hash unknown)";
@@ -280,9 +287,11 @@ export function listChangedPaths(params: {
     return status;
   }
 
-  const statusPaths = new Set(status.value);
+  status.value.forEach(({ filePath }) => paths.add(filePath));
 
-  statusPaths.forEach((changedPath) => paths.add(changedPath));
+  const statusPaths = new Set(
+    status.value.filter(({ isNew }) => !isNew).map(({ filePath }) => filePath)
+  );
 
   return { isOk: true, value: { hasBranchDiff, paths, statusPaths } };
 }
@@ -290,19 +299,27 @@ export function listChangedPaths(params: {
 /**
  * List which of the files git sees uncommitted changes to, in one `git status`
  * call.
+ *
+ * - `shouldSkipNew` leaves out files `HEAD` doesn't have, whose every line is
+ *   new, for a warning about changes besides the sign-off.
  */
 export function listDirtyPaths(params: {
   filePaths: readonly string[];
   repoRoot: string;
+  shouldSkipNew?: boolean;
 }): Outcome<string[]> {
-  const { filePaths, repoRoot } = params;
+  const { filePaths, repoRoot, shouldSkipNew = false } = params;
   const status = readStatusPaths({ pathspecs: filePaths, repoRoot });
 
   if (!status.isOk) {
     return status;
   }
 
-  const dirtyPaths = new Set(status.value);
+  const dirtyPaths = new Set(
+    status.value
+      .filter(({ isNew }) => !shouldSkipNew || !isNew)
+      .map(({ filePath }) => filePath)
+  );
 
   return {
     isOk: true,
@@ -420,7 +437,7 @@ function describeGitFailure(error: unknown): string {
 
 /**
  * List the paths `git status` reports under the pathspecs, untracked files
- * included.
+ * included, each marked when `HEAD` doesn't have it.
  *
  * - A rename or copy, marked in either status column, is followed by an extra
  *   entry holding its origin path, which is skipped.
@@ -431,9 +448,9 @@ function describeGitFailure(error: unknown): string {
 function readStatusPaths(params: {
   pathspecs: readonly string[];
   repoRoot: string;
-}): Outcome<string[]> {
+}): Outcome<{ filePath: string; isNew: boolean }[]> {
   const { pathspecs, repoRoot } = params;
-  const statusPaths: string[] = [];
+  const statusPaths: { filePath: string; isNew: boolean }[] = [];
   let output: string;
   let isOriginPath = false;
 
@@ -459,7 +476,10 @@ function readStatusPaths(params: {
         return;
       }
 
-      statusPaths.push(entry.slice(3));
+      statusPaths.push({
+        filePath: entry.slice(3),
+        isNew: NEW_FILE.test(entry),
+      });
       isOriginPath = RENAME_OR_COPY.test(entry);
     });
 
