@@ -16,6 +16,7 @@ import type { RunContext } from "./run-context.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { isStale, readStatusText } from "./frontmatter/read.ts";
 import { RECORD_STATUSES } from "./frontmatter/types.ts";
+import { toTerminalLine } from "./output.ts";
 import {
   loadCandidate,
   loadCandidates,
@@ -462,16 +463,4 @@ function toStatusRecord(candidate: Candidate): StatusRecord {
     type: summary.type ?? null,
     verifiedAt: summary.verifiedAt ?? null,
   };
-}
-
-/**
- * Make text safe as one line of a terminal: the record's own text, in a
- * status, a path, or a YAML error's excerpt, can't break the line, send
- * control codes, or reorder it with bidi marks.
- *
- * - Line and paragraph separators count too, since some terminals and
- *   transcripts break lines on them.
- */
-function toTerminalLine(text: string): string {
-  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, " ").trimEnd();
 }

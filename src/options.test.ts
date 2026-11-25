@@ -5,8 +5,10 @@ import {
   parseCommand,
   parseDiffArgs,
   parseGuideArgs,
+  parseIndexArgs,
   parseInitArgs,
   parseStatusArgs,
+  parseTagsArgs,
 } from "./options.ts";
 
 const STATUS_DEFAULTS = {
@@ -170,6 +172,16 @@ describe("parseCommand", () => {
       args: ["guide"],
       description: "guide, with no arguments",
       expected: { args: [], kind: "guide" },
+    },
+    {
+      args: ["index", "--check"],
+      description: "index, with the arguments after it",
+      expected: { args: ["--check"], kind: "index" },
+    },
+    {
+      args: ["tags", "--format", "json"],
+      description: "tags, with the arguments after it",
+      expected: { args: ["--format", "json"], kind: "tags" },
     },
   ])("reads $description", ({ args, expected }) => {
     // Given/When/Then - the command and its arguments, or why there's none
@@ -414,5 +426,126 @@ describe("parseStatusArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseStatusArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseIndexArgs", () => {
+  test.each([
+    {
+      args: [],
+      description: "no arguments",
+      options: { bundles: [], isCheck: false },
+    },
+    {
+      args: ["--bundle", "a", "--bundle", "b", "--check"],
+      description: "bundles and --check",
+      options: { bundles: ["a", "b"], isCheck: true },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When/Then - the options
+    expect(parseIndexArgs(args)).toStrictEqual({ kind: "options", options });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "--check"], description: "-h alongside other flags" },
+    {
+      args: ["--help", "--yes"],
+      description: "--help beside a flag index doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseIndexArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["--yes"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+    {
+      args: ["--bundle"],
+      description: "--bundle with no value",
+      message: expect.stringContaining("--bundle") as unknown,
+    },
+    {
+      args: ["docs/decisions/index.md"],
+      description: "a path",
+      message:
+        "okf index takes no paths, but was given docs/decisions/index.md.",
+    },
+    {
+      args: ["--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseIndexArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseTagsArgs", () => {
+  test.each([
+    {
+      args: [],
+      description: "no arguments",
+      options: { bundles: [], format: "text" },
+    },
+    {
+      args: ["--bundle", "a", "--format", "json"],
+      description: "a bundle and --format json",
+      options: { bundles: ["a"], format: "json" },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When/Then - the options
+    expect(parseTagsArgs(args)).toStrictEqual({ kind: "options", options });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    {
+      args: ["-h", "--format", "json"],
+      description: "-h alongside other flags",
+    },
+    {
+      args: ["--help", "--check"],
+      description: "--help beside a flag tags doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseTagsArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["--check"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--check") as unknown,
+    },
+    {
+      args: ["--format"],
+      description: "--format with no value",
+      message: expect.stringContaining("--format") as unknown,
+    },
+    {
+      args: ["--format", "yaml"],
+      description: "a format it doesn't print",
+      message: '--format takes json or text, not "yaml".',
+    },
+    {
+      args: ["cli"],
+      description: "a path",
+      message: "okf tags takes no paths, but was given cli.",
+    },
+    {
+      args: ["--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseTagsArgs(args)).toStrictEqual({ kind: "invalid", message });
   });
 });

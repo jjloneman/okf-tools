@@ -223,6 +223,150 @@ describe("run as okf, before a command runs", () => {
   });
 });
 
+describe.each([
+  {
+    command: "index",
+    expected: "[okf] Updated docs/decisions/index.md.",
+    usage: "[okf] usage: okf index [options]",
+  },
+  {
+    command: "tags",
+    expected: "[okf] cli (1)",
+    usage: "[okf] usage: okf tags [options]",
+  },
+])("run as okf $command", ({ command, expected, usage }) => {
+  /** Run the command from the repo root, or another directory. */
+  function runCommand(args: string[], cwd = repo.root): Promise<number> {
+    return run({
+      args: [command, ...args],
+      cwd,
+      isInteractive: false,
+      program: "okf",
+    });
+  }
+
+  test("prints its usage for --help", async () => {
+    // When - asking for help
+    const code = await runCommand(["--help"]);
+
+    // Then - its own usage on stdout
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos.join("\n")).toContain(usage);
+    expect(errors).toStrictEqual([]);
+  });
+
+  test("prints why and its usage for a usage error", async () => {
+    // When - passing a verify flag
+    const code = await runCommand(["--yes"]);
+
+    // Then - a usage error, with the usage
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toMatch(/--yes[\s\S]*usage: okf /u);
+  });
+
+  test("runs over the configured bundles", async () => {
+    // Given - a record with a tag, and an index that doesn't list it
+    repo.write(
+      "docs/decisions/a.md",
+      record(["type: Decision", "title: A", "tags: [cli]"])
+    );
+    repo.write("docs/decisions/index.md", "# Decisions\n");
+    mkdirSync(path.join(repo.root, "docs/references"));
+
+    // When - running it from a folder in the repo
+    const code = await runCommand([], path.join(repo.root, "docs"));
+
+    // Then - it ran, writing as `okf`
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([]);
+    expect(infos).toStrictEqual([expected]);
+  });
+
+  test("runs over the bundles named with --bundle, without a signer", async () => {
+    // Given - a config naming no bundles and no signer
+    repo.write("package.json", "{}\n");
+    repo.write(
+      "notes/a.md",
+      record(["type: Decision", "title: A", "tags: [cli]"])
+    );
+    repo.write("notes/index.md", "# Notes\n");
+
+    // When - naming the bundle
+    const code = await runCommand(["--bundle", "notes"]);
+
+    // Then - it ran
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([expected.replace("docs/decisions", "notes")]);
+  });
+
+  test.each([
+    {
+      description: "no bundles are configured",
+      message: "package.json",
+      setUp: (): void => {
+        repo.write("package.json", "{}\n");
+      },
+    },
+    {
+      description: "a bundle doesn't exist",
+      message: "No bundle directory at",
+      setUp: (): void => {
+        repo.write(
+          "package.json",
+          JSON.stringify({ okf: { bundles: ["docs/missing"] } })
+        );
+      },
+    },
+    {
+      description: "the config isn't valid JSON",
+      message: "package.json",
+      setUp: (): void => {
+        repo.write("package.json", "{");
+      },
+    },
+  ])("fails when $description", async ({ message, setUp }) => {
+    // Given - a repo it can't resolve bundles in
+    setUp();
+
+    // When - running it
+    const code = await runCommand([]);
+
+    // Then - why, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain(message);
+    expect(infos).toStrictEqual([]);
+  });
+
+  test("fails outside a git repo", async () => {
+    // Given - a folder in no repo
+    const outside = realpathSync(mkdtempSync(path.join(tmpdir(), "okf-out-")));
+
+    try {
+      // When - running it there
+      const code = await runCommand([], outside);
+
+      // Then - why, and exit 1
+      expect(code).toBe(EXIT_CODES.failure);
+      expect(errors).toHaveLength(1);
+    } finally {
+      rmSync(outside, { force: true, recursive: true });
+    }
+  });
+
+  test("reports an unexpected error instead of throwing", async () => {
+    // Given - a package.json that's a folder, so reading it throws
+    rmSync(path.join(repo.root, "package.json"));
+    mkdirSync(path.join(repo.root, "package.json"));
+
+    // When - running it
+    const code = await runCommand([]);
+
+    // Then - the error, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("EISDIR");
+  });
+});
+
 describe.each(INVOCATIONS)("as $command", (current) => {
   beforeEach(() => {
     invocation = current;

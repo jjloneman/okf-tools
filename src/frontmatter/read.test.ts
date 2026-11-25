@@ -154,9 +154,11 @@ describe("readRecordSummary", () => {
 
     // Then - the checklist fields come back
     expect(summary).toStrictEqual({
+      description: undefined,
       generatedAt: "2026-10-01T15:00:00Z",
       staleAfter: "2027-01-01T00:00:00Z",
       status: "draft",
+      tags: [],
       title: "What every export promises",
       type: "Decision",
       verifiedAt: "2026-09-28T09:00:00Z",
@@ -454,9 +456,11 @@ describe("readRecordSummary", () => {
 
     // Then - each read as what its anchor names
     expect(summary).toStrictEqual({
+      description: undefined,
       generatedAt: "2026-10-01T15:00:00Z",
       staleAfter: undefined,
       status: "draft",
+      tags: [],
       title: "What every export promises",
       type: "Decision",
       verifiedAt: undefined,
@@ -597,14 +601,106 @@ describe("readRecordSummary", () => {
 
     // Then - every other field is undefined
     expect(summary).toStrictEqual({
+      description: undefined,
       generatedAt: undefined,
       staleAfter: undefined,
       status: "draft",
+      tags: [],
       title: undefined,
       type: undefined,
       verifiedAt: undefined,
       writtenStatus: "draft",
     });
+  });
+
+  test.each([
+    {
+      description: "a block list",
+      lines: ["tags:", "  - cli", "  - api"],
+    },
+    { description: "a flow list", lines: ["tags: [cli, api]"] },
+    {
+      description: "a flow list wrapped over lines",
+      lines: ["tags:", "  [", "    cli,", "    api,", "  ]"],
+    },
+    {
+      description: "a list with duplicates",
+      lines: ["tags: [cli, api, cli, api]"],
+    },
+    {
+      description: "items that aren't non-empty strings",
+      lines: ['tags: [cli, "", { a: b }, [c], api]'],
+    },
+    {
+      description: "an item written as an alias",
+      lines: ["defs: [&k cli]", "tags: [*k, api]"],
+    },
+    {
+      description: "the list written as an alias",
+      lines: ["defs: [&t [cli, api]]", "tags: *t"],
+    },
+  ])("reads tags out of $description, in order, each once", ({ lines }) => {
+    // Given - a record whose tags are written that way
+    const text = record(["type: Decision", ...lines]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - the two tags, in the order first listed
+    expect(summary?.tags).toStrictEqual(["cli", "api"]);
+  });
+
+  test.each([
+    { description: "a single value", lines: ["tags: cli"] },
+    { description: "a mapping", lines: ["tags: { cli: true }"] },
+    { description: "an empty value", lines: ["tags:"] },
+    { description: "an empty list", lines: ["tags: []"] },
+  ])("reads no tags out of $description", ({ lines }) => {
+    // Given - a record whose tags aren't a list of strings
+    const text = record(["type: Decision", ...lines]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - no tags
+    expect(summary?.tags).toStrictEqual([]);
+  });
+
+  test.each([
+    {
+      description: "a plain description",
+      expected: "Every export returns a fallback.",
+      lines: ["description: Every export returns a fallback."],
+    },
+    {
+      description: "a quoted description",
+      expected: "Every export: a fallback.",
+      lines: ['description: "Every export: a fallback."'],
+    },
+    {
+      description: "a folded description",
+      expected: "Every export returns\na fallback.\n",
+      lines: ["description: >", "  Every export returns", "", "  a fallback."],
+    },
+    {
+      description: "a description written as an alias",
+      expected: "A fallback.",
+      lines: ["defs: [&d A fallback.]", "description: *d"],
+    },
+    {
+      description: "a description that isn't a single value",
+      expected: undefined,
+      lines: ["description: [a, b]"],
+    },
+  ])("reads $description", ({ expected, lines }) => {
+    // Given - a record with that description
+    const text = record(["type: Decision", ...lines]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - its value, without quotes
+    expect(summary?.description).toBe(expected);
   });
 
   test("returns undefined without a frontmatter block", () => {

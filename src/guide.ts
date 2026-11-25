@@ -28,7 +28,8 @@ export const RECORD_RULES = `- **Write a new record as \`status: draft\`**, and 
   - Pass \`--changed\` instead only when they asked for every changed record.
   - Never verify a record as a side effect of drafting or editing it.
 - **Write \`tags\` as a block list**, one \`- tag\` per line, sorted, in kebab-case.
-  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.`;
+  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.
+  - List the tags the bundles already use with \`okf tags\`, which reads every layout, rather than \`grep\`.`;
 
 /** Each command, and when an agent may run it, as Markdown bullets. */
 const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, and writes nothing. Run it whenever you need to know which records are draft, changed, or stale; \`--format json\` prints it for a program.
@@ -36,6 +37,9 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
 - **\`okf verify --yes <record>...\`** signs records off and commits just those files, or with \`--no-commit\` leaves committing to the person. Run it only when the person asks you to, as the rules above say.
   - It signs as the configured \`okf.verifiedBy\`, the person, since the approval is theirs; never pass \`--by\` with your own name.
 - **\`okf verify\`** without \`--yes\` asks in a terminal which records to sign off. It's for the person, not for you.
+- **\`okf tags\`** lists every tag in the bundles with its record count, and writes nothing. Run it whenever you choose a record's tags; \`--format json\` prints it for a program.
+- **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, or retitle a record, in the same change.
+  - \`okf index --check\` writes nothing, so run it whenever you like.
 - **\`okf init\`** writes the \`okf\` config and the agent block. Run it only when the person asks you to set up okf-tools or refresh the block.
   - \`okf init --check\` writes nothing, so run it whenever you like.
 - **\`okf guide\`** prints this guide.`;

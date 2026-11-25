@@ -56,9 +56,11 @@ const FENCE = "---";
  *   their working set, not the format's full list.
  */
 export const FRONTMATTER_KEYS = {
+  description: "description",
   generated: "generated",
   staleAfter: "stale_after",
   status: "status",
+  tags: "tags",
   title: "title",
   type: "type",
   verified: "verified",
