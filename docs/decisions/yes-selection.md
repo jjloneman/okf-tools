@@ -10,7 +10,7 @@ tags:
   - selection
   - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:52:27Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:19:50Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -32,6 +32,11 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
   - or one or more record paths, relative to where the command runs, each an existing `.md` file directly inside a bundle, other than `index.md`.
     - As of 2026-11-25, other than `log.md` too, the other file name OKF reserves (issue #31).
     - Under pnpm or npm, that's the folder the script was called from (`INIT_CWD`) only when it's in the package's repo; otherwise, as with `pnpm --dir <package>` from another repo, it's the package root.
+    - As of 2026-11-25, a record path and a configured bundle may take any spelling the disk resolves to the same file, such as another case on macOS: each is kept as given when git's index holds that spelling, and otherwise spelled as the disk spells it, since git compares paths byte for byte and, after a rename only in case, follows the index (issue #30).
+      - The folder the command runs from is resolved through symlinks and into the disk's spelling when it isn't already inside the repo as git spells its root, so running from a link to the repo works; one already inside is kept as given, so a record path through a link inside the repo is still refused.
+      - An absolute record path or `--bundle` is still read as given, so one that reaches the repo through a symlink above it counts as outside the repo.
+      - Names from the disk and names git prints are compared by their Unicode NFC form, since git on macOS composes the names it prints while the disk keeps the form a file was created with; on a disk that tells the forms apart, two names that differ only in form count as one.
+      - A record path through a symlink inside the repo is still refused, as [How okf-verify writes and commits records](writes.md) says.
 - **Every other combination is a usage error:**
   - `--yes` alone selects nothing;
   - `--changed` together with record paths;
@@ -59,6 +64,8 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
 - A sign-off left on disk by a commit a hook rejected would otherwise be skipped by every re-run, so a fix to the hook could never finish it (issue #29).
 - A changed record that's skipped because it can't be read or parsed would look signed off once the run succeeds, so the run fails instead (issue #8).
   - A near-miss block was taken for no frontmatter, so a draft with a typo in a fence read as "Nothing to verify" (issue #31).
+- git compares paths byte for byte, so a bundle configured in another case found no changed records, a record named in another case was edited and then failed to commit, a decomposed file name never counted as changed, and a folder reached through a symlink put every record outside the repo (issue #30).
+  - **Rejected:** comparing paths case-insensitively, since a case-sensitive disk can hold two records that differ only in case; the disk, and git's index, decide which spellings name one file.
 - `pnpm --dir` and `npm --prefix` set `INIT_CWD` to the caller's folder, so trusting it anywhere let `--yes --changed` read another repo's config and sign its drafts (issue #26).
 - Every sign-off must clear the record it signs; otherwise a run asks for a sign-off no sign-off can satisfy (issue #32).
   - OKF reads `verified` as how recently a record was reviewed, so the latest entry counts, not the first.
