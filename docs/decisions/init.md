@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: What `okf init` writes, and how it keeps the agent block current
-description: "`okf init` writes the `okf` block of `package.json` and a block of agent rules between two marker lines in `AGENTS.md`, rewriting only the text between them; malformed markers are refused, and `--check` fails when a block is missing or stale."
+description: "`okf init` writes the `okf` block of `package.json`, a block of agent rules between two marker lines in `AGENTS.md`, rewriting only the text between them, and the okf skills in `.claude/skills`; malformed markers and skills it didn't write are refused, and `--check` fails when a block or a skill is missing or stale."
 tags:
   - agents
   - cli
@@ -11,7 +11,7 @@ tags:
   - safety
   - tags
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:26:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T23:17:23Z }
 ---
 
 # What `okf init` writes, and how it keeps the agent block current
@@ -36,7 +36,8 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
     - **Rejected:** requiring one, since `okf verify --by` can name the signer, and a shared repo may leave `okf.verifiedBy` unset on purpose.
   - **Rejected:** creating a `package.json` when there's none; `okf init` refuses and says to add one.
 - **Every file is planned before any is written,** so a refusal in one writes none. Each file, `package.json` included, must resolve inside the repo, an existing one must be a file, and a missing one's nearest existing ancestor must be a folder, so a write can't fail on a known problem after others have landed. A write that fails midway names the files already written. It never commits.
-- **`okf init --check` writes nothing,** and exits `1` when a target is missing, has no block, has a stale one, or has malformed markers; it checks the blocks, not the config. `--check` takes no `--bundle` or `--by`.
+- **It writes the okf skills to `.claude/skills/<name>/SKILL.md`,** whole, refreshing only a file an earlier `okf init` wrote, and refusing one it didn't, writing nothing (#51); see [Which skills okf-tools ships, and how okf init installs them](skills.md).
+- **`okf init --check` writes nothing,** and exits `1` when a target is missing, has no block, has a stale one, or has malformed markers, or when a skill is missing, stale, or not its own; it checks the blocks and the skills, not the config. `--check` takes no `--bundle` or `--by`.
 - **The block's text is one constant, `AGENT_BLOCK`,** which the README's Agents section quotes, and a test keeps the two the same, so the rules are written once.
   - Its intro and rules come from `src/guide.ts`, which `okf guide` prints too, and it ends with a line pointing at `okf guide` for the commands (#50); see [What `okf guide` prints](guide.md).
   - It names only commands that exist: `okf tags` (#53) added the sub-bullet under `tags` that lists the bundles' tags with it, and `okf init` then brings every repo up to date.
@@ -51,8 +52,10 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
 ## Links
 
 - [Issue #49](https://github.com/jjloneman/okf-tools/issues/49)
+- [Issue #51](https://github.com/jjloneman/okf-tools/issues/51), which added the skills
 - [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which added the tags rules to the block's plan
 - [How okf-tools lays out its commands](command-layout.md)
 - [What `okf guide` prints](guide.md)
+- [Which skills okf-tools ships, and how okf init installs them](skills.md)
 - [How a record's tags are laid out](tags-layout.md)
 - [Who verifies a record](who-verifies.md)

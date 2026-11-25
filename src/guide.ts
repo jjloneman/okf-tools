@@ -15,6 +15,7 @@ import type { Output } from "./output.ts";
 
 import { EXIT_CODES } from "./exit-codes.ts";
 import { GUIDE_USAGE, parseGuideArgs } from "./options.ts";
+import { SKILLS } from "./skills.ts";
 
 /** What the records are, the paragraph that opens the block and the guide. */
 export const RECORDS_INTRO =
@@ -45,15 +46,16 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
 - **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, in the same change.
 - **\`okf migrate\`** prints the changes that move each bundle from OKF v0.1 or v0.2 to v0.3, and writes nothing; \`--write\` applies them. Run it bare whenever you like, but pass \`--write\` only when the person asks you to migrate.
   - \`okf migrate --check\` writes nothing, and fails while a bundle still needs migrating.
-- **\`okf init\`** writes the \`okf\` config and the agent block. Run it only when the person asks you to set up okf-tools or refresh the block.
+- **\`okf init\`** writes the \`okf\` config, the agent block, and the okf skills in \`.claude/skills\`. Run it only when the person asks you to set up okf-tools, or to refresh the block or the skills.
   - \`okf init --check\` writes nothing, so run it whenever you like.
 - **\`okf guide\`** prints this guide.`;
 
 /**
  * The whole guide `okf guide` prints, as Markdown with `\n` line breaks.
  *
- * - It's the shared rules, then the commands, so an agent reading the
- *   repo's block learns nothing here that contradicts it.
+ * - It's the shared rules, then the commands, then the skills `okf init`
+ *   installs, so an agent reading the repo's block learns nothing here that
+ *   contradicts it.
  */
 export const GUIDE: string = [
   "# OKF records",
@@ -64,6 +66,11 @@ export const GUIDE: string = [
   "## Commands",
   COMMAND_RULES,
   "Run `okf <command> --help` for a command's flags.",
+  "## Skills",
+  "`okf init` installs these skills in `.claude/skills`, from the same version as this guide. Load the one that fits the task:",
+  SKILLS.map(
+    ({ description, name }) => `- **\`${name}\`**: ${description}`
+  ).join("\n"),
 ].join("\n\n");
 
 /**

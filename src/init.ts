@@ -1,6 +1,7 @@
 /*
- * `okf init`: write the `okf` config and the agent-instructions block, or,
- * with `--check`, only say whether the block is current.
+ * `okf init`: write the `okf` config, the agent-instructions block, and the
+ * okf skills, or, with `--check`, only say whether the block and the skills
+ * are current.
  *
  * - Every file is planned before any is written, so a refusal in one leaves
  *   all of them untouched.
@@ -20,6 +21,7 @@ import type { ExitCode } from "./exit-codes.ts";
 import type { InitOptions } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
 import type { Output } from "./output.ts";
+import type { Skill } from "./skills.ts";
 
 import { findBlock, writeBlock } from "./agent-block.ts";
 import {
@@ -36,6 +38,7 @@ import { INIT_USAGE, parseInitArgs } from "./options.ts";
 import { describeError } from "./output.ts";
 import { writeOkfMember } from "./package-json.ts";
 import { resolveBundleDirs } from "./repo.ts";
+import { judgeSkill, skillFilePath, SKILLS } from "./skills.ts";
 import { spellLikeRepoRoot } from "./working-directory.ts";
 
 /** A file `okf init` will write, and the text it will hold. */
@@ -62,6 +65,30 @@ type PlannedWrite = {
   text: string;
 };
 
+/** A skill's `SKILL.md`, as installed in the repo. */
+type SkillTarget = {
+  /**
+   * The file, from the repo root, with `/` separators.
+   *
+   * @example ".claude/skills/okf-record/SKILL.md"
+   */
+  filePath: string;
+
+  /**
+   * The file's text, or `undefined` when it doesn't exist.
+   *
+   * @example `"---\nname: okf-record\n…"`
+   */
+  installed: string | undefined;
+
+  /**
+   * The skill as this version writes it.
+   *
+   * @example `SKILLS[0]`
+   */
+  skill: Skill;
+};
+
 /** An instruction file the block goes in, read from the repo. */
 type Target = {
   /**
@@ -84,6 +111,14 @@ const AGENTS_PATH = "AGENTS.md";
 
 /** The instruction file `--copilot` adds, refreshed whenever it holds a block. */
 const COPILOT_PATH = ".github/copilot-instructions.md";
+
+/** What keeps a skill from being current, after its file's name. */
+const SKILL_PROBLEMS = {
+  foreign:
+    "wasn't written by okf init, so it's left alone; move it, then run okf init to install the skill.",
+  missing: "doesn't exist; run okf init to write it.",
+  stale: "is out of date; run okf init to refresh it.",
+} as const;
 
 /**
  * Run `okf init` with its arguments, after the command's name.
@@ -149,9 +184,24 @@ export function runInit(params: {
       return EXIT_CODES.failure;
     }
 
+    const skills = readSkillTargets(repoRoot);
+
+    if (!skills.isOk) {
+      output.error(skills.reason);
+
+      return EXIT_CODES.failure;
+    }
+
     return options.isCheck
-      ? checkBlocks({ output, targets: targets.value })
-      : writeAll({ cwd, options, output, repoRoot, targets: targets.value });
+      ? checkAll({ output, skills: skills.value, targets: targets.value })
+      : writeAll({
+          cwd,
+          options,
+          output,
+          repoRoot,
+          skills: skills.value,
+          targets: targets.value,
+        });
   } catch (error) {
     output.error(describeError(error));
 
@@ -160,15 +210,17 @@ export function runInit(params: {
 }
 
 /**
- * Say whether each target holds the current block, writing nothing.
+ * Say whether each target holds the current block, and each skill is
+ * current, writing nothing.
  *
- * @returns `0` when every block is current, else `1`.
+ * @returns `0` when every block and skill is current, else `1`.
  */
-function checkBlocks(params: {
+function checkAll(params: {
   output: Output;
+  skills: readonly SkillTarget[];
   targets: readonly Target[];
 }): ExitCode {
-  const { output, targets } = params;
+  const { output, skills, targets } = params;
   let isCurrent = true;
 
   for (const { filePath, text } of targets) {
@@ -179,6 +231,17 @@ function checkBlocks(params: {
     } else {
       isCurrent = false;
       output.error(`${filePath} ${problem}`);
+    }
+  }
+
+  for (const { filePath, installed, skill } of skills) {
+    const state = judgeSkill({ installed, skill });
+
+    if (state === "current") {
+      output.info(`${filePath} is up to date.`);
+    } else {
+      isCurrent = false;
+      output.error(`${filePath} ${SKILL_PROBLEMS[state]}`);
     }
   }
 
@@ -381,6 +444,27 @@ function readRepoFile(params: {
 }
 
 /**
+ * Read each skill's installed `SKILL.md`, refusing one that can't be
+ * written, as the instruction files are.
+ */
+function readSkillTargets(repoRoot: string): Outcome<SkillTarget[]> {
+  const skills: SkillTarget[] = [];
+
+  for (const skill of SKILLS) {
+    const filePath = skillFilePath(skill.name);
+    const read = readRepoFile({ filePath, repoRoot });
+
+    if (!read.isOk) {
+      return read;
+    }
+
+    skills.push({ filePath, installed: read.value, skill });
+  }
+
+  return { isOk: true, value: skills };
+}
+
+/**
  * Read the instruction files the block goes in: `AGENTS.md` always, and the
  * Copilot file under `--copilot` or when it already holds a marker.
  *
@@ -419,9 +503,10 @@ function readTargets(params: {
 }
 
 /**
- * Plan the config and every block, then write the files that change.
+ * Plan the config, every block, and every skill, then write the files that
+ * change.
  *
- * - A refusal anywhere writes nothing.
+ * - A refusal anywhere writes nothing, a skill someone else wrote included.
  *
  * @returns `0` when every file is written or already current, else `1`.
  */
@@ -430,9 +515,10 @@ function writeAll(params: {
   options: InitOptions;
   output: Output;
   repoRoot: string;
+  skills: readonly SkillTarget[];
   targets: readonly Target[];
 }): ExitCode {
-  const { cwd, options, output, repoRoot, targets } = params;
+  const { cwd, options, output, repoRoot, skills, targets } = params;
   const config = planConfig({ cwd, options, output, repoRoot });
 
   if (!config.isOk) {
@@ -464,6 +550,24 @@ function writeAll(params: {
       output.info(`${filePath}'s okf block is up to date.`);
     } else {
       writes.push({ filePath, isNew: text === undefined, text: update.text });
+    }
+  }
+
+  for (const { filePath, installed, skill } of skills) {
+    const state = judgeSkill({ installed, skill });
+
+    if (state === "foreign") {
+      output.error(
+        `${filePath} ${SKILL_PROBLEMS.foreign} Nothing was written.`
+      );
+
+      return EXIT_CODES.failure;
+    }
+
+    if (state === "current") {
+      output.info(`${filePath} is up to date.`);
+    } else {
+      writes.push({ filePath, isNew: state === "missing", text: skill.text });
     }
   }
 
