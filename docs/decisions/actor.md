@@ -10,20 +10,20 @@ sources:
   - id: yaml-spec
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:18:43Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T16:09:03Z }
 verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
 # Which actors can sign a record
 
-`okf-verify` writes the signer into an inline entry, `verified: { by: <actor>, at: <timestamp> }`, by replacing lines rather than re-serializing YAML. So the actor has to be safe to write there unquoted.
+`okf-verify` writes the signer into an inline entry, `verified: { by: <actor>, at: <timestamp> }`, editing only the characters that change. As of 2026-11-25, the entry itself is written by the `yaml` package (`formatEntry` in `src/frontmatter/edit.ts`), which would quote an actor that needed it. The rule below keeps every actor one YAML reads back as the same string unquoted, so the entries it writes keep the unquoted shape people and agents write by hand.
 
 ## Decision
 
 As of 2026-11-11, from `src/config.ts`:
 
-- **Who signs** comes from `--by <actor>`, else `okf.verifiedBy` in `package.json`. With neither, the run stops with a usage error; there's no default actor.
+- **Who signs** comes from `--by <actor>`, else `okf.verifiedBy` in `package.json`. With neither, the run stops with exit `1` and, as of 2026-11-25, an error naming the `package.json` it read; there's no default actor.
 - **An actor must:**
   - start with a letter, so YAML can't read it as a number, a date, a sexagesimal like `12:30`, or an indicator such as `*`, `&`, `!`, or `@`;
   - have a `:` or a `/` after its first character, a kind or a producer, as OKF's actor convention does: `human:jjloneman`, `claude-code/2.1.316`[^okf-spec];
@@ -34,8 +34,8 @@ As of 2026-11-11, from `src/config.ts`:
 
 ## Why
 
-- Inside a flow mapping, YAML treats `,`, `{`, `}`, `[`, and `]` as structure, `#` after a space as a comment, and a leading indicator as syntax[^yaml-spec]. An actor holding any of them would corrupt the record or read back as something else.
-- Quoting the actor would avoid that, but would also make every `verified` line differ in shape from the ones people and agents already write unquoted.
+- Inside a flow mapping, YAML treats `,`, `{`, `}`, `[`, and `]` as structure, `#` after a space as a comment, and a leading indicator as syntax[^yaml-spec]. An actor holding any of them has to be quoted, and one written unquoted, as people and agents write entries by hand, would corrupt the record or read back as something else.
+- Quoting keeps such an actor safe in the entries `okf-verify` writes, but they would then differ in shape from the unquoted ones written by hand, and a hand-written entry that left the quotes off would sign as someone else, or break the record.
 - No default actor, because signing as the wrong person is worse than stopping: every run names who signs.
 
 ## Consequences
