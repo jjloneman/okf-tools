@@ -9,8 +9,8 @@ tags:
   - safety
   - selection
   - verification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:42:21Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -28,6 +28,7 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
     - a `generated.at` that can't be read can't be judged, so the record counts as unchanged once signed;
     - as of 2026-11-25, a `generated.at` ahead of the clock, such as one written in the wrong time zone, is judged like any other, and the record is refused when it's listed instead (issue #77);
   - or one or more record paths, relative to where the command runs, each an existing `.md` file directly inside a bundle, other than `index.md`.
+    - As of 2026-11-25, other than `log.md` too, the other file name OKF reserves (issue #31).
     - Under pnpm or npm, that's the folder the script was called from (`INIT_CWD`) only when it's in the package's repo; otherwise, as with `pnpm --dir <package>` from another repo, it's the package root.
 - **Every other combination is a usage error:**
   - `--yes` alone selects nothing;
@@ -39,11 +40,13 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
   - `--no-commit` still skips it.
 - **One record that refuses the edit means nothing is written.**
 - **A selected record that can't be read, or whose frontmatter isn't valid YAML, fails the run**, with a line naming it and why, whether it was named or found by `--changed`; it's never left out unseen.
+  - As of 2026-11-25, so does one whose frontmatter block is a near miss, such as one with no closing `---`, blanks around a fence, a blank line before the opening one, or a `...` close, with a line naming what's wrong with the fence (issue #31).
+    - A file whose first non-blank line starts with `---`, indented or not, a Markdown rule included, counts as one; any other file with no block still isn't a record.
   - As of 2026-11-25, so does one whose `generated.at` is ahead of the clock, with `generated.at is ahead of the clock; fix its time zone`, signed off before or not (issue #77).
     - **Rejected:** counting it as unchanged once signed, as issue #32 did, since a record regenerated after an older sign-off then read as verified until the clock passed its `generated.at`, which a typo such as `2099` puts off for good.
 - **Exit codes:**
   - `0` — the run worked (or, interactively, the person cancelled);
-  - `1` — a usage error, a git failure, a selected record that can't be read, isn't valid YAML, or was generated ahead of the clock, or a record that refused the edit;
+  - `1` — a usage error, a git failure, a selected record that can't be read, has a near-miss frontmatter block, isn't valid YAML, or was generated ahead of the clock, or a record that refused the edit;
   - `2` — `--yes` found nothing that still needs a sign-off.
 
 ## Why
@@ -53,6 +56,7 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
 - A record already signed off needs nothing, so skipping it lets an agent pass the same list twice safely.
 - A sign-off left on disk by a commit a hook rejected would otherwise be skipped by every re-run, so a fix to the hook could never finish it (issue #29).
 - A changed record that's skipped because it can't be read or parsed would look signed off once the run succeeds, so the run fails instead (issue #8).
+  - A near-miss block was taken for no frontmatter, so a draft with a typo in a fence read as "Nothing to verify" (issue #31).
 - `pnpm --dir` and `npm --prefix` set `INIT_CWD` to the caller's folder, so trusting it anywhere let `--yes --changed` read another repo's config and sign its drafts (issue #26).
 - Every sign-off must clear the record it signs; otherwise a run asks for a sign-off no sign-off can satisfy (issue #32).
   - OKF reads `verified` as how recently a record was reviewed, so the latest entry counts, not the first.

@@ -31,7 +31,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 - it adds or renews the signer's `verified` entry with the current UTC time;
 - it commits just those files, never pushing and never skipping hooks, and writes nothing when git would refuse that commit, such as mid-merge or for an ignored file;
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
-- it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end;
+- it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end, and one whose block is almost right, such as one with no closing `---` or blanks around a fence, rather than take it for no frontmatter;
 - it refuses a record that isn't valid UTF-8, as the OKF spec requires, rather than rewrite the bytes it can't read;
 - it refuses a record or bundle reached through a symlink, since git commits the link, not the file it points to;
 - it edits only the layouts below, and refuses any other with a reason, for a hand edit.
@@ -64,7 +64,7 @@ Then configure it in `package.json`:
 }
 ```
 
-- **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files directly inside each, other than `index.md`.
+- **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files directly inside each, other than `index.md` and `log.md`, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#31-reserved-filenames).
 - **`okf.verifiedBy`** is the OKF actor each `verified` entry names.
 
 Both can be given on the command line instead (`--bundle`, `--by`); there is no default for either.
@@ -158,7 +158,7 @@ import {
 
 - `verifyRecord` takes the sign-off's `at` as RFC 3339 profiles ISO 8601: a date, `T`, a time to the minute or finer, and a zone, such as `2026-10-02T13:30:00Z` or `2026-10-02T15:30+02:00`. It refuses any other, so every sign-off it writes can be dated.
 - A refusal has a `kind` to switch on, one of `REFUSAL_KINDS` (`invalidParams`, `invalidYaml`, `noFrontmatter`, `unsupportedLayout`), beside its `reason` in words.
-- `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, and `findEditProblem` says why `verifyRecord` would refuse a record.
+- `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, or when a block is almost right, and `findEditProblem` says why `verifyRecord` would refuse a record.
 - A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
 - `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`), and never reads the clock: a `generated.at` ahead of it is judged like any other.
 
