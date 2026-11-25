@@ -1,0 +1,59 @@
+name: 💡 Product review reminder
+
+on:
+  schedule:
+    # Every Monday; the job sends only in every fourth week.
+    - cron: "23 8 * * 1"
+  workflow_dispatch: {}
+
+# Nothing by default; the job grants only what it uses.
+permissions: {}
+
+jobs:
+  remind:
+    name: 💡 Remind the owner a product review is due
+    # Never on a fork, which has no reason to remind anyone.
+    if: ${{ github.repository == 'jjloneman/okf-tools' }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # The topic passes through `env`, never into the script's text, and goes
+      # in the JSON body, so no URL or log line carries it.
+      - env:
+          EVENT_NAME: ${{ github.event_name }}
+          IDEAS_URL: ${{ github.server_url }}/${{ github.repository }}/issues?q=label%3A%22%F0%9F%92%A1+idea%22
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          # Cron can't count weeks, so the job counts them itself.
+          #
+          # - A scheduled run sends only when the weeks since the Unix epoch
+          #   are a multiple of four.
+          # - A manual run always sends, to test it or to make up a missed one.
+          week=$(( $(date -u +%s) / 604800 ))
+          if [[ "$EVENT_NAME" == "schedule" && $(( week % 4 )) -ne 0 ]]; then
+            echo "Week $week isn't a review week, so no push."
+            exit 0
+          fi
+
+          # A topic holds no whitespace, so dropping all of it matches the spec
+          # watch's trim for a secret saved with a trailing newline.
+          topic="${NTFY_TOPIC//[$'\t\n\r ']/}"
+          if [[ -z "$topic" ]]; then
+            echo "::notice::No NTFY_TOPIC secret, so no push."
+            exit 0
+          fi
+
+          jq --null-input \
+            --arg click "$IDEAS_URL" \
+            --arg topic "$topic" \
+            '{
+              click: $click,
+              message: "Run /product-review in okf-tools when you are ready. It opens one issue of ranked ideas.",
+              tags: ["bulb"],
+              title: "okf-tools: a product review is due",
+              topic: $topic
+            }' |
+            curl --fail --max-time 30 --silent --show-error --output /dev/null \
+              --header "content-type: application/json" \
+              --data-binary @- https://ntfy.sh/
+    timeout-minutes: 5
