@@ -317,8 +317,8 @@ commands:
           writing records
   index   sync each index.md's record lines and tag index from the
           records' frontmatter, or check they're current
-  init    write the \`okf\` config and the agent-instructions block, or
-          check the block is current
+  init    write the \`okf\` config, the agent-instructions block, and the
+          okf skills, or check the block and the skills are current
   migrate move bundles from OKF v0.1 or v0.2 to v0.3, rewriting the paths
           whose meaning changes; a dry run unless --write
   new     write a new draft record's frontmatter, stamped from the clock,
@@ -362,9 +362,9 @@ export type ParsedGuideArgs =
 /** How to call `okf guide`, printed for its `--help` and after a usage error. */
 export const GUIDE_USAGE = `usage: okf guide
 
-Prints, as Markdown, each command and when an agent may run it, and the rules
-for writing and verifying records, from the installed version. It reads and
-writes nothing.
+Prints, as Markdown, the rules for writing and verifying records, each command
+and when an agent may run it, and the skills \`okf init\` installs, from the
+installed version. It reads and writes nothing.
 
 options:
   --help, -h  print this help`;
@@ -994,9 +994,11 @@ function parseGuideCommandLine(args: readonly string[]) {
 export const INIT_USAGE = `usage: okf init [options]
        okf init --check [--copilot]
 
-Writes the \`okf\` block of package.json, and a block of agent instructions
-between \`<!-- okf:start -->\` and \`<!-- okf:end -->\` in AGENTS.md. Run it
-again to refresh the block; nothing outside the markers is changed.
+Writes the \`okf\` block of package.json, a block of agent instructions
+between \`<!-- okf:start -->\` and \`<!-- okf:end -->\` in AGENTS.md, and the
+okf-architecture, okf-record, and okf-review skills in .claude/skills. Run it
+again to refresh the block and the skills; nothing outside the markers is
+changed, and a skill folder it didn't write is refused.
 
 options:
   --bundle <dir>  a bundle directory to configure; repeat for more
@@ -1004,7 +1006,8 @@ options:
   --by <actor>    who signs off (default: keep \`okf.verifiedBy\`)
   --copilot       write the block to .github/copilot-instructions.md too;
                   a file that already holds it is always refreshed
-  --check         write nothing; fail when a block is missing or out of date
+  --check         write nothing; fail when a block or a skill is missing or
+                  out of date
   --help, -h      print this help`;
 
 /** The flags and path an `okf new` run was given. */

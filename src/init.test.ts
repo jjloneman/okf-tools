@@ -18,11 +18,18 @@ import { useTestRepo } from "#test/repo";
 import { AGENT_BLOCK, BLOCK_END, BLOCK_START } from "./agent-block.ts";
 import { run } from "./cli.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
+import { SKILL_MARKER_PREFIX, skillFilePath, SKILLS } from "./skills.ts";
 
 const { repo } = useTestRepo();
 
 /** The block as `okf init` writes it. */
 const BLOCK = `${BLOCK_START}\n${AGENT_BLOCK}\n\n${BLOCK_END}`;
+
+/** Each skill's `SKILL.md`, from the repo root, in the order init writes them. */
+const SKILL_PATHS = SKILLS.map(({ name }) => skillFilePath(name));
+
+/** The record skill's `SKILL.md`, which the tests change alone. */
+const RECORD_PATH = skillFilePath("okf-record");
 
 /** A block an older version wrote. */
 const STALE_BLOCK = `${BLOCK_START}\n- an old rule\n${BLOCK_END}`;
@@ -46,9 +53,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** Write every skill as this version would, so a test can leave them out. */
+function installSkills(): void {
+  for (const { name, text } of SKILLS) {
+    repo.write(skillFilePath(name), text);
+  }
+}
+
 /** The scratch repo's `package.json`, parsed. */
 function readManifest(): unknown {
   return JSON.parse(repo.read("package.json"));
+}
+
+/** The record skill, as this version writes it. */
+function readRecordSkill(): string {
+  const skill = SKILLS.find(({ name }) => name === "okf-record");
+
+  if (skill === undefined) {
+    throw new Error("No okf-record skill.");
+  }
+
+  return skill.text;
 }
 
 /** Run `okf init` from the repo root, or a directory in it. */
@@ -84,7 +109,11 @@ describe("okf init", () => {
     expect(infos).toStrictEqual([
       "[okf] Updated package.json.",
       "[okf] Created AGENTS.md.",
+      ...SKILL_PATHS.map((filePath) => `[okf] Created ${filePath}.`),
     ]);
+    for (const { name, text } of SKILLS) {
+      expect(repo.read(skillFilePath(name))).toBe(text);
+    }
   });
 
   test("keeps every other key, the layout, and the file's own rules", async () => {
@@ -153,6 +182,7 @@ describe("okf init", () => {
     expect(infos).toStrictEqual([
       "[okf] package.json's okf config is up to date.",
       "[okf] AGENTS.md's okf block is up to date.",
+      ...SKILL_PATHS.map((filePath) => `[okf] ${filePath} is up to date.`),
     ]);
   });
 
@@ -165,6 +195,7 @@ describe("okf init", () => {
       })
     );
     repo.write("AGENTS.md", `# A\n\n${STALE_BLOCK}\n\n# B\n`);
+    installSkills();
 
     // When - running it
     const code = await runInit([]);
@@ -174,6 +205,7 @@ describe("okf init", () => {
     expect(repo.read("AGENTS.md")).toBe(`# A\n\n${BLOCK}\n\n# B\n`);
     expect(infos).toStrictEqual([
       "[okf] package.json's okf config is up to date.",
+      ...SKILL_PATHS.map((filePath) => `[okf] ${filePath} is up to date.`),
       "[okf] Updated AGENTS.md.",
     ]);
   });
@@ -271,6 +303,65 @@ describe("okf init", () => {
     // Then - a refusal
     expect(code).toBe(EXIT_CODES.failure);
     expect(errors).toStrictEqual([expect.stringMatching(error)]);
+    expect(existsSync(path.join(repo.root, "AGENTS.md"))).toBe(false);
+  });
+
+  test("refreshes a skill an earlier version wrote", async () => {
+    // Given - a configured repo, with one skill an older version wrote
+    repo.write(
+      "package.json",
+      JSON.stringify({ okf: { bundles: ["docs/decisions"] } })
+    );
+    repo.write("AGENTS.md", `${BLOCK}\n`);
+    installSkills();
+    repo.write(
+      RECORD_PATH,
+      `---\nname: old\n---\r\n\r\n${SKILL_MARKER_PREFIX} -->\r\n`
+    );
+
+    // When - running it
+    const code = await runInit([]);
+
+    // Then - that skill is rewritten whole, and the others are kept
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(repo.read(RECORD_PATH)).toBe(readRecordSkill());
+    expect(infos).toContain(`[okf] Updated ${RECORD_PATH}.`);
+    expect(infos).toContain(
+      `[okf] ${skillFilePath("okf-review")} is up to date.`
+    );
+  });
+
+  test("refuses a skill it didn't write, writing nothing", async () => {
+    // Given - a repo's own skill under an okf skill's name
+    repo.write(RECORD_PATH, "---\nname: okf-record\n---\n\nOurs.\n");
+
+    // When - initializing
+    const code = await runInit(["--bundle", "docs/decisions"]);
+
+    // Then - a refusal, and nothing is written
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors).toStrictEqual([
+      `[okf] ${RECORD_PATH} wasn't written by okf init, so it's left alone; move it, then run okf init to install the skill. Nothing was written.`,
+    ]);
+    expect(repo.read(RECORD_PATH)).toBe(
+      "---\nname: okf-record\n---\n\nOurs.\n"
+    );
+    expect(repo.read("package.json")).toBe("{}\n");
+    expect(existsSync(path.join(repo.root, "AGENTS.md"))).toBe(false);
+  });
+
+  test("refuses a skills folder that's a file, writing nothing", async () => {
+    // Given - a file where the skills folder goes
+    repo.write(".claude/skills", "not a folder\n");
+
+    // When - initializing
+    const code = await runInit(["--bundle", "docs/decisions"]);
+
+    // Then - a refusal, before anything is written
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors).toStrictEqual([
+      `[okf] .claude/skills isn't a folder, so ${skillFilePath("okf-architecture")} can't be written.`,
+    ]);
     expect(existsSync(path.join(repo.root, "AGENTS.md"))).toBe(false);
   });
 
@@ -550,11 +641,12 @@ describe("okf init --check", () => {
     // When - checking
     const code = await runInit(["--check"]);
 
-    // Then - both blocks are current
+    // Then - both blocks and every skill are current
     expect(code).toBe(EXIT_CODES.ok);
     expect(infos).toStrictEqual([
       "[okf] AGENTS.md's okf block is up to date.",
       "[okf] .github/copilot-instructions.md's okf block is up to date.",
+      ...SKILL_PATHS.map((filePath) => `[okf] ${filePath} is up to date.`),
     ]);
   });
 
@@ -582,7 +674,8 @@ describe("okf init --check", () => {
       text: `${BLOCK_END}\n`,
     },
   ])("fails on $description, writing nothing", async ({ error, text }) => {
-    // Given - the AGENTS.md
+    // Given - the AGENTS.md, and current skills
+    installSkills();
     if (text !== undefined) {
       repo.write("AGENTS.md", text);
     }
@@ -601,18 +694,62 @@ describe("okf init --check", () => {
   });
 
   test("fails on a missing Copilot file under --copilot", async () => {
-    // Given - a current AGENTS.md alone
+    // Given - a current AGENTS.md and skills, and no Copilot file
     repo.write("AGENTS.md", `${BLOCK}\n`);
+    installSkills();
 
     // When - checking with --copilot
     const code = await runInit(["--check", "--copilot"]);
 
     // Then - AGENTS.md passes, and the missing Copilot file fails
     expect(code).toBe(EXIT_CODES.failure);
-    expect(infos).toStrictEqual(["[okf] AGENTS.md's okf block is up to date."]);
+    expect(infos).toStrictEqual([
+      "[okf] AGENTS.md's okf block is up to date.",
+      ...SKILL_PATHS.map((filePath) => `[okf] ${filePath} is up to date.`),
+    ]);
     expect(errors).toStrictEqual([
       "[okf] .github/copilot-instructions.md doesn't exist; run okf init to write it.",
     ]);
+  });
+
+  test.each([
+    {
+      description: "a missing skill",
+      error: "doesn't exist; run okf init to write it.",
+      text: undefined,
+    },
+    {
+      description: "a skill an earlier version wrote",
+      error: "is out of date; run okf init to refresh it.",
+      text: `${SKILL_MARKER_PREFIX} -->\n`,
+    },
+    {
+      description: "a skill it didn't write",
+      error:
+        "wasn't written by okf init, so it's left alone; move it, then run okf init to install the skill.",
+      text: "# Ours\n",
+    },
+  ])("fails on $description, writing nothing", async ({ error, text }) => {
+    // Given - a current block, and every skill current but the record's
+    repo.write("AGENTS.md", `${BLOCK}\n`);
+    installSkills();
+    const filePath = RECORD_PATH;
+    rmSync(path.join(repo.root, filePath));
+    if (text !== undefined) {
+      repo.write(filePath, text);
+    }
+
+    // When - checking
+    const code = await runInit(["--check"]);
+
+    // Then - it fails on that skill alone, and leaves it as it was
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors).toStrictEqual([`[okf] ${filePath} ${error}`]);
+    expect(
+      text === undefined
+        ? existsSync(path.join(repo.root, filePath))
+        : repo.read(filePath)
+    ).toBe(text ?? false);
   });
 
   test("refuses a target it can't read", async () => {

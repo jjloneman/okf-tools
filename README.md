@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; and `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions and the okf skills current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; and `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (2026-11-18) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit. `okf --version` prints the installed version and the OKF version it follows.
 
@@ -21,6 +21,7 @@ It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-f
 - [✏️ New and touch](#️-new-and-touch)
 - [🚚 Migrate](#-migrate)
 - [🧭 Agents](#-agents)
+  - [🧩 Skills](#-skills)
 - [🏷️ Writing tags](#️-writing-tags)
   - [🔢 Listing tags](#-listing-tags)
 - [📚 Library](#-library)
@@ -109,13 +110,13 @@ Node 22 or later, and git, are required.
 ### 🧰 Setting up
 
 ```sh
-# Write the config and the agent block
+# Write the config, the agent block, and the skills
 pnpm exec okf init --bundle docs/decisions --by human:jjloneman
 
-# Refresh the block after an upgrade; the config is kept
+# Refresh the block and the skills after an upgrade; the config is kept
 pnpm exec okf init
 
-# In CI: fail when the block is missing or out of date
+# In CI: fail when the block or a skill is missing or out of date
 pnpm exec okf init --check
 ```
 
@@ -127,7 +128,9 @@ pnpm exec okf init --check
   - A file with no block gets it at the end; a file with one gets it refreshed in place; nothing outside the markers changes.
   - `--copilot` writes it to `.github/copilot-instructions.md` too, and a file that already holds the block is always refreshed.
   - A marker missing its pair, repeated, or out of order is refused, and nothing is written.
-- **`--check` writes nothing**, and exits `1` when a block is missing or out of date, or its markers are malformed.
+- **It writes the okf skills to `.claude/skills/<name>/SKILL.md`** (see [Skills](#-skills)), whole, rewriting a skill an earlier `okf init` wrote.
+  - A `SKILL.md` there that it didn't write is refused, and nothing is written.
+- **`--check` writes nothing**, and exits `1` when a block or a skill is missing or out of date, a block's markers are malformed, or a skill there isn't its own.
 - It never commits: review what it wrote, then commit it.
 - Exit codes: `0` worked or up to date, `1` failed or out of date.
 
@@ -426,6 +429,24 @@ Run `okf guide` through the repo's package manager, such as `pnpm exec okf guide
 `okf guide` prints the same rules, then each command and when an agent may run it, from the version installed in the repo, so an agent reads guidance that matches its commands; it prints Markdown with no `[okf]` prefix, reads nothing, and exits `0`, or `1` when given any argument but `--help`.
 
 The agent signs as the person (the configured `okf.verifiedBy`), since the approval is theirs. A repo that wants a stricter rule can say so in its own agent instructions, outside the block.
+
+### 🧩 Skills
+
+`okf init` also installs three [Agent Skills](https://agentskills.io) in `.claude/skills`, where Claude Code finds them, from the installed version:
+
+| Skill              | Use it to                                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `okf-record`       | Draft or edit a record: start it with `okf new`, re-stamp it with `okf touch --draft`, and leave it a draft.    |
+| `okf-review`       | Summarize what changed in each record since its last sign-off, from `okf status` and `okf diff`, for the owner. |
+| `okf-architecture` | Create, update, or audit a `type: Architecture` record, written from the code it lists in `sources`.            |
+
+- **okf-tools never writes `verified`, and neither does any skill.** The person signs a record off with `okf verify`, or an agent runs `okf verify --yes` when they ask it to, naming the records.
+- **No skill types a timestamp:** `okf new` and `okf touch` stamp `generated` from the clock.
+- **For what goes in a record**, such as sources, footnotes, and types, `okf-record` points at upstream's [okf-generate](https://github.com/open-knowledge-format/open-knowledge-format/tree/527e81aff55992be21507e97004286789126f88c/skills/okf-generate) skill. The one difference: okf-generate records a `human:<id>` verification when the person confirms the content, while okf-tools leaves every sign-off to `okf verify`.
+- `okf guide` lists each skill and when to load it.
+- A skill is rewritten whole on every `okf init`, so to change one, copy it to a folder with another name, set its `name` to match, and delete its `Written by` line.
+
+The full reasoning is in [Which skills okf-tools ships, and how okf init installs them](docs/decisions/skills.md).
 
 ## 🏷️ Writing tags
 
