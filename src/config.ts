@@ -152,6 +152,28 @@ export type SettingsResult =
  */
 const ACTOR = /^\p{Letter}(?=[^:/]*[:/])[^\s"#'(),[\]{}]*(?<!:)$/u;
 
+/** Say why a value can't be a `verified` entry's actor. */
+export function describeBadActor(value: string): string {
+  return `"${value}" isn't an actor a record can hold, such as human:jjloneman.`;
+}
+
+/** Say that no bundles are configured, and how to name one. */
+export function describeNoBundles(packageJsonPath: string): string {
+  return `No bundles: pass --bundle <dir>, or set \`okf.bundles\` in ${packageJsonPath}.`;
+}
+
+/** Whether a value is an actor a `verified` entry can name (see `ACTOR`). */
+export function isActor(value: string): boolean {
+  return ACTOR.test(value);
+}
+
+/** Whether a parsed JSON value is an object, not an array or `null`. */
+export function isPlainObject(
+  value: unknown
+): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Read the `okf` block from the text of a `package.json`.
  *
@@ -258,16 +280,10 @@ export function resolveSettings(params: {
   const { config, cwd, options, repoRoot } = params;
   const packageJsonPath = path.join(repoRoot, "package.json");
 
-  const bundleDirs =
-    options.bundles.length > 0
-      ? options.bundles.map((dir) => path.resolve(cwd, dir))
-      : (config.bundles ?? []).map((dir) => path.resolve(repoRoot, dir));
+  const bundleDirs = selectBundleDirs({ config, cwd, options, repoRoot });
 
   if (bundleDirs.length === 0) {
-    return {
-      isOk: false,
-      reason: `No bundles: pass --bundle <dir>, or set \`okf.bundles\` in ${packageJsonPath}.`,
-    };
+    return { isOk: false, reason: describeNoBundles(packageJsonPath) };
   }
 
   const verifiedBy = options.by ?? config.verifiedBy;
@@ -279,11 +295,8 @@ export function resolveSettings(params: {
     };
   }
 
-  if (!ACTOR.test(verifiedBy)) {
-    return {
-      isOk: false,
-      reason: `"${verifiedBy}" isn't an actor a record can hold, such as human:jjloneman.`,
-    };
+  if (!isActor(verifiedBy)) {
+    return { isOk: false, reason: describeBadActor(verifiedBy) };
   }
 
   return {
@@ -297,9 +310,26 @@ export function resolveSettings(params: {
   };
 }
 
-/** Whether a parsed JSON value is an object, not an array or `null`. */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/**
+ * Pick the bundle directories a run names, as absolute paths.
+ *
+ * - `--bundle` replaces `okf.bundles` rather than adding to it, and is
+ *   relative to where the command was run; config bundles are relative to the
+ *   repo root.
+ *
+ * @returns the directories, empty when neither names any.
+ */
+export function selectBundleDirs(params: {
+  config: Pick<OkfConfig, "bundles">;
+  cwd: string;
+  options: Pick<CliOptions, "bundles">;
+  repoRoot: string;
+}): string[] {
+  const { config, cwd, options, repoRoot } = params;
+
+  return options.bundles.length > 0
+    ? options.bundles.map((dir) => path.resolve(cwd, dir))
+    : (config.bundles ?? []).map((dir) => path.resolve(repoRoot, dir));
 }
 
 /** Whether a parsed JSON value is a list of non-empty strings. */

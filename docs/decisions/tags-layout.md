@@ -12,8 +12,8 @@ sources:
   - id: prettier-print-width
     resource: https://prettier.io/docs/options#print-width
     title: Prettier options, print width
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:57:26Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -43,7 +43,7 @@ As of 2026-11-25:
   - issue #53 adds `okf tags`, printing every tag with its record count, with `--json` for scripts;
   - issue #46 adds an opt-in `tags-layout` rule, `block`, `flow` or `any`, default `any`;
   - issue #47's `check --fix`, with `tags-layout: block` on, rewrites a flow `tags` list as a block list: a flat list of plain scalars, `tags` only, keeping a comment on the `tags` line and refusing anchors, quoted keys or nested values;
-  - issue #49's agent-instructions block says to write `tags` as a block list and to list them with `okf tags`;
+  - issue #49's agent-instructions block, written by `okf init`, says to write `tags` as a block list, and #53 adds to it the line that lists them with `okf tags`, once that command exists;
   - issue #51's record skill drafts `tags` as a block list.
 
 ## Why
