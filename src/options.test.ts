@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { parseCliArgs, parseCommand, parseDiffArgs } from "./options.ts";
+import {
+  parseCliArgs,
+  parseCommand,
+  parseDiffArgs,
+  parseInitArgs,
+} from "./options.ts";
 
 const DEFAULTS = {
   bundles: [],
@@ -113,6 +118,11 @@ describe("parseCommand", () => {
       expected: { args: ["docs/decisions/a.md"], kind: "diff" },
     },
     {
+      args: ["init", "--check"],
+      description: "init, with the arguments after it",
+      expected: { args: ["--check"], kind: "init" },
+    },
+    {
       args: ["--help"],
       description: "--help",
       expected: { kind: "help" },
@@ -202,5 +212,83 @@ describe("parseDiffArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // Given/When/Then - a usage error saying why
     expect(parseDiffArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseInitArgs", () => {
+  const INIT_DEFAULTS = {
+    bundles: [],
+    by: undefined,
+    isCheck: false,
+    shouldWriteCopilot: false,
+  };
+
+  test.each([
+    { args: [], description: "no arguments", options: {} },
+    {
+      args: ["--bundle", "a", "--bundle", "b", "--by", "human:x", "--copilot"],
+      description: "every writing flag",
+      options: { bundles: ["a", "b"], by: "human:x", shouldWriteCopilot: true },
+    },
+    {
+      args: ["--check", "--copilot"],
+      description: "--check with --copilot",
+      options: { isCheck: true, shouldWriteCopilot: true },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When - parsing the arguments
+    const parsed = parseInitArgs(args);
+
+    // Then - the options, with every other flag at its default
+    expect(parsed).toStrictEqual({
+      kind: "options",
+      options: { ...INIT_DEFAULTS, ...options },
+    });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "--check"], description: "-h beside another flag" },
+    { args: ["--bogus", "-h"], description: "-h beside an unknown flag" },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseInitArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["--bogus"],
+      description: "an unknown flag",
+      message: /Unknown option '--bogus'/u,
+    },
+    {
+      args: ["AGENTS.md"],
+      description: "a path",
+      message: /^okf init takes no paths, but was given AGENTS\.md\.$/u,
+    },
+    {
+      args: ["--bundle", ""],
+      description: "an empty --bundle",
+      message: /^--bundle needs a directory, not an empty string\.$/u,
+    },
+    {
+      args: ["--check", "--bundle", "docs"],
+      description: "--check with --bundle",
+      message: /^--check writes nothing, so it takes no --bundle or --by\.$/u,
+    },
+    {
+      args: ["--check", "--by", "human:x"],
+      description: "--check with --by",
+      message: /^--check writes nothing, so it takes no --bundle or --by\.$/u,
+    },
+  ])("refuses $description", ({ args, message }) => {
+    // When - parsing the arguments
+    const parsed = parseInitArgs(args);
+
+    // Then - a usage error that says why
+    expect(parsed).toStrictEqual({
+      kind: "invalid",
+      message: expect.stringMatching(message) as unknown,
+    });
   });
 });

@@ -4,7 +4,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 ## 🎯 Purpose of this repo
 
-`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundles. It ships one binary, `okf`, whose first argument names a command; today that's `okf verify`, which signs records off, with `okf-verify` kept as its alias, and `okf diff`, which shows what changed since a sign-off (see [README.md](README.md)).
+`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundles. It ships one binary, `okf`, whose first argument names a command: `okf verify`, which signs records off, with `okf-verify` kept as its alias; `okf diff`, which shows what changed since a sign-off; and `okf init`, which writes the config and a block of agent rules (see [README.md](README.md)).
 
 - **Interactive by default.** Without `--yes`, it prompts in a terminal and refuses to start without one.
 - **`--yes` runs without prompts**, but only against an explicit selection: `--changed`, or named record paths. `--yes` alone is a usage error.
@@ -16,8 +16,11 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 - `src/` — the package, one concern per file, each with its `*.test.ts` beside it.
   - `okf-bin.ts` and `bin.ts` — the `okf` and `okf-verify` entries, each calling `start` in `start.ts`, which reads the process, calls `run`, and sets the exit code.
-  - `cli.ts` — `run`: reads `okf`'s command (`okf-verify` goes straight to `verify`), parses that command's arguments, resolves the repo, config, and bundles, then dispatches to `okf diff` or a verify mode. It never throws.
-  - `options.ts` — `okf`'s commands, the verify and diff flags, the usage text for each, and which combinations are valid.
+  - `cli.ts` — `run`: reads `okf`'s command (`okf-verify` goes straight to `verify`), parses that command's arguments, resolves the repo, config, and bundles, then dispatches to `okf diff`, `okf init`, or a verify mode. It never throws.
+  - `init.ts` — `okf init`: plans the `okf` block of `package.json` and the agent block in each instruction file, then writes them all, or with `--check` only reports. It never throws.
+  - `package-json.ts` — `writeOkfMember`: replaces only the `okf` member of a `package.json` by position, keeping every other byte.
+  - `agent-block.ts` — the agent block's text, `AGENT_BLOCK`, which the README's Agents section quotes word for word (a test checks it), and the pure logic that finds the markers and rewrites only what's between them.
+  - `options.ts` — `okf`'s commands, the verify, diff and init flags, the usage text for each, and which combinations are valid.
   - `config.ts` — reads the `okf` block of `package.json` and merges the flags over it.
   - `interactive.ts` and `non-interactive.ts` — the two modes.
   - `diff.ts` — `okf diff`; `sign-off-diff.ts` finds what changed in a record since its signer's last sign-off, for it and for the interactive mode.

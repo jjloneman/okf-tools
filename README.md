@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off, and `okf diff`, which shows what changed since a sign-off; `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; and `okf init`, which writes a repo's config and keeps a block of agent instructions current. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
 
@@ -9,6 +9,7 @@ It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-f
 - [🎯 Why](#-why)
 - [📦 Install](#-install)
 - [🚀 Usage](#-usage)
+  - [🧰 Setting up](#-setting-up)
   - [🖐️ Interactive](#️-interactive)
   - [🤖 Non-interactive](#-non-interactive)
   - [🏳️ Flags](#️-flags)
@@ -73,7 +74,7 @@ Then configure it in `package.json`:
   - `inline` always writes `{ by, at }` on one line;
   - `block` always writes `by` and `at` on lines of their own.
 
-`okf.bundles` and `okf.verifiedBy` can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.exclude` and `okf.style` have no flag, and `okf.exclude` applies to `--bundle` too.
+`okf init --bundle docs/decisions --by human:jjloneman` writes `okf.bundles` and `okf.verifiedBy` for you (see [Setting up](#-setting-up)). Both can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.exclude` and `okf.style` have no flag, and `okf.exclude` applies to `--bundle` too.
 
 A block entry goes in a `-` list, even when it's the only one, since a bare block mapping can't take a second signer's entry (see the layouts above):
 
@@ -95,6 +96,31 @@ Node 22 or later, and git, are required.
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
 - `okf-verify <args>` runs as `okf verify <args>` does, with the same exit codes.
+
+### 🧰 Setting up
+
+```sh
+# Write the config and the agent block
+pnpm exec okf init --bundle docs/decisions --by human:jjloneman
+
+# Refresh the block after an upgrade; the config is kept
+pnpm exec okf init
+
+# In CI: fail when the block is missing or out of date
+pnpm exec okf init --check
+```
+
+- **It writes the `okf` block of `package.json`.** `--bundle` replaces `okf.bundles`, relative to where you run it, and stored from the repo root; `--by` sets `okf.verifiedBy`. Every other key, and the rest of the file, is kept.
+  - The bundles must already exist: it doesn't create folders or records.
+  - With no `--bundle`, the configured bundles are kept, and it fails when there are none.
+  - An actor is optional, since `okf verify --by` can name one instead.
+- **It writes the agent rules to `AGENTS.md`**, between `<!-- okf:start -->` and `<!-- okf:end -->` lines, creating the file when there's none (see [Agents](#-agents) for the text).
+  - A file with no block gets it at the end; a file with one gets it refreshed in place; nothing outside the markers changes.
+  - `--copilot` writes it to `.github/copilot-instructions.md` too, and a file that already holds the block is always refreshed.
+  - A marker missing its pair, repeated, or out of order is refused, and nothing is written.
+- **`--check` writes nothing**, and exits `1` when a block is missing or out of date, or its markers are malformed.
+- It never commits: review what it wrote, then commit it.
+- Exit codes: `0` worked or up to date, `1` failed or out of date.
 
 ### 🖐️ Interactive
 
@@ -158,13 +184,26 @@ Much OKF authoring now happens in a chat with a coding agent, and the non-intera
 - the owner edits a record with the agent until it meets their bar;
 - then asks the agent to verify it, which it does with `--yes`.
 
-What the agent should do:
+`okf init` writes these rules into `AGENTS.md`, between its markers, and refreshes them when run again:
 
-- **Don't verify a record unless the person asks you to.** Drafting, editing, and regenerating a record never imply a sign-off.
-- **Name the files** the person approved, rather than passing `--changed`, unless they asked for every changed record.
-- **Sign as the person** (the configured `okf.verifiedBy`), since the approval is theirs.
+```md
+<!-- Written by `okf init` from @jjloneman/okf-tools. Run it again to refresh this block, and keep the repo's own rules outside it. -->
 
-A repo that wants a stricter rule can say so in its own agent instructions.
+## OKF records
+
+The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.
+
+- **Write a new record as `status: draft`**, and name yourself in `generated` as `<producer>/<version>`, such as `claude-code/2.1.316`, with the UTC time you wrote it.
+- **When you edit a record, re-stamp `generated`** (`by` and `at`), and set a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
+- **Never add or change a `verified` entry yourself.** Signing a record off is the person's call.
+- **Verify only when the person asks you to**, with `okf verify --yes <record>...`, naming the files they approved.
+  - Pass `--changed` instead only when they asked for every changed record.
+  - Never verify a record as a side effect of drafting or editing it.
+- **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case.
+  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.
+```
+
+The agent signs as the person (the configured `okf.verifiedBy`), since the approval is theirs. A repo that wants a stricter rule can say so in its own agent instructions, outside the block.
 
 ## 🏷️ Writing tags
 

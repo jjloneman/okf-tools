@@ -10,6 +10,7 @@ import { readOkfConfig, resolveSettings } from "./config.ts";
 import { runDiff } from "./diff.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { findRepoRoot } from "./git.ts";
+import { runInit } from "./init.ts";
 import { runInteractive } from "./interactive.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
@@ -60,7 +61,8 @@ export type RunParams = {
 };
 
 /**
- * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command.
+ * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
+ * `okf diff`, `okf init`, or `okf verify`.
  *
  * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
  *   own name.
@@ -89,6 +91,10 @@ export async function run(params: RunParams): Promise<ExitCode> {
     output.error(`${parsed.message}\n\n${OKF_USAGE}`);
 
     return EXIT_CODES.failure;
+  }
+
+  if (parsed.kind === "init") {
+    return runInit({ args: parsed.args, cwd, output });
   }
 
   return parsed.kind === "diff"

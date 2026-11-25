@@ -115,7 +115,7 @@ export type ParsedCommand =
        *
        * @example "verify"
        */
-      kind: "diff" | "verify";
+      kind: "diff" | "init" | "verify";
     }
   | {
       /**
@@ -182,6 +182,8 @@ export const OKF_USAGE = `usage: okf <command> [options]
 
 commands:
   diff    print what changed in records since their last sign-off
+  init    write the \`okf\` config and the agent-instructions block, or
+          check the block is current
   verify  mark records \`status: stable\` with a \`verified\` entry, then
           commit just those files
 
@@ -201,6 +203,80 @@ options:
   --by <actor>    whose sign-off to diff from
                   (default: \`okf.verifiedBy\` in package.json)
   --help, -h      print this help`;
+
+/** The flags `okf init` was given. */
+export type InitOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "keep `okf.bundles`".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * The actor passed with `--by`; `undefined` keeps `okf.verifiedBy`.
+   *
+   * @example "human:jjloneman"
+   */
+  by: string | undefined;
+
+  /**
+   * Whether `--check` asked only to check the block, writing nothing.
+   *
+   * @example true
+   */
+  isCheck: boolean;
+
+  /**
+   * Whether `--copilot` asked for the block in
+   * `.github/copilot-instructions.md` too.
+   *
+   * @example true
+   */
+  shouldWriteCopilot: boolean;
+};
+
+/** What `okf init`'s command line asked for: help, a run, or nothing valid. */
+export type ParsedInitArgs =
+  | {
+      /**
+       * `--help` was passed.
+       *
+       * @example "help"
+       */
+      kind: "help";
+    }
+  | {
+      /**
+       * The arguments can't be run.
+       *
+       * @example "invalid"
+       */
+      kind: "invalid";
+
+      /**
+       * Why, without the usage text.
+       *
+       * @example "--check writes nothing, so it takes no --bundle or --by."
+       */
+      message: string;
+    }
+  | {
+      /**
+       * The arguments describe a run.
+       *
+       * @example "options"
+       */
+      kind: "options";
+
+      /**
+       * The run's options.
+       *
+       * @example `{ bundles: [], by: undefined, isCheck: true, shouldWriteCopilot: false }`
+       */
+      options: InitOptions;
+    };
 
 /**
  * How to call the verify command, printed for `--help` and after a usage
@@ -274,7 +350,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     return { kind: "help" };
   }
 
-  if (name === "diff" || name === "verify") {
+  if (name === "diff" || name === "init" || name === "verify") {
     return { args: rest, kind: name };
   }
 
@@ -407,6 +483,98 @@ function parseDiffCommandLine(args: readonly string[]) {
     options: {
       bundle: { multiple: true, type: "string" },
       by: { type: "string" },
+      help: { short: "h", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/** How to call `okf init`, printed for `--help` and after a usage error. */
+export const INIT_USAGE = `usage: okf init [options]
+       okf init --check [--copilot]
+
+Writes the \`okf\` block of package.json, and a block of agent instructions
+between \`<!-- okf:start -->\` and \`<!-- okf:end -->\` in AGENTS.md. Run it
+again to refresh the block; nothing outside the markers is changed.
+
+options:
+  --bundle <dir>  a bundle directory to configure; repeat for more
+                  (default: keep \`okf.bundles\`)
+  --by <actor>    who signs off (default: keep \`okf.verifiedBy\`)
+  --copilot       write the block to .github/copilot-instructions.md too;
+                  a file that already holds it is always refreshed
+  --check         write nothing; fail when a block is missing or out of date
+  --help, -h      print this help`;
+
+/** Read `okf init`'s command line into options, or say why it can't run. */
+export function parseInitArgs(args: readonly string[]): ParsedInitArgs {
+  let parsed: ReturnType<typeof parseInitCommandLine>;
+
+  try {
+    parsed = parseInitCommandLine(args);
+  } catch (error) {
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const options: InitOptions = {
+    bundles: values.bundle ?? [],
+    by: values.by,
+    isCheck: values.check === true,
+    shouldWriteCopilot: values.copilot === true,
+  };
+
+  const [extra] = positionals;
+
+  if (extra !== undefined) {
+    return {
+      kind: "invalid",
+      message: `okf init takes no paths, but was given ${extra}.`,
+    };
+  }
+
+  if (options.bundles.includes("")) {
+    return {
+      kind: "invalid",
+      message: "--bundle needs a directory, not an empty string.",
+    };
+  }
+
+  if (
+    options.isCheck &&
+    (options.bundles.length > 0 || options.by !== undefined)
+  ) {
+    return {
+      kind: "invalid",
+      message: "--check writes nothing, so it takes no --bundle or --by.",
+    };
+  }
+
+  return { kind: "options", options };
+}
+
+/**
+ * Run `parseArgs` over `okf init`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseInitCommandLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      by: { type: "string" },
+      check: { type: "boolean" },
+      copilot: { type: "boolean" },
       help: { short: "h", type: "boolean" },
     },
     strict: true,
