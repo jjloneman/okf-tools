@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions and the okf skills current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; and `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions and the okf skills current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3; and `okf check`, which reports problems against the spec's rules. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (2026-11-18) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit. `okf --version` prints the installed version and the OKF version it follows.
 
@@ -21,6 +21,8 @@ It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-f
 - [✏️ New and touch](#️-new-and-touch)
 - [🪦 Deprecate](#-deprecate)
 - [🚚 Migrate](#-migrate)
+- [🩺 Check](#-check)
+  - [📏 Rules](#-rules)
 - [🧭 Agents](#-agents)
   - [🧩 Skills](#-skills)
 - [🏷️ Writing tags](#️-writing-tags)
@@ -425,6 +427,66 @@ OKF v0.3 reads a path without a leading `/` from the folder of the file that hol
 | `--write`        | Apply the changes; without it, print them as diffs.                 |
 | `--check`        | Write nothing; exit `1` when a bundle still needs migrating.        |
 | `--help`, `-h`   | Print the usage.                                                    |
+
+## 🩺 Check
+
+```sh
+# Report problems in the bundles against OKF's spec rules
+pnpm okf check
+
+# In CI: fail on warnings too
+pnpm okf check --strict
+```
+
+`okf check` reads every Markdown file in the bundles that git would track, records, `index.md` and `log.md` alike, and reports what breaks the [spec](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)'s rules. It writes nothing.
+
+```text
+[okf] docs/decisions/log.md:5: error E005 log-date-heading: a log.md date heading must be YYYY-MM-DD (§9); found "May 1"
+[okf] 12 files checked: 1 error, 0 warnings, 0 info.
+```
+
+- **Each finding names its file, line, severity, code, and rule.**
+  - The codes and severities are those of upstream's own checker, `validate.py` in the spec repo's `okf-generate` skill, so both tools report a finding the same way.
+- **An `error` breaks the bundle's conformance**, as §11.1 defines it: frontmatter that doesn't parse as a YAML mapping, and an `index.md` or `log.md` that breaks §8 or §9.
+- **A `warning` is a value the spec's other sections advise against**, such as a timestamp without an offset or an unknown `status`; the bundle still conforms.
+- **It reads frontmatter as `okf verify` does**, so the two never disagree about a record.
+- **A key the spec doesn't define passes without a finding**, so a repo can use okf-tools beside a tool that adds its own keys.
+- **It skips what OKF leaves out of a bundle:** files and folders whose names start with `.`, and symlinks that lead out of the bundle; it skips what `okf.exclude` matches too.
+- **It exits `1` on an error, or a file it can't read,** and under `--strict` on a warning too; otherwise `0`.
+- **In GitHub Actions, text findings print as annotations too**, on the files they name, so they show on a pull request's diff; each still prints as a line, since GitHub shows only so many annotations.
+- **`--format json` prints the report for a program**, with `schemaVersion`, `filesChecked`, `counts`, `findings`, and `skipped`. Its shape is public API: a change to it bumps `schemaVersion`, and its TypeScript type is exported as `CheckReport`.
+
+| Flag                | Does                                                              |
+| ------------------- | ----------------------------------------------------------------- |
+| `--bundle <dir>`    | A bundle to check, relative to where you run it; repeat for more. |
+| `--format <format>` | `text`, the default, or `json`.                                   |
+| `--strict`          | Exit `1` on a warning too.                                        |
+| `--help`, `-h`      | Print the usage.                                                  |
+
+### 📏 Rules
+
+| Code | Rule                          | Severity | Finds                                                                                                          |
+| ---- | ----------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| E002 | `frontmatter-parses`          | error    | Frontmatter that isn't valid YAML, isn't a mapping, or has a near-miss fence (§4).                             |
+| E004 | `subfolder-index-frontmatter` | error    | An `index.md` below the bundle root with frontmatter (§8).                                                     |
+| E005 | `log-date-heading`            | error    | A `log.md` `##` heading that isn't a real `YYYY-MM-DD` date (§9).                                              |
+| E006 | `log-frontmatter`             | error    | A `log.md` with frontmatter (§9).                                                                              |
+| E007 | `frontmatter-unique-keys`     | error    | A key given twice in one mapping (§4).                                                                         |
+| W101 | `timestamp-format`            | warning  | A `generated.at`, `verified[].at`, or `stale_after` that's neither a date-time with an offset nor a date (§5). |
+| W102 | `generated-shape`             | warning  | A `generated` that isn't a mapping with a `by` (§5.2).                                                         |
+| W103 | `actor-format`                | warning  | A `generated.by` or `verified[].by` in neither actor form (§7).                                                |
+| W104 | `verified-event-shape`        | warning  | A `verified` event without both `by` and `at`, which consumers ignore (§5.2).                                  |
+| W105 | `status-value`                | warning  | A `status` other than `draft`, `stable`, or `deprecated` (§5.4).                                               |
+| W110 | `tags-list`                   | warning  | `tags` written as one string or a mapping, not a list (§4.1).                                                  |
+| W115 | `index-link-target`           | warning  | An `index.md` link to a path in the bundle that doesn't exist, such as a deleted record's (§6.1).              |
+| W116 | `license-value`               | warning  | A root `index.md` `license` that's neither an SPDX expression nor a file in the bundle (§8.1).                 |
+| W117 | `string-quoted`               | warning  | A `type`, `title`, `description`, `status`, or `okf_version` YAML would read as a number or boolean (§4).      |
+| W118 | `log-date-order`              | warning  | A `log.md` date heading newer than the one before it (§9).                                                     |
+| W120 | `not-a-concept`               | warning  | Markdown with no frontmatter, or no `type`, which consumers skip (§3.2).                                       |
+| W122 | `date-only-trust-time`        | warning  | A `generated.at` or `verified[].at` with a date but no time (§5).                                              |
+| W125 | `bundle-version`              | warning  | A bundle with no root `index.md`, or one without `okf_version` (§8.1).                                         |
+
+The gaps in the numbering are upstream rules okf-tools doesn't run yet, such as those on `sources` and attested computations.
 
 ## 🧭 Agents
 
