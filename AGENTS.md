@@ -69,6 +69,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 | `test`     | 🧪      | tests                              |
 
 - **Branches**: `feature/`, `bugfix/`, or `release/`, then `gh-<n>-` for the issue, then a kebab-case slug (`feature/gh-1-extract-okf-verify`).
+- **Stale branches**: `pnpm prune-branches` lists the local branches whose remote branch is gone, and deletes nothing; `pnpm prune-branches:force` deletes them all, unpushed commits included, so read the list first, and an agent runs it only with the owner's confirmation (see [Deleting things](#-deleting-things)).
 - **Issues and PRs** are assigned to `jjloneman` and labeled with a type (`✨ feature`, `🐞 bug`, `📦 dependencies`); spell the emoji-prefixed labels exactly.
 - **PRs are squash-merged**, so the PR title becomes the commit on `main`.
 - **`main` is protected** by [.github/rulesets/main.json](.github/rulesets/main.json): changes land through a squash-merged PR, unresolved review threads block the merge, every CI job must pass, and there are no force pushes or deletion. After editing the file, reapply it with `gh api --method PUT repos/jjloneman/okf-tools/rulesets/<id> --input .github/rulesets/main.json`.
