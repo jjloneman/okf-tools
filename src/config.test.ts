@@ -48,6 +48,7 @@ describe("readOkfConfig", () => {
       config: {
         bundles: undefined,
         exclude: ["!(docs)/**"],
+        style: undefined,
         verifiedBy: undefined,
       },
       isOk: true,
