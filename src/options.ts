@@ -1,5 +1,7 @@
 import { parseArgs } from "node:util";
 
+import type { MigrateMode } from "./migrate.ts";
+
 import { describeError } from "./output.ts";
 
 /** The flags and record paths a run was given. */
@@ -70,6 +72,25 @@ export type IndexOptions = {
   isCheck: boolean;
 };
 
+/** The flags an `okf migrate` run was given. */
+export type MigrateOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * What to do with the plans: print them as diffs (the default), apply them
+   * with `--write`, or with `--check` only fail when one is needed.
+   *
+   * @example "dry-run"
+   */
+  mode: MigrateMode;
+};
+
 /**
  * What a command's line asked for: help, a run, or nothing valid.
  *
@@ -127,6 +148,14 @@ export type ParsedCommand =
     }
   | {
       /**
+       * `--version` was passed before any command.
+       *
+       * @example "version"
+       */
+      kind: "version";
+    }
+  | {
+      /**
        * The arguments after the command's name.
        *
        * @example `["--yes", "--changed"]`
@@ -143,6 +172,7 @@ export type ParsedCommand =
         | "guide"
         | "index"
         | "init"
+        | "migrate"
         | "new"
         | "status"
         | "tags"
@@ -289,6 +319,8 @@ commands:
           records' frontmatter, or check they're current
   init    write the \`okf\` config and the agent-instructions block, or
           check the block is current
+  migrate move bundles from OKF v0.1 or v0.2 to v0.3, rewriting the paths
+          whose meaning changes; a dry run unless --write
   new     write a new draft record's frontmatter, stamped from the clock,
           and its index line
   status  list every record's trust state, writing nothing
@@ -297,8 +329,9 @@ commands:
   verify  mark records \`status: stable\` with a \`verified\` entry, then
           commit just those files
 
-Run \`okf <command> --help\` for a command's options. \`okf-verify\` is the
-same as \`okf verify\`.`;
+Run \`okf <command> --help\` for a command's options, and \`okf --version\`
+for the installed version and the OKF version it supports. \`okf-verify\` is
+the same as \`okf verify\`.`;
 
 /** How to call `okf diff`, printed for its `--help` and after a usage error. */
 export const DIFF_USAGE = `usage: okf diff [options] <record>...
@@ -451,6 +484,28 @@ options:
   --check         write nothing; fail when an index is out of date
   --help, -h      print this help`;
 
+/** How to call `okf migrate`, printed for `--help` and after a usage error. */
+export const MIGRATE_USAGE = `usage: okf migrate [options]
+
+Moves each bundle declared OKF v0.1 or v0.2, or undeclared, to v0.3: it sets
+\`okf_version: "0.3"\` in the bundle's root index.md, fills in a missing
+\`title\` and \`description\` from its first heading and paragraph, and
+rewrites each bare path, in a path field or a Markdown link, that names a
+file only from the bundle root to the relative path that names it from its
+own file, since v0.3 reads it from there. It never touches \`generated\` or
+\`verified\`, so a signed-off record stays signed off.
+
+Without --write it prints each change as a diff and writes nothing. A bundle
+with a path that names different files under the two readings, or a newer
+\`okf_version\`, is reported and left as it is.
+
+options:
+  --bundle <dir>  a bundle directory to migrate; repeat for more
+                  (default: \`okf.bundles\` in package.json)
+  --write         apply the changes
+  --check         write nothing; fail when a bundle still needs migrating
+  --help, -h      print this help`;
+
 /** How to call `okf tags`, printed for `--help` and after a usage error. */
 export const TAGS_USAGE = `usage: okf tags [options]
 
@@ -535,11 +590,16 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     return { kind: "help" };
   }
 
+  if (name === "--version") {
+    return { kind: "version" };
+  }
+
   if (
     name === "diff" ||
     name === "guide" ||
     name === "index" ||
     name === "init" ||
+    name === "migrate" ||
     name === "new" ||
     name === "status" ||
     name === "tags" ||
@@ -661,6 +721,52 @@ export function parseIndexArgs(
         },
       }
     : { kind: "invalid", message: problem };
+}
+
+/** Read `okf migrate`'s command line into options, or say why it can't run. */
+export function parseMigrateArgs(
+  args: readonly string[]
+): ParsedArgs<MigrateOptions> {
+  let parsed: ReturnType<typeof parseMigrateLine>;
+
+  try {
+    parsed = parseMigrateLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const problem =
+    findBundlesProblem({
+      bundles: values.bundle ?? [],
+      command: "okf migrate",
+      positionals,
+    }) ??
+    (values.check === true && values.write === true
+      ? "--check writes nothing, so it can't be passed with --write."
+      : undefined);
+
+  if (problem !== undefined) {
+    return { kind: "invalid", message: problem };
+  }
+
+  let mode: MigrateMode = "dry-run";
+
+  if (values.check === true) {
+    mode = "check";
+  } else if (values.write === true) {
+    mode = "write";
+  }
+
+  return { kind: "options", options: { bundles: values.bundle ?? [], mode } };
 }
 
 /** Read `okf status`'s command line into options, or say why it can't run. */
@@ -1075,6 +1181,26 @@ function parseInitCommandLine(args: readonly string[]) {
       check: { type: "boolean" },
       copilot: { type: "boolean" },
       help: { short: "h", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf migrate`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseMigrateLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      check: { type: "boolean" },
+      help: { short: "h", type: "boolean" },
+      write: { type: "boolean" },
     },
     strict: true,
   });

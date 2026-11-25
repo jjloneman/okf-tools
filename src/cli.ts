@@ -21,18 +21,21 @@ import { runGuide } from "./guide.ts";
 import { runIndex } from "./index-command.ts";
 import { runInit } from "./init.ts";
 import { runInteractive } from "./interactive.ts";
+import { runMigrate } from "./migrate.ts";
 import { runNew } from "./new-record.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
   DIFF_USAGE,
   formatVerifyUsage,
   INDEX_USAGE,
+  MIGRATE_USAGE,
   NEW_USAGE,
   OKF_USAGE,
   parseCliArgs,
   parseCommand,
   parseDiffArgs,
   parseIndexArgs,
+  parseMigrateArgs,
   parseNewArgs,
   parseStatusArgs,
   parseTagsArgs,
@@ -46,6 +49,7 @@ import { resolveBundleDirs } from "./repo.ts";
 import { runStatus } from "./status.ts";
 import { runTags } from "./tags.ts";
 import { runTouch } from "./touch.ts";
+import { formatVersion } from "./version.ts";
 import { spellLikeRepoRoot } from "./working-directory.ts";
 
 /** What a run of the CLI is given by the process that starts it. */
@@ -85,8 +89,9 @@ export type RunParams = {
 
 /**
  * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
- * `okf diff`, `okf guide`, `okf index`, `okf init`, `okf new`, `okf status`,
- * `okf tags`, `okf touch`, or `okf verify`.
+ * `okf diff`, `okf guide`, `okf index`, `okf init`, `okf migrate`, `okf new`,
+ * `okf status`, `okf tags`, `okf touch`, or `okf verify`; `okf --version`
+ * prints the installed version.
  *
  * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
  *   own name.
@@ -115,6 +120,12 @@ export async function run(params: RunParams): Promise<ExitCode> {
     output.error(`${parsed.message}\n\n${OKF_USAGE}`);
 
     return EXIT_CODES.failure;
+  }
+
+  if (parsed.kind === "version") {
+    output.data(formatVersion());
+
+    return EXIT_CODES.ok;
   }
 
   if (parsed.kind === "guide") {
@@ -149,12 +160,17 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runTouchCommand({ args: parsed.args, cwd, output });
   }
 
+  if (parsed.kind === "migrate") {
+    return runMigrateCommand({ args: parsed.args, cwd, output });
+  }
+
   return runVerify({ args: parsed.args, cwd, isInteractive, output, program });
 }
 
 /**
  * Resolve the repo and bundles a command works with when it needs no one's
- * sign-off: `okf index`, `okf new`, `okf tags`, and `okf touch`.
+ * sign-off: `okf index`, `okf migrate`, `okf new`, `okf tags`, and
+ * `okf touch`.
  */
 function buildBundleContext(params: {
   bundles: readonly string[];
@@ -369,6 +385,53 @@ function runIndexCommand(params: {
     }
 
     return runIndex({ context: context.value, isCheck: options.isCheck });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
+ * Run `okf migrate`: read its arguments and config, then plan each bundle's
+ * migration, and print, write, or check it.
+ */
+function runMigrateCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseMigrateArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(MIGRATE_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${MIGRATE_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runMigrate({ context: context.value, mode: options.mode });
   } catch (error) {
     output.error(describeError(error));
 

@@ -7,6 +7,7 @@ import {
   parseGuideArgs,
   parseIndexArgs,
   parseInitArgs,
+  parseMigrateArgs,
   parseNewArgs,
   parseStatusArgs,
   parseTagsArgs,
@@ -194,6 +195,16 @@ describe("parseCommand", () => {
       args: ["tags", "--format", "json"],
       description: "tags, with the arguments after it",
       expected: { args: ["--format", "json"], kind: "tags" },
+    },
+    {
+      args: ["migrate", "--write"],
+      description: "migrate, with the arguments after it",
+      expected: { args: ["--write"], kind: "migrate" },
+    },
+    {
+      args: ["--version"],
+      description: "--version",
+      expected: { kind: "version" },
     },
   ])("reads $description", ({ args, expected }) => {
     // Given/When/Then - the command and its arguments, or why there's none
@@ -495,6 +506,72 @@ describe("parseIndexArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseIndexArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseMigrateArgs", () => {
+  test.each([
+    {
+      args: [],
+      description: "no arguments, as a dry run",
+      options: { bundles: [], mode: "dry-run" },
+    },
+    {
+      args: ["--bundle", "a", "--bundle", "b", "--write"],
+      description: "bundles and --write",
+      options: { bundles: ["a", "b"], mode: "write" },
+    },
+    {
+      args: ["--check"],
+      description: "--check",
+      options: { bundles: [], mode: "check" },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When/Then - the options
+    expect(parseMigrateArgs(args)).toStrictEqual({ kind: "options", options });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "--write"], description: "-h alongside other flags" },
+    {
+      args: ["--help", "--yes"],
+      description: "--help beside a flag migrate doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseMigrateArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["--yes"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+    {
+      args: ["--bundle"],
+      description: "--bundle with no value",
+      message: expect.stringContaining("--bundle") as unknown,
+    },
+    {
+      args: ["docs/decisions"],
+      description: "a path",
+      message: "okf migrate takes no paths, but was given docs/decisions.",
+    },
+    {
+      args: ["--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+    {
+      args: ["--check", "--write"],
+      description: "--check with --write",
+      message: "--check writes nothing, so it can't be passed with --write.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseMigrateArgs(args)).toStrictEqual({ kind: "invalid", message });
   });
 });
 

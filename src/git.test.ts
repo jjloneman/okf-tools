@@ -10,6 +10,7 @@ import {
   listChangedPaths,
   listDirtyPaths,
   listIndexPaths,
+  listWorkingPaths,
   readBaseRef,
   readCommittedText,
   readGitFailure,
@@ -392,6 +393,36 @@ describe("listChangedPaths", () => {
       paths: ["docs/a.md", "docs/b.md"],
       statusPaths: ["docs/a.md"],
     });
+  });
+});
+
+describe("listWorkingPaths", () => {
+  test("lists tracked and untracked paths, but not ignored ones", () => {
+    // Given - a committed file, an untracked one, and an ignored one
+    repo.write(".gitignore", "build/\n");
+    repo.write("docs/a.md", "a\n");
+    repo.commitAll("add a");
+    repo.write("docs/b.md", "b\n");
+    repo.write("build/c.md", "c\n");
+
+    // When - listing the working tree
+    const workingPaths = listWorkingPaths(repo.root);
+
+    // Then - all but the ignored one
+    expect([...workingPaths].sort()).toStrictEqual([
+      ".gitignore",
+      "docs/a.md",
+      "docs/b.md",
+      "package.json",
+    ]);
+  });
+
+  test("lists nothing when git can't be asked", () => {
+    // Given/When - a folder that isn't a repo
+    const workingPaths = listWorkingPaths("/");
+
+    // Then - nothing
+    expect(workingPaths).toStrictEqual([]);
   });
 });
 

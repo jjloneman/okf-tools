@@ -7,6 +7,7 @@ okf_version: "0.2"
 - [How a record's tags are laid out](tags-layout.md) - okf-tools recommends a block list for `tags`, one `- tag` per line, since Prettier rewraps a long one-line flow list; it reads every valid layout, and recommends block only for new and fixed records.
 - [How changelog lines are built](changelog-formatter.md) - `scripts/changelog.ts` prefixes each changeset's summary with the gitmoji and scope of the squash commit that added it, under changesets' own bump-type headings; it's tested but never published, and runs under Node's type stripping.
 - [How okf index keeps an index.md in step with its records](index-sync.md) - `okf index` rewrites each top-level list line that links to a record from its title and description, sorted by title within its run, adds missing records, drops gone ones, and keeps a tag index between markers; everything else in the file stays as written, and `--check` fails when an index differs.
+- [How okf migrate moves a bundle to OKF v0.3](migrate.md) - `okf migrate` declares v0.3 in the root `index.md`, fills a missing `title` and `description`, and rewrites each bare path that names a file only from the bundle root to the relative path v0.3 reads, by position; it never touches `generated` or `verified`, refuses a bundle whose paths are ambiguous, and is a dry run unless `--write`.
 - [How okf new and okf touch stamp generated](new-and-touch.md) - `okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses.
 - [How okf status reports a bundle's trust state](status-report.md) - `okf status` lists every record under the first group that fits, changed, draft, never signed off, stale, or settled, judged against the signer's sign-off; it writes nothing, exits `0` whatever it finds, and prints a versioned JSON shape for programs.
 - [How okf-tools is distributed](distribution.md) - A public package on the npm registry, installed as an exact-pinned dev dependency; not a private package, GitHub Packages, a git dependency, or a global CLI.
@@ -21,14 +22,14 @@ okf_version: "0.2"
 - [What the library accepts, and how it refuses](library.md) - `verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; and a summary's `writtenStatus` tells an absent status from one OKF doesn't define.
 - [Which actors can sign a record](actor.md) - `okf.verifiedBy` or `--by` must be an OKF actor YAML reads back as a plain string: it starts with a letter, has a `:` or `/` after it, and holds no whitespace, quotes, `#`, or flow indicators; there is no default.
 - [Which files in a bundle are records](bundle-contents.md) - Every `.md` file at any depth under a configured bundle is a record, other than `index.md` and `log.md` at every level and the paths `okf.exclude` matches; a bundle inside another counts each record once, and a symlink to a folder is never followed.
-- [Which OKF spec okf-tools follows](spec-pin.md) - okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.2 text at `0b87c52`; every spec link points to the pin, and adopting v0.3 is a PR of its own.
+- [Which OKF spec okf-tools follows](spec-pin.md) - okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.3 text at `527e81a`; every spec link points to the pin, and `okf migrate` moves a v0.1 or v0.2 bundle to it.
 - [Who owns the spec rules `okf check` runs](spec-rules.md) - okf-tools builds the spec rules into `okf check` itself, on the frontmatter reader `okf verify` uses; a trial of okfit, okf-lint and okf-kit on a fabricated bundle rejected adopting any of them, and adopting one is revisited if v0.3 grows the spec rules well past what okf-tools reads.
 - [Who verifies a record](who-verifies.md) - Verification is the person's call, but not only a terminal prompt may record it; an agent verifies with `--yes` when the person asks, naming the files and signing as the person.
 - [Why every PR adds a changeset](changeset-every-pr.md) - CI's required `🦋 Changeset` check fails a PR without one; a PR that ships nothing adds `pnpm changeset --empty`, and the version PR, which is exempt, has its CI run approved by hand before it merges.
 
 # About this bundle
 
-This directory is an [Open Knowledge Format v0.2](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case. `pnpm okf:index` rewrites those lines from each record's frontmatter.
+This directory is an [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) bundle, still declared `okf_version: "0.2"`, of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case. `pnpm okf:index` rewrites those lines from each record's frontmatter.
 
 Each decision opens with YAML frontmatter:
 
@@ -45,7 +46,7 @@ tags:
   - verification
 sources:
   - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
 status: stable
 generated: { by: <agent>/<model-id>, at: 2026-11-11T12:00:00Z }

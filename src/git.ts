@@ -531,6 +531,26 @@ export function listIndexPaths(repoRoot: string): string[] {
 }
 
 /**
+ * List every path in the working tree git would track: those in its index,
+ * and untracked ones it doesn't ignore, in one `git ls-files` call; empty when
+ * git can't be asked.
+ *
+ * - Not trimmed, since a file name may start with a space.
+ */
+export function listWorkingPaths(repoRoot: string): string[] {
+  try {
+    return runGit({
+      args: ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+      repoRoot,
+    })
+      .split("\0")
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Read the ref a record counts as changed against: the remote's default
  * branch (`origin/HEAD`), else `origin/main`, else the local `main`.
  *
