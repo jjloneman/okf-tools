@@ -8,7 +8,7 @@ import {
   outro,
   select,
 } from "@clack/prompts";
-import { chmodSync } from "node:fs";
+import { chmodSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -505,5 +505,64 @@ describe("runInteractive", () => {
       expect.stringContaining("the commit failed:\nhook says no")
     );
     expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
+  });
+});
+
+describe("runInteractive, when a file or git call fails", () => {
+  test("closes the prompts naming a record deleted while the prompt is open", async () => {
+    // Given - the person deletes a draft before confirming
+    vi.mocked(confirm).mockImplementation(() => {
+      unlinkSync(path.join(repo.root, "docs/decisions/a.md"));
+
+      return Promise.resolve(true);
+    });
+
+    // When - running
+    const code = await runInteractive(context());
+
+    // Then - a failure naming the record, and the other draft untouched
+    expect(code).toBe(1);
+    expect(cancel).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^docs\/decisions\/a\.md can't be read any more: ENOENT[^\n]*\nNo files changed\.$/u
+      )
+    );
+    expect(repo.read("docs/references/c.md")).toBe(draftRecord("C"));
+  });
+
+  test("closes the prompts naming a bundle that can't be listed", async () => {
+    // Given - a bundle with no read permission
+    const bundle = path.join(repo.root, "docs/references");
+
+    chmodSync(bundle, 0o000);
+
+    try {
+      // When - running
+      const code = await runInteractive(context());
+
+      // Then - a failure naming the bundle, before any prompt
+      expect(code).toBe(1);
+      expect(cancel).toHaveBeenCalledWith(
+        expect.stringMatching(/^docs\/references can't be listed: EACCES/u)
+      );
+      expect(multiselect).not.toHaveBeenCalled();
+    } finally {
+      chmodSync(bundle, 0o755);
+    }
+  });
+
+  test("closes the prompts naming the bundles when git status fails", async () => {
+    // Given - an index git can't read
+    repo.write(".git/index", "garbage\n");
+
+    // When - running
+    const code = await runInteractive(context());
+
+    // Then - a failure naming the bundles and git's reason, before any prompt
+    expect(code).toBe(1);
+    expect(cancel).toHaveBeenCalledWith(
+      "Couldn't read git status for docs/decisions, docs/references: fatal: .git/index: index file smaller than expected"
+    );
+    expect(multiselect).not.toHaveBeenCalled();
   });
 });

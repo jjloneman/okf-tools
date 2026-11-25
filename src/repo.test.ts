@@ -10,6 +10,8 @@ import {
   verifiedRecord,
 } from "#test/repo";
 
+import type { Outcome } from "./outcome.ts";
+
 import {
   loadCandidate,
   loadCandidates,
@@ -20,6 +22,15 @@ import {
 } from "./repo.ts";
 
 const { repo } = useTestRepo();
+
+/** The value of an outcome a test expects to succeed. */
+function unwrap<T>(outcome: Outcome<T>): T {
+  if (!outcome.isOk) {
+    throw new Error(outcome.reason);
+  }
+
+  return outcome.value;
+}
 
 describe("loadCandidate", () => {
   test("explains a record that can't be read", () => {
@@ -54,11 +65,13 @@ describe("loadCandidates, given invalid YAML", () => {
     repo.write("docs/decisions/b.md", draftRecord("B"));
 
     // When - loading the bundle
-    const { candidates, skipped } = loadCandidates({
-      bundleDirs: ["docs/decisions"],
-      repoRoot: repo.root,
-      verifiedBy: VERIFIED_BY,
-    });
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
 
     // Then - the good record listed, and the other reported
     expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
@@ -83,11 +96,13 @@ describe("loadCandidates, given a layout the edits refuse", () => {
     repo.write("docs/decisions/b.md", draftRecord("B"));
 
     // When - loading the bundle
-    const { candidates, skipped } = loadCandidates({
-      bundleDirs: ["docs/decisions"],
-      repoRoot: repo.root,
-      verifiedBy: VERIFIED_BY,
-    });
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
 
     // Then - the good record listed, and the other reported with its reason
     expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
@@ -111,11 +126,13 @@ describe("loadCandidates", () => {
     chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);
 
     // When - loading the bundle
-    const { candidates, skipped } = loadCandidates({
-      bundleDirs: ["docs/decisions"],
-      repoRoot: repo.root,
-      verifiedBy: VERIFIED_BY,
-    });
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
 
     // Then - the readable record listed, and the other reported
     expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
@@ -127,6 +144,33 @@ describe("loadCandidates", () => {
     expect(skipped[0]?.reason).toMatch(
       /^docs\/decisions\/a\.md can't be read: /u
     );
+  });
+
+  test("fails naming a bundle that can't be listed", () => {
+    // Given - a bundle with no read permission
+    const bundle = path.join(repo.root, "docs/decisions");
+
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    chmodSync(bundle, 0o000);
+
+    try {
+      // When - loading it
+      const loaded = loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      });
+
+      // Then - a failure naming the bundle
+      expect(loaded).toStrictEqual({
+        isOk: false,
+        reason: expect.stringMatching(
+          /^docs\/decisions can't be listed: EACCES/u
+        ) as unknown,
+      });
+    } finally {
+      chmodSync(bundle, 0o755);
+    }
   });
 
   test("reads each bundle's records in order, skipping non-records", () => {
@@ -143,11 +187,13 @@ describe("loadCandidates", () => {
     repo.write("docs/references/d.md", draftRecord("D"));
 
     // When - loading both bundles
-    const { candidates, skipped } = loadCandidates({
-      bundleDirs: ["docs/decisions", "docs/references"],
-      repoRoot: repo.root,
-      verifiedBy: VERIFIED_BY,
-    });
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions", "docs/references"],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
 
     // Then - the records, with their states
     expect(

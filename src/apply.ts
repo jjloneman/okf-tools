@@ -8,7 +8,8 @@
 import type { Candidate } from "./records.ts";
 import type { RunContext } from "./run-context.ts";
 
-import { commitFiles, listDirtyPaths } from "./git.ts";
+import { commitFiles } from "./git.ts";
+import { describeError } from "./output.ts";
 import {
   buildCommitMessage,
   currentTimestamp,
@@ -20,8 +21,9 @@ import { readRecordText, writeRecords } from "./repo.ts";
 export type ApplyOutcome =
   | {
       /**
-       * Nothing was written: a record changed on disk since it was read, or a
-       * write failed and the others were restored.
+       * Nothing was written: a record changed on disk or became unreadable
+       * since it was read, or a write failed and the others were restored;
+       * the message names any record the restore couldn't put back.
        *
        * @example "notWritten"
        */
@@ -110,7 +112,8 @@ export type VerificationPlan = {
  * Write the plan's edits, then commit them unless the run says not to.
  *
  * - Every record is read again first: if one changed on disk since the plan
- *   was made (an edit saved while the prompt was open), nothing is written.
+ *   was made (an edit saved while the prompt was open), or can't be read any
+ *   more, nothing is written.
  *
  * - The edits are rebuilt with the current time, so `verified.at` is when the
  *   person confirmed, not when the checklist opened.
@@ -123,11 +126,24 @@ export function applyVerification(params: {
   const { repoRoot, shouldCommit, verifiedBy } = context;
   const { candidates, filePaths, message } = plan;
 
-  const changedPaths = candidates
-    .filter(
-      ({ filePath, text }) => readRecordText({ filePath, repoRoot }) !== text
-    )
-    .map(({ filePath }) => filePath);
+  const changedPaths: string[] = [];
+
+  for (const { filePath, text } of candidates) {
+    let currentText: string;
+
+    try {
+      currentText = readRecordText({ filePath, repoRoot });
+    } catch (error) {
+      return {
+        kind: "notWritten",
+        message: `${filePath} can't be read any more: ${describeError(error)}\nNo files changed.`,
+      };
+    }
+
+    if (currentText !== text) {
+      changedPaths.push(filePath);
+    }
+  }
 
   if (changedPaths.length > 0) {
     return {
@@ -182,23 +198,19 @@ export function describeDirtyPaths(dirtyPaths: readonly string[]): string {
  * - Listing already left out any record the edits refuse, and
  *   `applyVerification` checks again before writing.
  *
- * - `statusPaths` is what `git status` already reported this run, when the
- *   caller has it, so the dirty check needn't ask again.
+ * - `statusPaths` is what `git status` reported for the records, read by the
+ *   caller, so planning never calls git and can't fail.
  */
 export function planVerification(params: {
-  context: Pick<RunContext, "repoRoot" | "shouldCommit">;
+  context: Pick<RunContext, "shouldCommit">;
   selected: readonly Candidate[];
-  statusPaths?: ReadonlySet<string>;
+  statusPaths: ReadonlySet<string>;
 }): VerificationPlan {
   const { context, selected, statusPaths } = params;
-  const { repoRoot, shouldCommit } = context;
+  const { shouldCommit } = context;
 
   const filePaths = selected.map(({ filePath }) => filePath);
-
-  const dirtyPaths =
-    statusPaths === undefined
-      ? listDirtyPaths({ filePaths, repoRoot })
-      : filePaths.filter((filePath) => statusPaths.has(filePath));
+  const dirtyPaths = filePaths.filter((filePath) => statusPaths.has(filePath));
 
   return {
     candidates: selected,

@@ -41,10 +41,15 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
 
   intro(`Verify records in ${bundleDirs.join(", ")}`);
 
-  const { hasBranchDiff, paths, statusPaths } = listChangedPaths({
-    bundleDirs,
-    repoRoot,
-  });
+  const changes = listChangedPaths({ bundleDirs, repoRoot });
+
+  if (!changes.isOk) {
+    cancel(changes.reason);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { hasBranchDiff, paths, statusPaths } = changes.value;
 
   if (!hasBranchDiff) {
     log.warn(
@@ -52,11 +57,15 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
     );
   }
 
-  const { candidates: all, skipped } = loadCandidates({
-    bundleDirs,
-    repoRoot,
-    verifiedBy,
-  });
+  const loaded = loadCandidates({ bundleDirs, repoRoot, verifiedBy });
+
+  if (!loaded.isOk) {
+    cancel(loaded.reason);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { candidates: all, skipped } = loaded.value;
   const hasSkipped = skipped.length > 0;
 
   for (const { reason } of skipped) {

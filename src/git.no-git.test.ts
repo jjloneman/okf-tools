@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { findRepoRoot } from "./git.ts";
+import { findRepoRoot, listDirtyPaths } from "./git.ts";
 
 const { failure } = vi.hoisted(() => ({
   failure: { error: new Error("unset") },
@@ -35,6 +35,27 @@ describe("findRepoRoot when git can't run", () => {
     expect(findRepoRoot("/")).toStrictEqual({
       isOk: false,
       reason: "Couldn't find the repo root: git failed",
+    });
+  });
+});
+
+describe("listDirtyPaths when git status prints nothing", () => {
+  test.for([
+    { description: "no stderr", error: new Error("killed") },
+    {
+      description: "an empty stderr",
+      error: Object.assign(new Error("killed"), { stderr: "  \n" }),
+    },
+  ])("names the path and the error, given $description", ({ error }) => {
+    // Given - git status failing without a message
+    failure.error = error;
+
+    // When/Then - the error's own message
+    expect(
+      listDirtyPaths({ filePaths: ["a.md"], repoRoot: "/" })
+    ).toStrictEqual({
+      isOk: false,
+      reason: "Couldn't read git status for a.md: killed",
     });
   });
 });

@@ -3,8 +3,8 @@ type: Decision
 title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-13T02:28:00Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:24:32Z }
 verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
@@ -30,8 +30,12 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - **All or nothing before writing:** if any chosen record refuses the edit, nothing is written.
   - As of 2026-11-12, a record the edits would refuse is reported when the records are listed and left out of the selection, so it can't hold the others back; the write-time refusal still guards a record changed on disk since.
 - **Re-read before writing:** each record is read again just before the write; if one changed on disk since it was listed, such as an edit saved while the prompt was open, nothing is written.
+  - As of 2026-11-25, a record that can't be read any more, such as one deleted while the prompt was open, also writes nothing, with a message naming it (issue #34).
 - **Re-stamped at confirmation:** the edits are rebuilt with the current UTC time at write time, so `verified.at` is when the person confirmed, not when the checklist opened.
 - **A failed write rolls back:** if a write fails partway, the records already written get their original text back.
+  - As of 2026-11-25, the rollback is best effort: it tries every record written so far and the one whose write failed, which may be left truncated, and the message names each one it couldn't restore, in place of "No files changed." (issue #34).
+- **Failures are outcomes, not exceptions:** as of 2026-11-25, a file or git call that fails on the way (re-reading a record, listing a bundle, `git status`) ends the run with exit `1` and a message naming the path, and closes the interactive prompts cleanly (issue #34).
+  - A commit whose hash can't be read back still counts as committed, reported as `(hash unknown)`, since git made it.
 - **The commit names only the verified files:** `git add -- <files>`, then `git commit -m <message> -- <files>`, so anything else staged stays out of it.
   - A chosen record with other uncommitted changes is committed whole, with a warning listing it first.
 - **A rejected commit is unstaged:** if a hook rejects it, the files are unstaged again so the next unrelated commit doesn't pick them up; the edits stay on disk, and the hook's output is printed.
@@ -43,6 +47,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - A record that's half-verified, or verified with text the person never saw, is worse than one left as a draft; each guard keeps the result to "all verified as reviewed" or "nothing changed".
 - Hooks are the repo's own checks, so a sign-off goes through them like any other commit; pushing stays the person's step.
 - These guards came from two `/code-review` passes and PR review on PR #2.
+- A raw `ENOENT` from a deleted record, or a prompt frame left open, tells the person nothing about which record or what state the files are in; the code audit (issue #25) found the unguarded calls, and issue #34 made each return a reason that the run mode prints.
 - The OKF spec lets a record use any YAML, so reading must accept every layout, but a writer may refuse one. Each layout the edits accepted beyond the common ones (anchors, aliases, multi-line flow collections, `?` keys) needed its own code path and drew its own review findings; an allowlist turns the unknown layouts into refusals instead of bugs, and every `verified` field in the owner's bundles as of 2026-11-12 was already a one-line `{ by, at }`.
 - The `yaml` package's CST layer (`CST.setScalarValue`) was tried for the value overwrites on 2026-11-12 and not adopted: an empty value (`at:`) has no CST token, so the range-based edit was needed anyway, and the values written (`stable`, an ISO timestamp) never need the escaping it adds. A full round-trip with `doc.toString()` was also rejected: it changed 13 of the owner's records, such as `[a, b]` to `[ a, b ]`.
 - Property tests with `fast-check` generate the allowed layouts and check the edits' meaning and untouched lines on each; they found the insert point after a block whose last value is empty, and, with a wider generator, after a `? generated` key with no value.

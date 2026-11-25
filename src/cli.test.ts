@@ -406,6 +406,57 @@ describe("run --yes", () => {
     expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
   });
 
+  test.for([
+    {
+      args: ["--changed"],
+      description: "--changed",
+      paths: "docs/decisions, docs/references",
+    },
+    {
+      args: ["docs/decisions/a.md"],
+      description: "a named record",
+      paths: "docs/decisions/a.md",
+    },
+  ])(
+    "$description fails naming the paths when git status fails",
+    async ({ args, paths }) => {
+      // Given - an index git can't read
+      repo.write(".git/index", "garbage\n");
+
+      // When - verifying
+      const code = await runIn(["--yes", ...args]);
+
+      // Then - a failure naming the paths, and nothing written
+      expect(code).toBe(1);
+      expect(errors).toStrictEqual([
+        `[okf-verify] Couldn't read git status for ${paths}: fatal: .git/index: index file smaller than expected`,
+      ]);
+      expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
+    }
+  );
+
+  test.for([
+    {
+      args: ["--no-commit", "docs/decisions/a.md"],
+      code: 0,
+      description: "a run that doesn't commit",
+    },
+    {
+      args: ["docs/decisions/b.md"],
+      code: 2,
+      description: "a run with nothing to verify",
+    },
+  ])("$description never needs git status", async ({ args, code }) => {
+    // Given - an index git can't read
+    repo.write(".git/index", "garbage\n");
+
+    // When - verifying named records
+    const exitCode = await runIn(["--yes", ...args]);
+
+    // Then - the run ends as it would with a working index
+    expect({ errors, exitCode }).toStrictEqual({ errors: [], exitCode: code });
+  });
+
   test("refuses a named record that can't be read", async () => {
     // Given - a record that can't be read
     chmodSync(path.join(repo.root, "docs/decisions/a.md"), 0o000);

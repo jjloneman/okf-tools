@@ -161,21 +161,36 @@ export function loadCandidate(params: {
  * - A record that can't be read, isn't valid YAML, or has a layout the edits
  *   refuse is left out too, but reported, so the caller can say so rather
  *   than skip it unseen.
+ *
+ * - A bundle that can't be listed fails the whole load, naming the bundle,
+ *   since its records can't even be counted as skipped.
  */
 export function loadCandidates(params: {
   bundleDirs: readonly string[];
   repoRoot: string;
   verifiedBy: string;
-}): LoadedRecords {
+}): Outcome<LoadedRecords> {
   const { bundleDirs, repoRoot } = params;
+  const filePaths: string[] = [];
 
-  const filePaths = bundleDirs.flatMap((bundleDir) =>
-    readdirSync(path.join(repoRoot, bundleDir))
-      .sort()
-      .map((name) => path.posix.join(bundleDir, name))
-  );
+  for (const bundleDir of bundleDirs) {
+    let names: string[];
 
-  return loadCandidatesAt({ ...params, filePaths });
+    try {
+      names = readdirSync(path.join(repoRoot, bundleDir));
+    } catch (error) {
+      return {
+        isOk: false,
+        reason: `${bundleDir} can't be listed: ${describeError(error)}`,
+      };
+    }
+
+    filePaths.push(
+      ...names.sort().map((name) => path.posix.join(bundleDir, name))
+    );
+  }
+
+  return { isOk: true, value: loadCandidatesAt({ ...params, filePaths }) };
 }
 
 /**
@@ -304,6 +319,10 @@ export function resolveRecordPaths(params: {
  *
  * - When a write fails partway, the records already written get their
  *   original text back, so no record is left half-verified.
+ *
+ * - That rollback is best effort, and covers the record whose write failed
+ *   too, since a failed write can leave it truncated: a record it can't
+ *   restore is named, so the person knows which are left changed.
  */
 export function writeRecords(params: {
   edits: readonly RecordEdit[];
@@ -316,13 +335,19 @@ export function writeRecords(params: {
     try {
       writeFileSync(path.join(repoRoot, edit.filePath), edit.text);
     } catch (error) {
-      written.forEach(({ filePath, originalText }) => {
-        writeFileSync(path.join(repoRoot, filePath), originalText);
+      const unrestored = restoreRecords({
+        edits: [...written, edit],
+        repoRoot,
       });
 
       return {
         isOk: false,
-        reason: `Couldn't write ${edit.filePath}: ${describeError(error)}\nNo files changed.`,
+        reason: [
+          `Couldn't write ${edit.filePath}: ${describeError(error)}`,
+          unrestored.length === 0
+            ? "No files changed."
+            : `These are left changed, since restoring them failed:\n${unrestored.join("\n")}`,
+        ].join("\n"),
       };
     }
 
@@ -330,6 +355,20 @@ export function writeRecords(params: {
   }
 
   return { isOk: true, value: undefined };
+}
+
+/** Whether a file can be read and holds the given text. */
+function holdsText(params: {
+  filePath: string;
+  originalText: string;
+}): boolean {
+  const { filePath, originalText } = params;
+
+  try {
+    return readFileSync(filePath, "utf8") === originalText;
+  } catch {
+    return false;
+  }
 }
 
 /** Whether a path exists and is a directory. */
@@ -368,6 +407,36 @@ function isRecordPath(params: {
   const { filePath, repoRoot } = params;
 
   return isRecordName(params) && isFile(path.join(repoRoot, filePath));
+}
+
+/**
+ * Write each record's original text back, unless it already holds it.
+ *
+ * - A record already holding its original text is left alone, so one whose
+ *   write was refused before it opened isn't reported as unrestored.
+ *
+ * @returns why each record that couldn't be restored wasn't, naming it.
+ */
+function restoreRecords(params: {
+  edits: readonly RecordEdit[];
+  repoRoot: string;
+}): string[] {
+  const { edits, repoRoot } = params;
+  const unrestored: string[] = [];
+
+  for (const { filePath, originalText } of edits) {
+    if (holdsText({ filePath: path.join(repoRoot, filePath), originalText })) {
+      continue;
+    }
+
+    try {
+      writeFileSync(path.join(repoRoot, filePath), originalText);
+    } catch (error) {
+      unrestored.push(`${filePath}: ${describeError(error)}`);
+    }
+  }
+
+  return unrestored;
 }
 
 /**

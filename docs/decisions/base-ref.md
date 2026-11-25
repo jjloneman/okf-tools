@@ -3,8 +3,8 @@ type: Decision
 title: What a record counts as changed against
 description: The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 tags: [git]
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-13T02:28:00Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:24:32Z }
 verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
@@ -24,6 +24,7 @@ As of 2026-11-11, from `readBaseRef` and `listChangedPaths` in `src/git.ts`:
   - in `git diff <base>...HEAD`, the changes since the branch left the base;
   - or reported by `git status`, staged, unstaged, or untracked.
 - **When the diff can't be read**, such as a base that doesn't exist, the run says so and uses uncommitted changes only, rather than failing.
+- **When `git status` fails**, such as on a corrupt index, the run fails with exit `1`, naming the bundles and git's message, since the uncommitted records it would miss are the ones most often verified (as of 2026-11-25, issue #34).
 - **Every git path is literal** (`--literal-pathspecs`), so a record named `[ab].md` matches only itself.
 
 ## Why
