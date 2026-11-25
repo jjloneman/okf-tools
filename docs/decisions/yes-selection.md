@@ -3,9 +3,9 @@ type: Decision
 title: What `--yes` verifies, and how it exits
 description: "`--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified and committed, and exits `0` worked, `1` failed, `2` nothing to verify."
 tags: [agents, cli]
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:37:22Z }
-verified: { by: human:jjloneman, at: 2026-11-12T07:03:21Z }
+verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
 # What `--yes` verifies, and how it exits

@@ -10,9 +10,9 @@ sources:
   - id: yaml-spec
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:18:43Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
 # Which actors can sign a record

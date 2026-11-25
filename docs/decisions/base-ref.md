@@ -3,9 +3,9 @@ type: Decision
 title: What a record counts as changed against
 description: The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 tags: [git]
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:24:32Z }
-verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
+verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
 # What a record counts as changed against
