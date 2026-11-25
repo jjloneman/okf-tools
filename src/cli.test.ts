@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -412,6 +412,240 @@ describe("run --yes", () => {
       "the commit failed:\n[okf-verify] hook says no"
     );
     expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
+    expect(infos.at(-1)).toBe(
+      "[okf-verify] Once the commit can go through, run the same command again to commit it."
+    );
+  });
+
+  test("a re-run after a rejected commit commits the sign-off as it is", async () => {
+    // Given - a sign-off left on disk by a commit a hook rejected
+    repo.installFailingHook({ output: "hook says no" });
+    await runIn(["--yes", "docs/decisions/a.md"]);
+    unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+
+    const signedOff = repo.read("docs/decisions/a.md");
+
+    infos.length = 0;
+
+    // When - running the same command again
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - committed unchanged, with no warning about its own change
+    expect(code).toBe(0);
+    expect(repo.git("status", "--porcelain")).toBe("");
+    expect(repo.read("docs/decisions/a.md")).toBe(signedOff);
+    expect(infos).toStrictEqual([
+      "[okf-verify] committing docs/decisions/a.md: already verified, not yet committed",
+      expect.stringMatching(/^\[okf-verify\] committed [0-9a-f]+$/u),
+    ]);
+  });
+
+  test("--changed commits a verified record HEAD doesn't have, beside a draft", async () => {
+    // Given - a new record verified on disk but never committed, and a draft
+    repo.write(
+      "docs/decisions/e.md",
+      verifiedRecord({ by: "human:jjloneman", title: "E" })
+    );
+    repo.write("docs/decisions/a.md", `${draftRecord("A")}\nMore.\n`);
+
+    // When - verifying every changed record
+    const code = await runIn(["--yes", "--changed"]);
+
+    // Then - both in one commit, the draft edited and the new one as it is
+    expect(code).toBe(0);
+    expect(repo.git("show", "--name-only", "--format=%s", "HEAD")).toBe(
+      "docs(decisions): 📝 verify 2 decision records\n\ndocs/decisions/a.md\ndocs/decisions/e.md\n"
+    );
+    expect(infos).toContain("[okf-verify] verified docs/decisions/a.md");
+    expect(infos).not.toContain("[okf-verify] verified docs/decisions/e.md");
+  });
+
+  test("--no-commit still skips a verified record that isn't committed", async () => {
+    // Given - a sign-off on disk, not committed
+    repo.write(
+      "docs/decisions/a.md",
+      verifiedRecord({ by: "human:jjloneman", title: "A" })
+    );
+
+    // When - naming it without committing
+    const code = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+
+    // Then - nothing to do
+    expect(code).toBe(2);
+    expect(infos[0]).toBe(
+      "[okf-verify] skipped docs/decisions/a.md: already verified, unchanged"
+    );
+  });
+
+  test("skips a verified record when HEAD can't be read", async () => {
+    // Given - a verified record on a branch with no commits yet
+    repo.git("checkout", "--quiet", "--orphan", "empty");
+
+    // When - naming it
+    const code = await runIn(["--yes", "docs/decisions/b.md"]);
+
+    // Then - skipped, as when it's committed
+    expect(code).toBe(2);
+    expect(infos[0]).toBe(
+      "[okf-verify] skipped docs/decisions/b.md: already verified, unchanged"
+    );
+  });
+
+  test("commits a verified record whose HEAD copy isn't a record", async () => {
+    // Given - a file committed with no frontmatter, now a verified record
+    repo.write("docs/decisions/e.md", "# Just notes\n");
+    repo.commitAll("add notes");
+    repo.write(
+      "docs/decisions/e.md",
+      verifiedRecord({ by: "human:jjloneman", title: "E" })
+    );
+
+    // When - naming it
+    const code = await runIn(["--yes", "docs/decisions/e.md"]);
+
+    // Then - committed as it is
+    expect(code).toBe(0);
+    expect(repo.git("status", "--porcelain")).toBe("");
+  });
+
+  test("a re-run commits a renewed sign-off over an older committed one", async () => {
+    // Given - b.md regenerated on disk, re-verified, and the commit rejected
+    repo.write(
+      "docs/decisions/b.md",
+      verifiedRecord({ by: "human:jjloneman", title: "B" }).replace(
+        "at: 2026-10-01T15:00:00Z",
+        "at: 2026-10-03T15:00:00Z"
+      )
+    );
+    repo.installFailingHook({ output: "hook says no" });
+    await runIn(["--yes", "docs/decisions/b.md"]);
+    unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+
+    // When - running the same command again
+    const code = await runIn(["--yes", "docs/decisions/b.md"]);
+
+    // Then - the renewed sign-off is committed
+    expect(code).toBe(0);
+    expect(repo.git("status", "--porcelain")).toBe("");
+  });
+
+  test("warns when an uncommitted sign-off carries other changes too", async () => {
+    // Given - a sign-off left by a rejected commit, then a body edit
+    repo.installFailingHook({ output: "hook says no" });
+    await runIn(["--yes", "docs/decisions/a.md"]);
+    unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+    repo.write(
+      "docs/decisions/a.md",
+      `${repo.read("docs/decisions/a.md")}\nMore.\n`
+    );
+
+    // When - running the same command again
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - committed whole, with the warning naming it
+    expect(code).toBe(0);
+    expect(infos.join("\n")).toContain(
+      "which the commit will include:\n[okf-verify] docs/decisions/a.md"
+    );
+  });
+
+  test("skips an older sign-off restored over the committed one", async () => {
+    // Given - b.md committed with a later sign-off, and the older copy restored
+    const older = verifiedRecord({ by: "human:jjloneman", title: "B" });
+
+    repo.write(
+      "docs/decisions/b.md",
+      older.replace("at: 2026-10-02T13:30:00Z", "at: 2026-10-05T13:30:00Z")
+    );
+    repo.commitAll("renew b");
+    repo.write("docs/decisions/b.md", older);
+
+    // When - naming it
+    const code = await runIn(["--yes", "docs/decisions/b.md"]);
+
+    // Then - skipped, and left uncommitted
+    expect(code).toBe(2);
+    expect(repo.git("status", "--porcelain")).toBe(" M docs/decisions/b.md\n");
+  });
+
+  test("still skips a verified record git ignores, and verifies the rest", async () => {
+    // Given - a verified record never committed, which git ignores
+    repo.write(".gitignore", "docs/decisions/e.md\n");
+    repo.commitAll("ignore e");
+    repo.write(
+      "docs/decisions/e.md",
+      verifiedRecord({ by: "human:jjloneman", title: "E" })
+    );
+
+    // When - naming it beside a draft
+    const code = await runIn([
+      "--yes",
+      "docs/decisions/a.md",
+      "docs/decisions/e.md",
+    ]);
+
+    // Then - skipped, and the draft committed
+    expect(code).toBe(0);
+    expect(infos).toContain(
+      "[okf-verify] skipped docs/decisions/e.md: already verified, unchanged"
+    );
+    expect(repo.git("status", "--porcelain")).toBe("");
+  });
+
+  test("fails when git status can't confirm an uncommitted sign-off", async () => {
+    // Given - a sign-off on disk, not committed, and an index git can't read
+    repo.write(
+      "docs/decisions/a.md",
+      verifiedRecord({ by: "human:jjloneman", title: "A" })
+    );
+    repo.write(".git/index", "garbage\n");
+
+    // When - naming it
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - why, and the record as it was
+    expect(code).toBe(1);
+    expect(errors[0]).toMatch(
+      /^\[okf-verify\] Couldn't read git status for docs\/decisions\/a\.md: /u
+    );
+  });
+
+  test("leaves the record untouched when a merge is in progress", async () => {
+    // Given - a merge stopped before its commit
+    repo.git("checkout", "--quiet", "-b", "other");
+    repo.write("other.txt", "x\n");
+    repo.commitAll("other");
+    repo.git("checkout", "--quiet", "feature");
+    repo.write("feature.txt", "y\n");
+    repo.commitAll("feature");
+    repo.git("merge", "--quiet", "--no-ff", "--no-commit", "other");
+
+    // When - verifying a draft
+    const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+    // Then - refused before any write
+    expect(code).toBe(1);
+    expect(errors).toStrictEqual([
+      "[okf-verify] A merge is in progress, and git won't commit only some files during one; finish or abort it first.\n[okf-verify] No files changed.",
+    ]);
+    expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
+  });
+
+  test("leaves an ignored record untouched", async () => {
+    // Given - a draft that git ignores
+    repo.write(".gitignore", "docs/decisions/e.md\n");
+    repo.commitAll("ignore e");
+    repo.write("docs/decisions/e.md", draftRecord("E"));
+
+    // When - verifying it
+    const code = await runIn(["--yes", "docs/decisions/e.md"]);
+
+    // Then - refused with git's reason, and the file as it was
+    expect(code).toBe(1);
+    expect(errors[0]).toMatch(
+      /^\[okf-verify\] git won't stage docs\/decisions\/e\.md: The following paths are ignored/u
+    );
+    expect(repo.read("docs/decisions/e.md")).toBe(draftRecord("E"));
   });
 
   test("restores every record when one can't be written", async () => {

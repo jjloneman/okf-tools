@@ -99,6 +99,15 @@ export type GitFailure = {
   stdout: string | undefined;
 };
 
+/**
+ * The states in which git refuses a commit of only some files, by the ref
+ * each one leaves.
+ */
+const PARTIAL_COMMIT_BLOCKERS = [
+  { name: "A merge", ref: "MERGE_HEAD" },
+  { name: "A cherry-pick", ref: "CHERRY_PICK_HEAD" },
+] as const;
+
 /** The branch a record counts as changed against when `origin/HEAD` is unset. */
 const FALLBACK_BASE_REF = "main";
 
@@ -116,6 +125,46 @@ const RENAME_OR_COPY = /^(?:[CR].|.[CR])/u;
 
 /** The hash a commit reports when git can't read it back. */
 const UNKNOWN_HASH = "(hash unknown)";
+
+/**
+ * Say why git would refuse to commit just these files, before they're
+ * written, so a refusal leaves them as they were.
+ *
+ * - A merge or cherry-pick in progress refuses a commit of only some files.
+ *
+ * - `git add --dry-run` refuses an ignored path, or one beyond a symlink,
+ *   without staging anything.
+ */
+export function checkCommittable(params: {
+  filePaths: readonly string[];
+  repoRoot: string;
+}): Outcome<undefined> {
+  const { filePaths, repoRoot } = params;
+
+  const blocker = PARTIAL_COMMIT_BLOCKERS.find(
+    ({ ref }) =>
+      tryGit({ args: ["rev-parse", "--quiet", "--verify", ref], repoRoot }) !==
+      undefined
+  );
+
+  if (blocker !== undefined) {
+    return {
+      isOk: false,
+      reason: `${blocker.name} is in progress, and git won't commit only some files during one; finish or abort it first.`,
+    };
+  }
+
+  try {
+    runGit({ args: ["add", "--dry-run", "--", ...filePaths], repoRoot });
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `git won't stage ${filePaths.join(", ")}: ${describeGitFailure(error)}`,
+    };
+  }
+
+  return { isOk: true, value: undefined };
+}
 
 /**
  * Commit just the given files, so nothing else staged rides along.
@@ -288,6 +337,39 @@ export function readBaseRef(repoRoot: string): string {
     }) !== undefined;
 
   return hasRemoteMain ? REMOTE_MAIN : FALLBACK_BASE_REF;
+}
+
+/**
+ * Read a file as `HEAD` holds it.
+ *
+ * - `git ls-tree` prints nothing for a path `HEAD` doesn't have, so a record
+ *   never committed reads as `undefined`, not as a failure.
+ */
+export function readCommittedText(params: {
+  filePath: string;
+  repoRoot: string;
+}): Outcome<string | undefined> {
+  const { filePath, repoRoot } = params;
+
+  try {
+    const entry = runGit({
+      args: ["ls-tree", "-z", "HEAD", "--", filePath],
+      repoRoot,
+    });
+
+    return {
+      isOk: true,
+      value:
+        entry === ""
+          ? undefined
+          : runGit({ args: ["show", `HEAD:${filePath}`], repoRoot }),
+    };
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't read ${filePath} at HEAD: ${describeGitFailure(error)}`,
+    };
+  }
 }
 
 /**

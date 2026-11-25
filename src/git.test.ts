@@ -3,15 +3,82 @@ import { describe, expect, test } from "vitest";
 import { useTestRepo } from "#test/repo";
 
 import {
+  checkCommittable,
   commitFiles,
   findRepoRoot,
   listChangedPaths,
   listDirtyPaths,
   readBaseRef,
+  readCommittedText,
   readGitFailure,
 } from "./git.ts";
 
 const { repo } = useTestRepo();
+
+describe("checkCommittable", () => {
+  test("accepts a tracked and an untracked file, staging neither", () => {
+    // Given - a committed file changed, and a new one
+    repo.write("docs/a.md", "a\n");
+    repo.commitAll("add a");
+    repo.write("docs/a.md", "a2\n");
+    repo.write("docs/b.md", "b\n");
+
+    // When - asking whether both can be committed
+    const result = checkCommittable({
+      filePaths: ["docs/a.md", "docs/b.md"],
+      repoRoot: repo.root,
+    });
+
+    // Then - they can, and nothing is staged
+    expect(result).toStrictEqual({ isOk: true, value: undefined });
+    expect(repo.git("diff", "--cached", "--name-only")).toBe("");
+  });
+
+  test.each([
+    { description: "a merge", name: "A merge", ref: "MERGE_HEAD" },
+    {
+      description: "a cherry-pick",
+      name: "A cherry-pick",
+      ref: "CHERRY_PICK_HEAD",
+    },
+  ])("refuses during $description", ({ name, ref }) => {
+    // Given - the ref git leaves while one is in progress
+    repo.write("docs/a.md", "a\n");
+    repo.write(`.git/${ref}`, repo.git("rev-parse", "HEAD"));
+
+    // When - asking whether a file can be committed alone
+    const result = checkCommittable({
+      filePaths: ["docs/a.md"],
+      repoRoot: repo.root,
+    });
+
+    // Then - refused, naming what's in progress
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: `${name} is in progress, and git won't commit only some files during one; finish or abort it first.`,
+    });
+  });
+
+  test("refuses an ignored file, with git's reason", () => {
+    // Given - a file git ignores
+    repo.write(".gitignore", "docs/a.md\n");
+    repo.write("docs/a.md", "a\n");
+
+    // When - asking whether it can be committed
+    const result = checkCommittable({
+      filePaths: ["docs/a.md"],
+      repoRoot: repo.root,
+    });
+
+    // Then - refused, naming it
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^git won't stage docs\/a\.md: The following paths are ignored/u
+      ) as unknown,
+    });
+  });
+});
 
 describe("commitFiles", () => {
   test("commits only the named files", () => {
@@ -304,6 +371,57 @@ describe("readBaseRef", () => {
   test("falls back to main without origin/HEAD", () => {
     // Given/When/Then - main
     expect(readBaseRef(repo.root)).toBe("main");
+  });
+});
+
+describe("readCommittedText", () => {
+  test("reads a file as HEAD holds it, not as it is on disk", () => {
+    // Given - a committed file, changed since
+    repo.write("docs/a.md", "a\n");
+    repo.commitAll("add a");
+    repo.write("docs/a.md", "a2\n");
+
+    // When - reading it at HEAD
+    const result = readCommittedText({
+      filePath: "docs/a.md",
+      repoRoot: repo.root,
+    });
+
+    // Then - the committed text
+    expect(result).toStrictEqual({ isOk: true, value: "a\n" });
+  });
+
+  test("reads a file HEAD doesn't have as undefined", () => {
+    // Given - a file never committed
+    repo.write("docs/a.md", "a\n");
+
+    // When - reading it at HEAD
+    const result = readCommittedText({
+      filePath: "docs/a.md",
+      repoRoot: repo.root,
+    });
+
+    // Then - nothing, and no failure
+    expect(result).toStrictEqual({ isOk: true, value: undefined });
+  });
+
+  test("fails, naming the file, on a branch with no commits", () => {
+    // Given - HEAD on a branch with no commits yet
+    repo.git("checkout", "--quiet", "--orphan", "empty");
+
+    // When - reading a file at HEAD
+    const result = readCommittedText({
+      filePath: "package.json",
+      repoRoot: repo.root,
+    });
+
+    // Then - why
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^Couldn't read package\.json at HEAD: /u
+      ) as unknown,
+    });
   });
 });
 

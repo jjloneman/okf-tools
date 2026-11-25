@@ -5,14 +5,25 @@
  * - Split in two, so the interactive mode can show the plan and ask before
  *   anything is written.
  */
+import type { RecordSummary } from "./frontmatter/read.ts";
+import type { Timestamp } from "./frontmatter/types.ts";
+import type { Outcome } from "./outcome.ts";
 import type { Candidate } from "./records.ts";
 import type { RunContext } from "./run-context.ts";
 
-import { commitFiles } from "./git.ts";
+import { verifyRecord } from "./frontmatter/edit.ts";
+import { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
+import {
+  checkCommittable,
+  commitFiles,
+  listDirtyPaths,
+  readCommittedText,
+} from "./git.ts";
 import { describeError } from "./output.ts";
 import {
   buildCommitMessage,
   currentTimestamp,
+  needsSignOff,
   prepareEdits,
 } from "./records.ts";
 import { isRecordUnchanged, writeRecords } from "./repo.ts";
@@ -22,8 +33,9 @@ export type ApplyOutcome =
   | {
       /**
        * Nothing was written: a record changed on disk or became unreadable
-       * since it was read, or a write failed and the others were restored;
-       * the message names any record the restore couldn't put back.
+       * since it was read, git would refuse the commit, or a write failed
+       * and the others were restored; the message names any record the
+       * restore couldn't put back.
        *
        * @example "notWritten"
        */
@@ -75,18 +87,36 @@ export type ApplyOutcome =
       kind: "written";
     };
 
+/** The sign-offs on disk that `HEAD` doesn't hold yet. */
+export type UncommittedSignOffs = {
+  /**
+   * The verified records whose sign-off isn't committed.
+   *
+   * @example `new Set(["docs/decisions/a.md"])`
+   */
+  paths: ReadonlySet<string>;
+
+  /**
+   * Those whose only change from `HEAD` is the sign-off, so the warning about
+   * other uncommitted changes leaves them out.
+   *
+   * @example `new Set(["docs/decisions/a.md"])`
+   */
+  signOffOnlyPaths: ReadonlySet<string>;
+};
+
 /** What a run is about to do, before anything is written. */
 export type VerificationPlan = {
   /**
-   * The chosen records, as they were read; the edits are rebuilt from them at
-   * write time, with that moment's timestamp.
+   * The chosen records to edit, as they were read; the edits are rebuilt from
+   * them at write time, with that moment's timestamp.
    *
    * @example `[]`
    */
   candidates: readonly Candidate[];
 
   /**
-   * The chosen records that have other uncommitted changes, which a commit
+   * The edited records that have other uncommitted changes, which a commit
    * will include; empty when the run doesn't commit.
    *
    * @example `["docs/decisions/package-promise.md"]`
@@ -94,7 +124,8 @@ export type VerificationPlan = {
   dirtyPaths: string[];
 
   /**
-   * The chosen records' paths from the repo root.
+   * The chosen records' paths from the repo root, the edited and the
+   * uncommitted alike: what the commit names.
    *
    * @example `["docs/decisions/package-promise.md"]`
    */
@@ -106,6 +137,14 @@ export type VerificationPlan = {
    * @example `"docs(decisions): 📝 verify 1 decision record\n\n- A (a.md)"`
    */
   message: string;
+
+  /**
+   * The chosen records already verified on disk but not committed, which the
+   * commit takes as they are, with no edit.
+   *
+   * @example `[]`
+   */
+  uncommitted: readonly Candidate[];
 };
 
 /**
@@ -114,6 +153,9 @@ export type VerificationPlan = {
  * - Every record is read again first: if one changed on disk since the plan
  *   was made (an edit saved while the prompt was open), or can't be read any
  *   more, nothing is written.
+ *
+ * - A committing run asks git first whether it would commit these files, so
+ *   a refusal git is known to make leaves them as they were.
  *
  * - The edits are rebuilt with the current time, so `verified.at` is when the
  *   person confirmed, not when the checklist opened.
@@ -124,11 +166,11 @@ export function applyVerification(params: {
 }): ApplyOutcome {
   const { context, plan } = params;
   const { repoRoot, shouldCommit, verifiedBy } = context;
-  const { candidates, filePaths, message } = plan;
+  const { candidates, filePaths, message, uncommitted } = plan;
 
   const changedPaths: string[] = [];
 
-  for (const { filePath, text } of candidates) {
+  for (const { filePath, text } of [...candidates, ...uncommitted]) {
     let isUnchanged: boolean;
 
     try {
@@ -150,6 +192,17 @@ export function applyVerification(params: {
       kind: "notWritten",
       message: `${changedPaths.join(", ")} changed on disk since it was read; nothing written.`,
     };
+  }
+
+  if (shouldCommit) {
+    const committable = checkCommittable({ filePaths, repoRoot });
+
+    if (!committable.isOk) {
+      return {
+        kind: "notWritten",
+        message: `${committable.reason}\nNo files changed.`,
+      };
+    }
   }
 
   // Listing checked these same texts, so this only guards against the two
@@ -193,6 +246,81 @@ export function describeDirtyPaths(dirtyPaths: readonly string[]): string {
 }
 
 /**
+ * Pick out the records whose sign-off is on disk but not committed, such as
+ * after a hook rejected the commit, so a re-run can commit them as they are.
+ *
+ * - A verified record counts when `HEAD` lacks it, `HEAD`'s copy still needs
+ *   a sign-off, or the sign-off on disk is later than the one `HEAD` holds.
+ *   So a committed sign-off, or an older one restored over it, is never
+ *   committed as a new one.
+ *
+ * - `git status` must report it too, and is asked only when `HEAD` leaves
+ *   some record in doubt, so a run whose sign-offs are all committed never
+ *   needs it. That leaves out a file git won't stage, such as an ignored
+ *   one, and a path git sees as unchanged, such as a symlink.
+ *
+ * - When `HEAD` can't be read, the record is left out, as it would have been
+ *   before: skipped as already verified.
+ */
+export function findUncommittedSignOffs(params: {
+  candidates: readonly Candidate[];
+  context: Pick<RunContext, "repoRoot" | "verifiedBy">;
+}): Outcome<UncommittedSignOffs> {
+  const { candidates, context } = params;
+  const { repoRoot, verifiedBy } = context;
+  const signOffOnlyPaths = new Set<string>();
+  const filePaths: string[] = [];
+
+  candidates.forEach((candidate) => {
+    const { filePath, summary, text } = candidate;
+    const { verifiedAt } = summary;
+
+    if (verifiedAt === undefined || needsSignOff(candidate)) {
+      return;
+    }
+
+    const committed = readCommittedText({ filePath, repoRoot });
+
+    if (!committed.isOk) {
+      return;
+    }
+
+    const headText = committed.value;
+    const headSummary =
+      headText === undefined
+        ? undefined
+        : readRecordSummary({ text: headText, verifiedBy });
+
+    if (
+      headSummary !== undefined &&
+      getRecordState(headSummary) === "verified" &&
+      !isLater({ earlier: headSummary, later: verifiedAt })
+    ) {
+      return;
+    }
+
+    filePaths.push(filePath);
+
+    if (
+      headText !== undefined &&
+      isSignOffOf({ at: verifiedAt, headText, text, verifiedBy })
+    ) {
+      signOffOnlyPaths.add(filePath);
+    }
+  });
+
+  if (filePaths.length === 0) {
+    return { isOk: true, value: { paths: new Set(), signOffOnlyPaths } };
+  }
+
+  const dirty = listDirtyPaths({ filePaths, repoRoot });
+
+  return dirty.isOk
+    ? { isOk: true, value: { paths: new Set(dirty.value), signOffOnlyPaths } }
+    : dirty;
+}
+
+/**
  * Work out what verifying the chosen records will do, without writing.
  *
  * - Listing already left out any record the edits refuse, and
@@ -200,22 +328,73 @@ export function describeDirtyPaths(dirtyPaths: readonly string[]): string {
  *
  * - `statusPaths` is what `git status` reported for the records, read by the
  *   caller, so planning never calls git and can't fail.
+ *
+ * - A record in `uncommitted.paths` is committed as it is, not edited, and is
+ *   warned about only when it changed by more than the sign-off.
  */
 export function planVerification(params: {
   context: Pick<RunContext, "shouldCommit">;
   selected: readonly Candidate[];
   statusPaths: ReadonlySet<string>;
+  uncommitted?: UncommittedSignOffs;
 }): VerificationPlan {
-  const { context, selected, statusPaths } = params;
+  const {
+    context,
+    selected,
+    statusPaths,
+    uncommitted = { paths: new Set(), signOffOnlyPaths: new Set() },
+  } = params;
   const { shouldCommit } = context;
 
-  const filePaths = selected.map(({ filePath }) => filePath);
-  const dirtyPaths = filePaths.filter((filePath) => statusPaths.has(filePath));
+  const isUncommitted = ({ filePath }: Candidate): boolean =>
+    uncommitted.paths.has(filePath);
+
+  const candidates = selected.filter((candidate) => !isUncommitted(candidate));
+  const dirtyPaths = selected
+    .map(({ filePath }) => filePath)
+    .filter(
+      (filePath) =>
+        statusPaths.has(filePath) && !uncommitted.signOffOnlyPaths.has(filePath)
+    );
 
   return {
-    candidates: selected,
+    candidates,
     dirtyPaths: shouldCommit ? dirtyPaths : [],
-    filePaths,
+    filePaths: selected.map(({ filePath }) => filePath),
     message: buildCommitMessage(selected),
+    uncommitted: selected.filter(isUncommitted),
   };
+}
+
+/**
+ * Whether a sign-off time is later than the one a record holds, read the way
+ * a record's state is read.
+ *
+ * - `getRecordState` calls a record `verified` when it was generated no later
+ *   than it was signed, so a sign-off taken as the generation time is later
+ *   exactly when the state comes out `changed`.
+ */
+function isLater(params: {
+  earlier: RecordSummary;
+  later: Timestamp;
+}): boolean {
+  const { earlier, later } = params;
+
+  return getRecordState({ ...earlier, generatedAt: later }) === "changed";
+}
+
+/**
+ * Whether a record on disk is `HEAD`'s copy with only the sign-off added: the
+ * same edits, at the same time, give the same text.
+ */
+function isSignOffOf(params: {
+  at: Timestamp;
+  headText: string;
+  text: string;
+  verifiedBy: string;
+}): boolean {
+  const { at, headText, text, verifiedBy } = params;
+  const result = verifyRecord({ at, text: headText, verifiedBy });
+
+  return result.isOk && result.text === text;
 }
