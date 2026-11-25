@@ -14,13 +14,25 @@ import {
 import type { SpecPin } from "./pin.ts";
 
 import { createGitHubClient } from "./github.ts";
-import { findNewNotices, readUpstream, readVersion } from "./upstream.ts";
+import { readUpstream } from "./upstream.ts";
 
 /** The URL of the commits list the watch reads. */
 const COMMITS_URL = `${API}/repos/acme/spec/commits?path=okf%2FSPEC.md&per_page=100`;
 
 /** The URL of the spec's contents, before its `ref`. */
 const SPEC_URL = `${API}/repos/acme/spec/contents/okf/SPEC.md`;
+
+/** The URL of the README in the spec's folder, before any `ref`. */
+const FOLDER_README_URL = `${API}/repos/acme/spec/readme/okf`;
+
+/** The URL of the first page of releases. */
+const RELEASES_URL = `${API}/repos/acme/spec/releases?per_page=100&page=1`;
+
+/** The URL of the owner's newest repos. */
+const SIBLINGS_URL = `${API}/users/acme/repos?sort=created&direction=desc&per_page=100`;
+
+/** The URL of the first page of tags. */
+const TAGS_URL = `${API}/repos/acme/spec/tags?per_page=100&page=1`;
 
 /** The URL of the first page of open pull requests. */
 const PULLS_URL = `${API}/repos/acme/spec/pulls?state=open&per_page=100&page=1`;
@@ -30,6 +42,7 @@ function makeCommit(sha: string): unknown {
   return {
     commit: {
       author: { date: "2026-08-21T10:00:00Z" },
+      committer: { date: "2026-08-21T10:00:00Z" },
       message: `Update the spec\n\nA longer body.`,
     },
     html_url: `https://github.com/acme/spec/commit/${sha}`,
@@ -73,6 +86,7 @@ describe("readUpstream", () => {
       isOk: true,
       upstream: {
         commits: [],
+        foundHomes: [],
         fullName: "acme/spec",
         headSha: PIN_SHA,
         isArchived: false,
@@ -81,6 +95,8 @@ describe("readUpstream", () => {
         notices: [],
         publicCandidates: [],
         pullRequests: [],
+        releases: [],
+        tags: [],
         version: "0.2",
       },
     });
@@ -134,7 +150,50 @@ describe("readUpstream", () => {
         url: `${API}/repos/acme/spec/pulls/4/files?per_page=100&page=1`,
       },
       { body: { private: false }, url: `${API}/repos/acme/next-home` },
+      {
+        body: "**Version 0.3**\n",
+        url: `${API}/repos/acme/next-home/contents/okf/SPEC.md`,
+      },
       { status: 404, url: `${API}/repos/acme/other-home` },
+      {
+        body: "# Folder\nThe spec now lives in\n> https://github.com/acme/moved-home.\n",
+        url: FOLDER_README_URL,
+      },
+      { body: "# Folder\n", url: `${FOLDER_README_URL}?ref=${PIN_SHA}` },
+      {
+        status: 404,
+        url: `${API}/repos/acme/moved-home/contents/okf/SPEC.md`,
+      },
+      {
+        body: "**Version 0.4**\n",
+        url: `${API}/repos/acme/moved-home/contents/SPEC.md`,
+      },
+      { body: "# Moved\n", url: `${API}/repos/acme/moved-home/readme` },
+      {
+        body: [
+          {
+            name: "OKF v0.3",
+            tag_name: "v0.3",
+          },
+        ],
+        url: RELEASES_URL,
+      },
+      { body: [{ name: "v0.3" }, { name: "v0.2" }], url: TAGS_URL },
+      {
+        body: [
+          { created_at: "2026-09-01T00:00:00Z", full_name: "acme/sibling" },
+          {
+            created_at: "2026-09-01T00:00:00Z",
+            full_name: "acme/spec-renamed",
+          },
+          { created_at: "2026-01-01T00:00:00Z", full_name: "acme/old" },
+        ],
+        url: SIBLINGS_URL,
+      },
+      {
+        body: "**Version 0.3**\n",
+        url: `${API}/repos/acme/sibling/contents/okf/SPEC.md`,
+      },
     ];
 
     // When - reading it
@@ -152,23 +211,87 @@ describe("readUpstream", () => {
             url: `https://github.com/acme/spec/commit/${HEAD_SHA}`,
           },
         ],
+        foundHomes: [
+          {
+            linkedFrom: "acme/spec",
+            repo: "acme/moved-home",
+            spec: { path: "SPEC.md", version: "0.4" },
+          },
+          {
+            linkedFrom: undefined,
+            repo: "acme/sibling",
+            spec: { path: "okf/SPEC.md", version: "0.3" },
+          },
+        ],
         fullName: "acme/spec-renamed",
         headSha: HEAD_SHA,
         isArchived: true,
         isPinFound: true,
         isSpecMissing: false,
         notices: [
-          { file: "README", line: "Deprecated: see below." },
-          { file: "SPEC", line: "The spec has moved to acme/next-home." },
+          { file: "README", line: "Deprecated: see below.", repos: [] },
+          {
+            file: "FOLDER_README",
+            line: "The spec now lives in",
+            repos: ["acme/moved-home"],
+          },
+          {
+            file: "SPEC",
+            line: "The spec has moved to acme/next-home.",
+            repos: [],
+          },
         ],
-        publicCandidates: ["acme/next-home"],
+        publicCandidates: [
+          {
+            repo: "acme/next-home",
+            spec: { path: "okf/SPEC.md", version: "0.3" },
+          },
+        ],
         pullRequests: [
           { number: 4, title: "Rename the spec" },
           { number: 9, title: "Touch the spec" },
         ],
+        releases: [
+          {
+            name: "OKF v0.3",
+            tag: "v0.3",
+          },
+        ],
+        tags: ["v0.2"],
         version: "0.3",
       },
     });
+  });
+
+  test("reads no folder README for a spec at the repo's root", async () => {
+    // Given - a pin to a spec at the root, unchanged upstream
+    const pin = { ...PIN, candidates: [], path: "SPEC.md" };
+    const rootSpecUrl = `${API}/repos/acme/spec/contents/SPEC.md`;
+    const { fetch, requests } = createFakeFetch([
+      { body: { full_name: "acme/spec" }, url: `${API}/repos/acme/spec` },
+      {
+        body: [makeCommit(PIN_SHA)],
+        url: `${API}/repos/acme/spec/commits?path=SPEC.md&per_page=100`,
+      },
+      { body: "**Version 0.2**\n", url: `${rootSpecUrl}?ref=${PIN_SHA}` },
+      ...createUpstreamRoutes({
+        headSha: PIN_SHA,
+        pinSha: PIN_SHA,
+        version: "0.2",
+      }),
+    ]);
+
+    // When - reading it
+    const answer = await readUpstream({
+      client: createGitHubClient({ fetch, token: "fake-token" }),
+      pin,
+    });
+
+    // Then - nothing differs, and no folder README was read
+    expect(answer).toMatchObject({ isOk: true, upstream: { notices: [] } });
+    expect(requests.some((request) => request.url.includes("README.md"))).toBe(
+      false
+    );
   });
 
   test("lists every commit, and reads missing fields as empty, when the pin isn't found", async () => {
@@ -213,8 +336,13 @@ describe("readUpstream", () => {
       { status: 404, url: `${SPEC_URL}?ref=${PIN_SHA}` },
       { status: 404, url: `${API}/repos/acme/spec/readme` },
       { status: 404, url: `${API}/repos/acme/spec/readme?ref=${PIN_SHA}` },
+      { status: 404, url: FOLDER_README_URL },
+      { status: 404, url: `${FOLDER_README_URL}?ref=${PIN_SHA}` },
       { body: [], url: PULLS_URL },
+      { body: [], url: RELEASES_URL },
+      { body: [], url: TAGS_URL },
       { body: {}, url: `${API}/repos/acme/next-home` },
+      { body: [], url: SIBLINGS_URL },
     ];
 
     // When - reading it
@@ -225,6 +353,7 @@ describe("readUpstream", () => {
       isOk: true,
       upstream: {
         commits: [],
+        foundHomes: [],
         fullName: "acme/spec",
         headSha: undefined,
         isArchived: false,
@@ -233,6 +362,8 @@ describe("readUpstream", () => {
         notices: [],
         publicCandidates: [],
         pullRequests: [],
+        releases: [],
+        tags: [],
         version: undefined,
       },
     });
@@ -241,9 +372,14 @@ describe("readUpstream", () => {
   test.each([
     {
       description: "a public candidate",
-      expectedCandidates: ["acme/next-home"],
+      expectedCandidates: [{ repo: "acme/next-home", spec: undefined }],
       routes: [
         { body: { private: false }, url: `${API}/repos/acme/next-home` },
+        {
+          status: 404,
+          url: `${API}/repos/acme/next-home/contents/okf/SPEC.md`,
+        },
+        { status: 404, url: `${API}/repos/acme/next-home/contents/SPEC.md` },
       ],
     },
     {
@@ -259,20 +395,39 @@ describe("readUpstream", () => {
   ])(
     "reads a repo that is gone, with $description",
     async ({ expectedCandidates, routes }) => {
-      // Given - the repo answers 404
+      // Given - the repo answers 404, and its owner has an old repo with
+      // a spec
       const allRoutes: FakeRoute[] = [
         { status: 404, url: `${API}/repos/acme/spec` },
         ...routes,
+        {
+          body: [
+            { created_at: "2020-01-01T00:00:00Z", full_name: "acme/older" },
+          ],
+          url: SIBLINGS_URL,
+        },
+        {
+          body: "**Version 0.2**\n",
+          url: `${API}/repos/acme/older/contents/okf/SPEC.md`,
+        },
       ];
 
       // When - reading it
       const answer = await read({ routes: allRoutes });
 
-      // Then - the gone state, with the candidates read
+      // Then - the gone state, with the candidates read, and the owner's
+      // repo found however old it is
       expect(answer).toStrictEqual({
         isOk: true,
         upstream: {
           commits: [],
+          foundHomes: [
+            {
+              linkedFrom: undefined,
+              repo: "acme/older",
+              spec: { path: "okf/SPEC.md", version: "0.2" },
+            },
+          ],
           fullName: undefined,
           headSha: undefined,
           isArchived: false,
@@ -281,6 +436,8 @@ describe("readUpstream", () => {
           notices: [],
           publicCandidates: expectedCandidates,
           pullRequests: [],
+          releases: [],
+          tags: [],
           version: undefined,
         },
       });
@@ -344,10 +501,27 @@ describe("readUpstream", () => {
       reason: "GET /repos/acme/next-home answered 500",
       route: { status: 500, url: `${API}/repos/acme/next-home` },
     },
+    {
+      description: "the releases",
+      reason: `GET ${RELEASES_URL.slice(API.length)} answered 500`,
+      route: { status: 500, url: RELEASES_URL },
+    },
+    {
+      description: "the owner's repos",
+      reason: `GET ${SIBLINGS_URL.slice(API.length)} answered 500`,
+      route: { status: 500, url: SIBLINGS_URL },
+    },
   ])("fails when $description fails", async ({ reason, route }) => {
-    // Given - one read that fails, and one open pull request
+    // Given - one read that fails, one open pull request, and a README
+    // notice linking to another repo
     const routes: FakeRoute[] = [
       route,
+      {
+        body: "Deprecated: see https://github.com/acme/linked.\n",
+        url: `${API}/repos/acme/spec/readme`,
+      },
+      { status: 404, url: `${API}/repos/acme/linked/contents/okf/SPEC.md` },
+      { status: 404, url: `${API}/repos/acme/linked/contents/SPEC.md` },
       { body: [{ number: 9, title: "Touch the spec" }], url: PULLS_URL },
       {
         body: [],
@@ -365,41 +539,5 @@ describe("readUpstream", () => {
 
     // Then - that read's reason
     expect(answer).toStrictEqual({ isOk: false, reason });
-  });
-});
-
-describe("findNewNotices", () => {
-  test("finds only notice lines that weren't there at the pin, once each", () => {
-    // Given - a file that gained a notice twice, and kept an old one
-    const pinText = "# Spec\n`deprecated` is a status.\n";
-    const headText =
-      "# Spec\n`deprecated` is a status.\nNo longer maintained.\n No longer maintained.\nPlain line.\n";
-
-    // When - finding the new notices
-    const notices = findNewNotices({ file: "SPEC", headText, pinText });
-
-    // Then - the new one, once
-    expect(notices).toStrictEqual([
-      { file: "SPEC", line: "No longer maintained." },
-    ]);
-  });
-});
-
-describe("readVersion", () => {
-  test.each([
-    {
-      description: "a version line",
-      expected: "0.3",
-      text: "# Spec\n**Version 0.3 **\n",
-    },
-    { description: "no version line", expected: undefined, text: "# Spec\n" },
-  ])("reads $description", ({ expected, text }) => {
-    // Given - a spec's text
-
-    // When - reading its version
-    const version = readVersion(text);
-
-    // Then - the trimmed version, or undefined
-    expect(version).toBe(expected);
   });
 });

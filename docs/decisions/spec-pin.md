@@ -19,8 +19,8 @@ sources:
   - id: gcp-deprecated
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:59:44Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -42,7 +42,7 @@ As of 2026-11-25, from `spec/upstream.json` and issue #89:
 - **A re-pinned signed-off record goes back to `status: draft`**, keeping its `verified` entry, and is verified again; `okf-verify` sets it to `stable` on sign-off.
   - **Rejected:** keeping `stable` for a link-only edit; the re-stamped `generated` already marks it changed, but OKF v0.2 has no "trivial edit" exception (v0.3 §5.2 adds one), and one rule for every edit is simpler to follow.
 - **`candidates` is empty after the move**, since the only candidate became the home and no other is known.
-  - Finding the next home without a named candidate is #91.
+  - The spec watch still looks for the next home without one, as #91 added: repos a new notice links to, and new repos beside the home.
 
 ## Why
 
@@ -53,7 +53,7 @@ As of 2026-11-25, from `spec/upstream.json` and issue #89:
 
 - The first spec-watch run after the move reports the v0.3 commits and the version change, in an issue for adopting v0.3.
 - Re-pinning a record's spec source is an edit, so a signed-off record shows as changed, and reads as `draft`, until it's verified again.
-- Moves the spec watch didn't catch are tracked in #91.
+- The spec watch now reports moves like these two, as #91 added, including a move a notice in the spec's own folder announces.
 
 ## Links
 

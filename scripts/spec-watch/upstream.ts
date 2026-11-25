@@ -3,27 +3,21 @@
  * against the pin.
  */
 import type { Failure, GitHubClient } from "./github.ts";
+import type { CandidateHome, FoundHome } from "./homes.ts";
+import type { Notice } from "./notices.ts";
 import type { SpecPin } from "./pin.ts";
+import type { SpecRelease } from "./releases.ts";
 
 import { encodePath } from "./github.ts";
+import {
+  readLinkedHomes,
+  readPublicCandidates,
+  readSiblingHomes,
+} from "./homes.ts";
 import { readBoolean, readField, readNumber, readString } from "./json.ts";
-
-/** A line in an upstream file that may announce a deprecation or a move. */
-export type Notice = {
-  /**
-   * Which file holds it.
-   *
-   * @example "README"
-   */
-  file: "README" | "SPEC";
-
-  /**
-   * The line, trimmed.
-   *
-   * @example "This repo is deprecated; the spec has moved."
-   */
-  line: string;
-};
+import { findNewNotices } from "./notices.ts";
+import { readReleases } from "./releases.ts";
+import { readVersion } from "./spec-file.ts";
 
 /** A commit to the spec since the pin. */
 export type SpecCommit = {
@@ -83,6 +77,14 @@ export type UpstreamState = {
   commits: SpecCommit[];
 
   /**
+   * Repos outside the pin that hold a spec: linked from a new notice, or new
+   * beside the home.
+   *
+   * @example []
+   */
+  foundHomes: FoundHome[];
+
+  /**
    * The watched repo's name as GitHub now reports it, or `undefined` when the
    * repo is gone.
    *
@@ -127,11 +129,11 @@ export type UpstreamState = {
   notices: Notice[];
 
   /**
-   * The candidate homes that are now public.
+   * The candidate homes that are now public, each with its spec.
    *
-   * @example ["okf-community/okf-spec"]
+   * @example `[{ repo: "okf-community/okf-spec", spec: undefined }]`
    */
-  publicCandidates: string[];
+  publicCandidates: CandidateHome[];
 
   /**
    * The open upstream pull requests that touch the spec, by number.
@@ -139,6 +141,20 @@ export type UpstreamState = {
    * @example `[{ number: 401, title: "Update SPEC.md" }]`
    */
   pullRequests: SpecPullRequest[];
+
+  /**
+   * The watched repo's GitHub releases, newest first.
+   *
+   * @example []
+   */
+  releases: SpecRelease[];
+
+  /**
+   * The watched repo's tags that no release is published from.
+   *
+   * @example ["v0.2"]
+   */
+  tags: string[];
 
   /**
    * The spec's `**Version …**` line at `headSha`, or `undefined` when it has
@@ -166,42 +182,6 @@ type UpstreamAnswer = {
   upstream: UpstreamState;
 };
 
-/*
- * A line that may announce a deprecation or a move.
- *
- * - Only lines new since the pin count, since the spec itself defines a
- *   `deprecated` status.
- */
-const NOTICE_PATTERN =
-  /\b(?:archived|deprecated|deprecation|has moved|moved to|no longer (?:maintained|supported|updated))\b/iu;
-
-/** The spec's version line, such as `**Version 0.2**`. */
-const VERSION_PATTERN = /^\*\*Version (?<version>[^*\n]+)\*\*/mu;
-
-/** The lines of a file's new text that may be notices and weren't in the old. */
-export function findNewNotices({
-  file,
-  headText,
-  pinText,
-}: {
-  /** Which file the texts are. */
-  file: Notice["file"];
-
-  /** The file's text now. */
-  headText: string;
-
-  /** The file's text at the pin. */
-  pinText: string;
-}): Notice[] {
-  const pinLines = new Set(pinText.split("\n").map((line) => line.trim()));
-  const lines = headText
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => NOTICE_PATTERN.test(line) && !pinLines.has(line));
-
-  return [...new Set(lines)].map((line) => ({ file, line }));
-}
-
 /** Read the upstream spec's state. */
 export async function readUpstream({
   client,
@@ -220,26 +200,35 @@ export async function readUpstream({
   }
 
   if (repoAnswer.json === undefined) {
-    const goneCandidates = await readPublicCandidates({ client, pin });
+    const goneHomes = await readNextHomes({
+      client,
+      fullName: pin.repo,
+      notices: [],
+      pin,
+      pinTime: undefined,
+    });
 
-    return goneCandidates.isOk
+    return goneHomes.isOk
       ? {
           isOk: true,
           upstream: {
             ...goneState(),
-            publicCandidates: goneCandidates.publicCandidates,
+            foundHomes: goneHomes.foundHomes,
+            publicCandidates: goneHomes.publicCandidates,
           },
         }
-      : goneCandidates;
+      : goneHomes;
   }
 
+  const fullName =
+    readString({ key: "full_name", value: repoAnswer.json }) ?? pin.repo;
   const commitsAnswer = await readCommits({ client, pin });
 
   if (!commitsAnswer.isOk) {
     return commitsAnswer;
   }
 
-  const { commits, headSha, isPinFound } = commitsAnswer;
+  const { commits, headSha, isPinFound, pinTime } = commitsAnswer;
   const filesAnswer = await readFiles({ client, headSha, pin });
 
   if (!filesAnswer.isOk) {
@@ -252,40 +241,50 @@ export async function readUpstream({
     return pullsAnswer;
   }
 
-  const candidatesAnswer = await readPublicCandidates({ client, pin });
+  const releasesAnswer = await readReleases({ client, repo: pin.repo });
 
-  if (!candidatesAnswer.isOk) {
-    return candidatesAnswer;
+  if (!releasesAnswer.isOk) {
+    return releasesAnswer;
+  }
+
+  const homesAnswer = await readNextHomes({
+    client,
+    fullName,
+    notices: filesAnswer.notices,
+    pin,
+    pinTime,
+  });
+
+  if (!homesAnswer.isOk) {
+    return homesAnswer;
   }
 
   return {
     isOk: true,
     upstream: {
       commits,
-      fullName:
-        readString({ key: "full_name", value: repoAnswer.json }) ?? pin.repo,
+      foundHomes: homesAnswer.foundHomes,
+      fullName,
       headSha,
       isArchived:
         readBoolean({ key: "archived", value: repoAnswer.json }) ?? false,
       isPinFound,
       isSpecMissing: filesAnswer.specText === undefined,
       notices: filesAnswer.notices,
-      publicCandidates: candidatesAnswer.publicCandidates,
+      publicCandidates: homesAnswer.publicCandidates,
       pullRequests: pullsAnswer.pullRequests,
+      releases: releasesAnswer.releases,
+      tags: releasesAnswer.tags,
       version: readVersion(filesAnswer.specText ?? ""),
     },
   };
-}
-
-/** Read the spec's version from its `**Version …**` line. */
-export function readVersion(text: string): string | undefined {
-  return VERSION_PATTERN.exec(text)?.groups?.version?.trim();
 }
 
 /** The state of a watched repo that no longer exists. */
 function goneState(): UpstreamState {
   return {
     commits: [],
+    foundHomes: [],
     fullName: undefined,
     headSha: undefined,
     isArchived: false,
@@ -294,6 +293,8 @@ function goneState(): UpstreamState {
     notices: [],
     publicCandidates: [],
     pullRequests: [],
+    releases: [],
+    tags: [],
     version: undefined,
   };
 }
@@ -325,6 +326,7 @@ async function readCommits({
       headSha: string | undefined;
       isOk: true;
       isPinFound: boolean;
+      pinTime: number | undefined;
     }
   | Failure
 > {
@@ -341,16 +343,40 @@ async function readCommits({
 
   const all = answer.json.map((item: unknown) => readCommit(item));
   const pinIndex = all.findIndex((commit) => commit.sha === pin.sha);
+  const pinCommit = readField({
+    key: "commit",
+    value: pinIndex === -1 ? undefined : answer.json[pinIndex],
+  });
+
+  /*
+   * The spec watch runs with no install, so the time is read with
+   * `Date.parse`, not luxon.
+   */
+  const pinTime = Date.parse(
+    readString({
+      key: "date",
+      value: readField({ key: "committer", value: pinCommit }),
+    }) ?? ""
+  );
 
   return {
     commits: pinIndex === -1 ? all : all.slice(0, pinIndex),
     headSha: all[0]?.sha,
     isOk: true,
     isPinFound: pinIndex !== -1,
+    pinTime: Number.isNaN(pinTime) ? undefined : pinTime,
   };
 }
 
-/** Read the spec and the README, now and at the pin. */
+/*
+ * Read the spec, the README, and the README in the spec's own folder, now and
+ * at the pin.
+ *
+ * - A spec at the repo's root has no folder README of its own, and a folder
+ *   with no README is normal, so either reads as empty.
+ *
+ * - The `readme` endpoint finds a README of any name, such as `readme.md`.
+ */
 async function readFiles({
   client,
   headSha,
@@ -364,11 +390,20 @@ async function readFiles({
 > {
   const specPath = `/repos/${pin.repo}/contents/${encodePath(pin.path)}`;
   const readmePath = `/repos/${pin.repo}/readme`;
+  const folder = pin.path.slice(0, Math.max(pin.path.lastIndexOf("/"), 0));
+  const folderReadmePath =
+    folder === ""
+      ? undefined
+      : `/repos/${pin.repo}/readme/${encodePath(folder)}`;
   const paths = [
     headSha === undefined ? undefined : `${specPath}?ref=${headSha}`,
     `${specPath}?ref=${pin.sha}`,
     readmePath,
     `${readmePath}?ref=${pin.sha}`,
+    folderReadmePath,
+    folderReadmePath === undefined
+      ? undefined
+      : `${folderReadmePath}?ref=${pin.sha}`,
   ];
   const texts: (string | undefined)[] = [];
 
@@ -387,7 +422,8 @@ async function readFiles({
     texts.push(answer.text);
   }
 
-  const [specHead, specPin, readmeHead, readmePin] = texts;
+  const [specHead, specPin, readmeHead, readmePin, folderHead, folderPin] =
+    texts;
 
   return {
     isOk: true,
@@ -396,6 +432,11 @@ async function readFiles({
         file: "README",
         headText: readmeHead ?? "",
         pinText: readmePin ?? "",
+      }),
+      ...findNewNotices({
+        file: "FOLDER_README",
+        headText: folderHead ?? "",
+        pinText: folderPin ?? "",
       }),
       ...findNewNotices({
         file: "SPEC",
@@ -407,29 +448,57 @@ async function readFiles({
   };
 }
 
-/** Read which candidate homes are public. */
-async function readPublicCandidates({
+/*
+ * Look for the spec's next home: public candidates, repos the new notices
+ * link to, and new repos beside the home.
+ */
+async function readNextHomes({
   client,
+  fullName,
+  notices,
   pin,
+  pinTime,
 }: {
   client: GitHubClient;
+  fullName: string;
+  notices: Notice[];
   pin: SpecPin;
-}): Promise<{ isOk: true; publicCandidates: string[] } | Failure> {
-  const publicCandidates: string[] = [];
+  pinTime: number | undefined;
+}): Promise<
+  | { foundHomes: FoundHome[]; isOk: true; publicCandidates: CandidateHome[] }
+  | Failure
+> {
+  const candidatesAnswer = await readPublicCandidates({ client, pin });
 
-  for (const candidate of pin.candidates) {
-    const answer = await client.getJson(`/repos/${candidate}`);
-
-    if (!answer.isOk) {
-      return answer;
-    }
-
-    if (readBoolean({ key: "private", value: answer.json }) === false) {
-      publicCandidates.push(candidate);
-    }
+  if (!candidatesAnswer.isOk) {
+    return candidatesAnswer;
   }
 
-  return { isOk: true, publicCandidates };
+  const known = [pin.repo, fullName, ...pin.candidates];
+  const linkedHomes = await readLinkedHomes({
+    client,
+    home: pin.repo,
+    known,
+    notices,
+    pin,
+  });
+  const siblingAnswer = await readSiblingHomes({
+    client,
+    home: fullName,
+    known: [...known, ...linkedHomes.map((home) => home.repo)],
+    pin,
+    since: pinTime,
+  });
+
+  if (!siblingAnswer.isOk) {
+    return siblingAnswer;
+  }
+
+  return {
+    foundHomes: [...linkedHomes, ...siblingAnswer.homes],
+    isOk: true,
+    publicCandidates: candidatesAnswer.publicCandidates,
+  };
 }
 
 /** Read the open upstream pull requests that touch the spec. */
