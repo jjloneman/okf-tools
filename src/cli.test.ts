@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { chmodSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -7,6 +8,7 @@ import type { TestRepo } from "#test/repo";
 import {
   createTestRepo,
   draftRecord,
+  record,
   REFUSAL_REASON,
   refusedRecord,
   verifiedRecord,
@@ -319,6 +321,30 @@ describe("run --yes", () => {
     );
     expect(repo.git("show", "HEAD", "--", "docs/decisions/a.md")).toContain(
       "+More."
+    );
+  });
+
+  test("clears a record generated ahead of the clock, and says so", async () => {
+    // Given - a draft stamped an hour ahead of now, as a wrong zone writes it
+    const ahead = DateTime.utc().plus({ hours: 1 }).toISO();
+
+    repo.write(
+      "docs/decisions/a.md",
+      record([
+        "type: Decision",
+        "status: draft",
+        `generated: { by: claude-code/model, at: ${ahead} }`,
+      ])
+    );
+
+    // When - signing it, then naming it again
+    const first = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+    const second = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+
+    // Then - the second run has nothing to do, and says why
+    expect({ first, second }).toStrictEqual({ first: 0, second: 2 });
+    expect(infos).toContain(
+      "[okf-verify] skipped docs/decisions/a.md: already verified; generated.at is ahead of the clock"
     );
   });
 

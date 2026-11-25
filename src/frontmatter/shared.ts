@@ -10,6 +10,7 @@
  */
 import type { Document, Node, Pair, Range, Scalar, YAMLMap } from "yaml";
 
+import { DateTime } from "luxon";
 import {
   isAlias,
   isCollection,
@@ -248,6 +249,31 @@ export function describeYamlErrors(doc: Frontmatter): string | undefined {
 }
 
 /**
+ * Find which of the signer's entries counts: the one whose `at` is latest
+ * once read, the first of any that tie, or the first entry when none reads.
+ *
+ * - The reads, the edits, and the meaning check all pick with this, so the
+ *   entry an edit renews is the one the state is judged by.
+ */
+export function findLatestIndex(
+  timestamps: readonly (Timestamp | undefined)[]
+): number {
+  let latestIndex = 0;
+  let latestMillis = Number.NEGATIVE_INFINITY;
+
+  timestamps.forEach((timestamp, index) => {
+    const time = timestamp === undefined ? undefined : readTime(timestamp);
+
+    if (time?.isValid === true && time.toMillis() > latestMillis) {
+      latestIndex = index;
+      latestMillis = time.toMillis();
+    }
+  });
+
+  return latestIndex;
+}
+
+/**
  * Find where the line holding `index` ends, before its `\n` or `\r\n`, so
  * an insert there keeps the line's own line break after it.
  *
@@ -267,6 +293,9 @@ export function findLineEnd(params: PositionParams): number {
 /**
  * Find `verifiedBy`'s entry, resolving aliases, for the reads and the meaning
  * check; the edits find it in the editable layout instead.
+ *
+ * - With several entries by the signer, the one with the latest readable `at`
+ *   counts, as OKF reads `verified`; `findLatestIndex` picks it for both.
  */
 export function findOwnEntry(params: FindOwnEntryParams): undefined | YAMLMap {
   const { doc, verifiedBy } = params;
@@ -279,9 +308,9 @@ export function findOwnEntry(params: FindOwnEntryParams): undefined | YAMLMap {
 
   const entries: unknown[] = isSeq(verified) ? verified.items : [verified];
 
-  return entries
+  const ownEntries = entries
     .map((entry) => resolveAlias({ doc, node: entry }))
-    .find(
+    .filter(
       (entry): entry is YAMLMap =>
         isMap(entry) &&
         isSignersBy({
@@ -289,6 +318,14 @@ export function findOwnEntry(params: FindOwnEntryParams): undefined | YAMLMap {
           verifiedBy,
         })
     );
+
+  return ownEntries[
+    findLatestIndex(
+      ownEntries.map((entry) =>
+        readTimestamp(readField({ doc, key: ENTRY_KEYS.at, map: entry }))
+      )
+    )
+  ];
 }
 
 /** Find a mapping's pair whose key is the given single value. */
@@ -420,6 +457,13 @@ export function readString(node: unknown): string | undefined {
   return isScalar(node) && typeof node.value === "string"
     ? node.value
     : undefined;
+}
+
+/** Read a timestamp as ISO 8601, or with a space before the time, in UTC. */
+export function readTime(value: Timestamp): DateTime {
+  const iso = DateTime.fromISO(value, { zone: "utc" });
+
+  return iso.isValid ? iso : DateTime.fromSQL(value, { zone: "utc" });
 }
 
 /** Read a timestamp, or `undefined` when it's missing, empty, or null. */

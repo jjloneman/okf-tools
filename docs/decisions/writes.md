@@ -4,7 +4,7 @@ title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:24:32Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:25:09Z }
 verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
@@ -23,6 +23,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
   - As of 2026-11-12, only an allowlist of `status` and `verified` layouts is edited, listed in the README; any other is refused with a reason naming the field, for a hand edit. Refused: an anchor, alias, or tag on a `draft` status, `verified`, an entry, any entry's `by`, or the signer's `at`; a value or flow collection spread over several lines; a quoted or `?` `status` or `verified` key; a `verified` holding a single value; someone else's entry written as a block mapping when it's the whole `verified` value; and a signer's name holding a line break.
   - Also refused, anywhere in the frontmatter, before any edit is planned: a carriage return that doesn't end a line (YAML 1.2 reads it as a line break, the parser as text); an alias whose anchor isn't set before it; and two keys that mean the same, such as an alias key repeating another, `~` beside `null`, or equal collection keys.
   - A null `by` names nobody, so it never counts as the signer's entry.
+  - As of 2026-11-25, when the signer has several entries, the one with the latest readable `at` is renewed, the first of any that tie, or the first entry when none reads; the reads judge the state by the same entry, so the sign-off always clears it (issue #32).
   - The meaning check tells a null from an empty string, though the failsafe schema reads both as `""`.
   - A status other than `draft`, and other people's `at`, are never edited, so they may take any form.
   - The frontmatter is sliced out of the record by position, after any byte order mark, so no line ending outside an edit is rewritten, and a line an edit adds takes the line break of the line it follows.

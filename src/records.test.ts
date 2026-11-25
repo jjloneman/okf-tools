@@ -120,15 +120,32 @@ describe("describeState", () => {
     {
       description: "a verified record",
       expected: "already verified, unchanged",
+      generatedAt: "2026-10-01T15:00:00Z",
       state: "verified",
       status: "stable",
     },
-  ] as const)("words $description", ({ expected, state, status }) => {
-    // When/Then - the hint
-    expect(
-      describeState(candidate({ filePath: "a.md", state, summary: { status } }))
-    ).toBe(expected);
-  });
+    {
+      description: "a verified record generated ahead of the clock",
+      expected: "already verified; generated.at is ahead of the clock",
+      generatedAt: "2999-01-01T00:00:00Z",
+      state: "verified",
+      status: "stable",
+    },
+  ] as const)(
+    "words $description",
+    ({ expected, state, status, ...summary }) => {
+      // When/Then - the hint
+      expect(
+        describeState(
+          candidate({
+            filePath: "a.md",
+            state,
+            summary: { ...summary, status },
+          })
+        )
+      ).toBe(expected);
+    }
+  );
 });
 
 describe("needsSignOff", () => {

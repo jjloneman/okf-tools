@@ -15,6 +15,7 @@ import {
   parseFrontmatter,
   readField,
   readString,
+  readTime,
   readTimestamp,
   splitFrontmatter,
 } from "./shared.ts";
@@ -95,7 +96,11 @@ export function findFrontmatterProblem(text: string): string | undefined {
  *   that the sign-off's timestamp can't be read.
  *
  * - `verified` means it was signed off and not touched since, or that the
- *   generation time can't be read, since no sign-off could ever follow it.
+ *   generation time can't be read or is ahead of the clock, since no sign-off
+ *   could ever follow it.
+ *
+ * - Times are compared at whole seconds, since a sign-off is stamped to the
+ *   second.
  */
 export function getRecordState(summary: RecordSummary): RecordState {
   if (summary.verifiedAt === undefined) {
@@ -117,10 +122,30 @@ export function getRecordState(summary: RecordSummary): RecordState {
   const verifiedTime = readTime(summary.verifiedAt);
 
   // An unreadable sign-off time reads as "changed", so it's signed again.
-  return verifiedTime.isValid &&
-    generatedTime.toMillis() <= verifiedTime.toMillis()
+  if (!verifiedTime.isValid) {
+    return "changed";
+  }
+
+  // A generation time still to come is later than any sign-off made now, so
+  // it can't be judged either.
+  return isAhead(generatedTime) ||
+    toSeconds(generatedTime) <= toSeconds(verifiedTime)
     ? "verified"
     : "changed";
+}
+
+/**
+ * Whether a record's `generated.at` is later than now, to the second, as a
+ * wrong time zone writes it; such a record can't be judged changed.
+ */
+export function isGeneratedAhead(summary: RecordSummary): boolean {
+  if (summary.generatedAt === undefined) {
+    return false;
+  }
+
+  const generatedTime = readTime(summary.generatedAt);
+
+  return generatedTime.isValid && isAhead(generatedTime);
 }
 
 /**
@@ -171,9 +196,12 @@ export function readRecordSummary(
   };
 }
 
-/** Read a timestamp as ISO 8601, or with a space before the time, in UTC. */
-function readTime(value: Timestamp): DateTime {
-  const iso = DateTime.fromISO(value, { zone: "utc" });
+/** Whether a time is later than now, to the second. */
+function isAhead(time: DateTime): boolean {
+  return toSeconds(time) > toSeconds(DateTime.utc());
+}
 
-  return iso.isValid ? iso : DateTime.fromSQL(value, { zone: "utc" });
+/** Read a time as whole seconds since the epoch, dropping any fraction. */
+function toSeconds(time: DateTime): number {
+  return Math.floor(time.toSeconds());
 }

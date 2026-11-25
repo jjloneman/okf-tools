@@ -83,6 +83,49 @@ describe("verifyRecord", () => {
 
   test.each([
     {
+      description: "the latest of the owner's entries",
+      expected: [
+        `  - { by: ${VERIFIED_BY}, at: 2026-09-01T00:00:00Z }`,
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      lines: [
+        `  - { by: ${VERIFIED_BY}, at: 2026-09-01T00:00:00Z }`,
+        `  - { by: ${VERIFIED_BY}, at: ${OLD_AT} }`,
+      ],
+    },
+    {
+      description: "the first owner entry when none reads",
+      expected: [
+        `  - { by: ${VERIFIED_BY}, at: ${AT} }`,
+        `  - { by: ${VERIFIED_BY}, at: soon }`,
+      ],
+      lines: [
+        `  - { by: ${VERIFIED_BY}, at: ~ }`,
+        `  - { by: ${VERIFIED_BY}, at: soon }`,
+      ],
+    },
+  ])("renews $description", ({ expected, lines }) => {
+    // Given - a record the owner signed more than once
+    const text = record([...DRAFT_LINES, "verified:", ...lines]);
+
+    // When - verifying it again
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the entry the state is judged by is the one renewed
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        ...DRAFT_LINES.slice(0, 2),
+        "status: stable",
+        DRAFT_LINES[3] ?? "",
+        "verified:",
+        ...expected,
+      ]),
+    });
+  });
+
+  test.each([
+    {
       description: "at before by",
       entry: `{ at: 2026-09-28T09:00:00Z, by: ${VERIFIED_BY} }`,
     },
