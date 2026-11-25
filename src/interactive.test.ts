@@ -240,6 +240,31 @@ describe("runInteractive", () => {
     }
   );
 
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "lists a new record in a bundle folder renamed only in case as changed",
+    async () => {
+      // Given - the bundle's folder renamed only in case on disk, and a new
+      // draft in it
+      renameSync(
+        path.join(repo.root, "docs/decisions"),
+        path.join(repo.root, "docs/Decisions")
+      );
+      repo.write("docs/Decisions/c.md", draftRecord("C"));
+      vi.mocked(select).mockResolvedValue("changed");
+
+      // When - running and picking the changed records
+      await runInteractive(context());
+
+      // Then - listed as the one changed record, signed and committed under
+      // git's spelling of the folder
+      expect(vi.mocked(multiselect).mock.calls[0]?.[0].options).toHaveLength(1);
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+        "docs/decisions/c.md\n"
+      );
+    }
+  );
+
   test("skips the scope question when every record changed", async () => {
     // Given - one bundle whose only record changed
     repo.write("docs/references/c.md", `${draftRecord("C")}\nMore.\n`);

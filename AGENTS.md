@@ -22,7 +22,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - `interactive.ts` and `non-interactive.ts` — the two modes.
   - `records.ts` — pure record logic: the candidate type, the commit message, the edits.
   - `git.ts` — every git call, relative to the repo root.
-  - `repo.ts` — the file-system work on records: resolving bundles and paths, loading candidates, reading and writing records.
+  - `repo.ts` — the file-system work on records: resolving bundles and paths, listing changed records, loading candidates, reading and writing records.
   - `frontmatter/` — pure functions, apart from the clock `read.ts` reads, that read and edit a record's frontmatter, exported from `index.ts`. It reads with the `yaml` package's failsafe schema, aliases resolved, and slices the frontmatter out by position, so line endings are never rewritten.
     - `types.ts` — the public types and constants (`EntryStyle`, `RecordStatus`, `RefusalKind`, `Timestamp`, `VerifyRecordParams`, `ENTRY_STYLES`, `RECORD_STATUSES`, `REFUSAL_KINDS`). It imports nothing, so the published declarations never import the `yaml` package's types.
     - `shared.ts` — the types, constants, and helpers the others share: parsing, splitting, positions, and the small node readers. It imports only from `types.ts`.
