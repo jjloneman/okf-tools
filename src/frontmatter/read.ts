@@ -3,6 +3,7 @@
  * verified. Reading accepts any valid YAML; only editing is allowlisted.
  */
 import { DateTime } from "luxon";
+import { isScalar } from "yaml";
 
 import type { RecordStatus, Timestamp, VerifyRecordParams } from "./types.ts";
 
@@ -11,6 +12,7 @@ import {
   ENTRY_KEYS,
   findOwnEntry,
   FRONTMATTER_KEYS,
+  isNullScalar,
   isRecordStatus,
   parseFrontmatter,
   readField,
@@ -73,7 +75,21 @@ export type RecordSummary = {
    * @example "2026-10-02T13:30:00Z"
    */
   verifiedAt: Timestamp | undefined;
+
+  /**
+   * The record's `status` as written, whether or not OKF defines it.
+   *
+   * - `undefined` means the record has no `status`, an empty or null one, or
+   *   one that isn't a single value, so it tells an absent status from one
+   *   OKF doesn't define.
+   *
+   * @example "wip"
+   */
+  writtenStatus: string | undefined;
 };
+
+/** The timestamps the state is judged by, out of a `RecordSummary`. */
+export type RecordTimes = Pick<RecordSummary, "generatedAt" | "verifiedAt">;
 
 /**
  * Check that a record's frontmatter is valid YAML, so it can be read and
@@ -102,7 +118,7 @@ export function findFrontmatterProblem(text: string): string | undefined {
  * - Times are compared at whole seconds, since a sign-off is stamped to the
  *   second.
  */
-export function getRecordState(summary: RecordSummary): RecordState {
+export function getRecordState(summary: RecordTimes): RecordState {
   if (summary.verifiedAt === undefined) {
     return "unverified";
   }
@@ -138,7 +154,7 @@ export function getRecordState(summary: RecordSummary): RecordState {
  * Whether a record's `generated.at` is later than now, to the second, as a
  * wrong time zone writes it; such a record can't be judged changed.
  */
-export function isGeneratedAhead(summary: RecordSummary): boolean {
+export function isGeneratedAhead(summary: RecordTimes): boolean {
   if (summary.generatedAt === undefined) {
     return false;
   }
@@ -152,6 +168,9 @@ export function isGeneratedAhead(summary: RecordSummary): boolean {
  * Read the fields the verify flow shows and decides on.
  *
  * - Reads every layout YAML allows, aliases included, unlike the edits.
+ *
+ * - Reads what it can of frontmatter that isn't valid YAML;
+ *   `findFrontmatterProblem` tells such a record apart.
  *
  * @returns the summary, or `undefined` when the text has no frontmatter block.
  */
@@ -175,9 +194,16 @@ export function readRecordSummary(
     map: contents,
   });
 
-  const status = readString(
-    readField({ doc, key: FRONTMATTER_KEYS.status, map: contents })
-  );
+  const statusNode = readField({
+    doc,
+    key: FRONTMATTER_KEYS.status,
+    map: contents,
+  });
+  const statusText =
+    isScalar(statusNode) && isNullScalar(statusNode)
+      ? undefined
+      : readString(statusNode);
+  const status = statusText === "" ? undefined : statusText;
 
   return {
     generatedAt: readTimestamp(
@@ -193,6 +219,7 @@ export function readRecordSummary(
     verifiedAt: readTimestamp(
       readField({ doc, key: ENTRY_KEYS.at, map: ownEntry })
     ),
+    writtenStatus: status,
   };
 }
 

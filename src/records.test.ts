@@ -37,6 +37,7 @@ function candidate(params: {
       title: "A title",
       type: "Decision",
       verifiedAt: undefined,
+      writtenStatus: "draft",
       ...summary,
     },
     text,

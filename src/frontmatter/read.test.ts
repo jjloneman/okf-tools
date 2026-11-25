@@ -96,6 +96,7 @@ describe("readRecordSummary", () => {
       title: "What every export promises",
       type: "Decision",
       verifiedAt: "2026-09-28T09:00:00Z",
+      writtenStatus: "draft",
     });
   });
 
@@ -394,6 +395,7 @@ describe("readRecordSummary", () => {
       title: "What every export promises",
       type: "Decision",
       verifiedAt: undefined,
+      writtenStatus: "draft",
     });
   });
 
@@ -476,15 +478,49 @@ describe("readRecordSummary", () => {
     expect(summary?.status).toBe("draft");
   });
 
-  test("reads an unknown status as absent", () => {
-    // Given - a status OKF doesn't define
-    const text = record(["status: stabel"]);
+  test.each([
+    {
+      description: "a status OKF doesn't define",
+      lines: ["status: stabel"],
+      writtenStatus: "stabel",
+    },
+    {
+      description: "no status",
+      lines: ["type: Decision"],
+      writtenStatus: undefined,
+    },
+    {
+      description: "an empty status",
+      lines: ["status:"],
+      writtenStatus: undefined,
+    },
+    {
+      description: "a null status",
+      lines: ["status: ~"],
+      writtenStatus: undefined,
+    },
+    {
+      description: "a quoted empty status",
+      lines: ['status: ""'],
+      writtenStatus: undefined,
+    },
+    {
+      description: "a status that isn't a single value",
+      lines: ["status: [draft]"],
+      writtenStatus: undefined,
+    },
+  ])("tells $description apart by its written status", (row) => {
+    // Given - a record with $description
+    const text = record(row.lines);
 
     // When - reading its summary
     const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
 
-    // Then - the status is undefined
-    expect(summary?.status).toBeUndefined();
+    // Then - no status OKF defines, and the status as written
+    expect({
+      status: summary?.status,
+      writtenStatus: summary?.writtenStatus,
+    }).toStrictEqual({ status: undefined, writtenStatus: row.writtenStatus });
   });
 
   test("leaves absent fields undefined", () => {
@@ -501,6 +537,7 @@ describe("readRecordSummary", () => {
       title: undefined,
       type: undefined,
       verifiedAt: undefined,
+      writtenStatus: "draft",
     });
   });
 
@@ -615,13 +652,7 @@ describe("getRecordState", () => {
     });
 
     // When - judging a summary whose timestamps are $description
-    const state = getRecordState({
-      generatedAt,
-      status: "stable",
-      title: "T",
-      type: "Decision",
-      verifiedAt,
-    });
+    const state = getRecordState({ generatedAt, verifiedAt });
 
     // Then - the state is $expected
     expect(state).toBe(expected);
@@ -667,13 +698,7 @@ describe("isGeneratedAhead", () => {
     });
 
     // When - asking whether the generation time is ahead of it
-    const isAhead = isGeneratedAhead({
-      generatedAt,
-      status: "draft",
-      title: "T",
-      type: "Decision",
-      verifiedAt: undefined,
-    });
+    const isAhead = isGeneratedAhead({ generatedAt, verifiedAt: undefined });
 
     // Then - only a time in a later second is
     expect(isAhead).toBe(shouldBeAhead);
