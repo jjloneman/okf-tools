@@ -17,6 +17,7 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
+import { ENTRY_STYLES } from "./frontmatter/types.ts";
 import {
   checkCommittable,
   commitFiles,
@@ -166,11 +167,14 @@ export type VerificationPlan = {
  *   person confirmed, not when the checklist opened.
  */
 export function applyVerification(params: {
-  context: Pick<RunContext, "repoRoot" | "shouldCommit" | "verifiedBy">;
+  context: Pick<
+    RunContext,
+    "repoRoot" | "shouldCommit" | "style" | "verifiedBy"
+  >;
   plan: VerificationPlan;
 }): ApplyOutcome {
   const { context, plan } = params;
-  const { repoRoot, shouldCommit, verifiedBy } = context;
+  const { repoRoot, shouldCommit, style, verifiedBy } = context;
   const { candidates, filePaths, message, uncommitted } = plan;
 
   const changedPaths: string[] = [];
@@ -215,6 +219,7 @@ export function applyVerification(params: {
   const { edits, failures } = prepareEdits({
     at: currentTimestamp(),
     candidates,
+    style,
     verifiedBy,
   });
 
@@ -400,7 +405,10 @@ function isLater(params: {
 
 /**
  * Whether a record on disk is `HEAD`'s copy with only the sign-off added: the
- * same edits, at the same time, give the same text.
+ * same edits, at the same time, in any style, give the same text.
+ *
+ * - Every style is tried, so a sign-off written before `okf.style` changed
+ *   still counts as one.
  */
 function isSignOffOf(params: {
   at: Timestamp;
@@ -409,7 +417,10 @@ function isSignOffOf(params: {
   verifiedBy: string;
 }): boolean {
   const { at, headText, text, verifiedBy } = params;
-  const result = verifyRecord({ at, text: headText, verifiedBy });
 
-  return result.isOk && result.text === text;
+  return Object.values(ENTRY_STYLES).some((style) => {
+    const result = verifyRecord({ at, style, text: headText, verifiedBy });
+
+    return result.isOk && result.text === text;
+  });
 }

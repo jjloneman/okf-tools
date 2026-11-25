@@ -233,6 +233,14 @@ type ReadVerifiedListParams = {
 type VerifiedLayout =
   | {
       /**
+       * The `verified` key, so a list written in place of the null is
+       * indented past it.
+       *
+       * @example `pair.key`
+       */
+      key: Placed<Scalar>;
+
+      /**
        * The layout: a null value, such as `~` or nothing.
        *
        * @example "null"
@@ -551,7 +559,7 @@ function readVerifiedLayout(
 
   return isSeq(value) && isPlaced(value)
     ? readVerifiedList({ field, node: value, text, verifiedBy })
-    : readVerifiedScalar({ field, node: value });
+    : readVerifiedScalar({ field, key, node: value });
 }
 
 /**
@@ -599,13 +607,13 @@ function readVerifiedList(
  * replace with an entry.
  */
 function readVerifiedScalar(
-  params: Pick<FieldNodeParams, "field" | "node">
+  params: Pick<FieldNodeParams, "field" | "node"> & Pick<KeyedPair, "key">
 ): LayoutPartResult<VerifiedLayout> {
-  const { field, node } = params;
+  const { field, key, node } = params;
 
   // A null is never more than a word, so it can't span lines.
   return isScalar(node) && isPlaced(node) && isNullScalar(node)
-    ? { isOk: true, value: { kind: "null", node } }
+    ? { isOk: true, value: { key, kind: "null", node } }
     : {
         isOk: false,
         reason: `${field} holds a single value, not an entry or a list`,

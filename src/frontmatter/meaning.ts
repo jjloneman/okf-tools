@@ -47,13 +47,21 @@ export type CheckMeaningParams = {
    * @example `parseFrontmatter("status: stable")`
    */
   editedDoc: Frontmatter;
-} & PlanEntryParams;
+} & AddIntendedEntryParams;
 
-/** What `formatEntry` needs: who signs, and when. */
+/** What `createEntry` needs: who signs, and when. */
 export type FormatEntryParams = Pick<VerifyRecordParams, "at" | "verifiedBy">;
 
-/** The parsed frontmatter, who signs, and when. */
-type PlanEntryParams = Pick<FindOwnEntryParams, "doc"> &
+/** What `addIntendedEntry` needs: the parse, who, when, and the entry's form. */
+type AddIntendedEntryParams = {
+  /**
+   * Whether a new entry is a block mapping, which a `verified` that's absent
+   * or null gets as a one-item list rather than bare.
+   *
+   * @example false
+   */
+  isBlock: boolean;
+} & Pick<FindOwnEntryParams, "doc"> &
   Pick<VerifyRecordParams, "at" | "verifiedBy">;
 
 /** What `readKeyMeaning` needs: the key, and the document it's in. */
@@ -76,7 +84,7 @@ type ReadKeyMeaningParams = {
  * @returns why the edit is refused, or `undefined` when it means what's meant.
  */
 export function checkMeaning(params: CheckMeaningParams): string | undefined {
-  const { at, doc, editedDoc, verifiedBy } = params;
+  const { at, doc, editedDoc, isBlock, verifiedBy } = params;
 
   // A last check that no edit, whatever the layout, left the YAML broken.
   if (describeYamlErrors(editedDoc) !== undefined) {
@@ -90,7 +98,7 @@ export function checkMeaning(params: CheckMeaningParams): string | undefined {
     status.value = RECORD_STATUSES.stable;
   }
 
-  addIntendedEntry({ at, doc: intended, verifiedBy });
+  addIntendedEntry({ at, doc: intended, isBlock, verifiedBy });
 
   // Resolving aliases throws past the parser's limit, which guards against
   // alias bombs, so such a record is refused rather than ending the run.
@@ -106,7 +114,10 @@ export function checkMeaning(params: CheckMeaningParams): string | undefined {
   }
 }
 
-/** Build the signer's new entry as a flow mapping of `by`, then `at`. */
+/**
+ * Build the signer's new entry as a flow mapping of `by`, then `at`, which
+ * the edits re-lay as the record's style asks.
+ */
 export function createEntry(params: FormatEntryParams): YAMLMap {
   const { at, verifiedBy } = params;
   const entry = new YAMLMap();
@@ -144,8 +155,8 @@ export function findAmbiguity(doc: Document): string | undefined {
  * Add or renew the signer's entry in a parsed copy of the frontmatter, as the
  * meaning check expects to find it.
  */
-function addIntendedEntry(params: PlanEntryParams): void {
-  const { at, doc, verifiedBy } = params;
+function addIntendedEntry(params: AddIntendedEntryParams): void {
+  const { at, doc, isBlock, verifiedBy } = params;
   const ownEntry = findOwnEntry({ doc, verifiedBy });
 
   if (ownEntry !== undefined) {
@@ -169,7 +180,10 @@ function addIntendedEntry(params: PlanEntryParams): void {
     verified === undefined ||
     (isScalar(verified) && isNullScalar(verified))
   ) {
-    doc.set(FRONTMATTER_KEYS.verified, entry);
+    const list = new YAMLSeq();
+
+    list.items = [entry];
+    doc.set(FRONTMATTER_KEYS.verified, isBlock ? list : entry);
   } else {
     const list = new YAMLSeq();
 

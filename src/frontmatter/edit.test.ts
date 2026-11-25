@@ -274,7 +274,7 @@ describe("verifyRecord", () => {
     // When - verifying it
     const result = verifyRecord({ ...VERIFY_OPTIONS, text });
 
-    // Then - the verified line follows the whole block
+    // Then - the verified field follows the whole block, as a block too
     expect(result).toStrictEqual({
       isOk: true,
       text: record([
@@ -283,7 +283,9 @@ describe("verifyRecord", () => {
         "generated:",
         "  by: claude-code/model",
         "  at: 2026-10-01T15:00:00Z",
-        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "verified:",
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
         "tags: [a]",
       ]),
     });
@@ -936,7 +938,9 @@ describe("verifyRecord", () => {
       isOk: true,
       text: record([
         ...lines,
-        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "verified:",
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
         "title: T",
       ]),
     });
@@ -1431,7 +1435,9 @@ describe("verifyRecord", () => {
       expected: [
         "  generated:",
         "    at:",
-        `  verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+        "  verified:",
+        `    - by: ${VERIFIED_BY}`,
+        `      at: ${AT}`,
         "  # a comment",
         "  title: x",
       ],
@@ -1981,6 +1987,367 @@ describe("verifyRecord", () => {
     expect(result).toStrictEqual({
       isOk: true,
       text: `---\nstatus: stable\nverified: { by: ${VERIFIED_BY}, at: ${AT} }\n---\r\nbody\n`,
+    });
+  });
+});
+
+describe("verifyRecord's new entry style", () => {
+  test.each([
+    {
+      description: "match, with an inline generated",
+      expected: [
+        "generated: { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      generated: [
+        "generated: { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
+      ],
+      style: "match" as const,
+    },
+    {
+      description: "match, with no generated",
+      expected: [`verified: { by: ${VERIFIED_BY}, at: ${AT} }`],
+      generated: [],
+      style: "match" as const,
+    },
+    {
+      description: "match, with a generated that isn't a mapping",
+      expected: [
+        "generated: claude-code/model",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      generated: ["generated: claude-code/model"],
+      style: "match" as const,
+    },
+    {
+      description: "inline, with a block generated",
+      expected: [
+        "generated:",
+        "  by: claude-code/model",
+        "  at: 2026-10-01T15:00:00Z",
+        `verified: { by: ${VERIFIED_BY}, at: ${AT} }`,
+      ],
+      generated: [
+        "generated:",
+        "  by: claude-code/model",
+        "  at: 2026-10-01T15:00:00Z",
+      ],
+      style: "inline" as const,
+    },
+    {
+      description: "block, with an inline generated",
+      expected: [
+        "generated: { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
+        "verified:",
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
+      ],
+      generated: [
+        "generated: { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
+      ],
+      style: "block" as const,
+    },
+  ])("writes a new field as asked: $description", (row) => {
+    // Given - a draft with the generated field given and no verified
+    const text = record(["status: draft", ...row.generated]);
+
+    // When - verifying it in the style given
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: row.style, text });
+
+    // Then - the new field in that style
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record(["status: stable", ...row.expected]),
+    });
+  });
+
+  test.each([
+    {
+      description: "a double-quoted generated.at",
+      expected: `"${AT}"`,
+      lines: [
+        'generated: { by: claude-code/model, at: "2026-10-01T15:00:00Z" }',
+      ],
+    },
+    {
+      description: "a single-quoted generated.at",
+      expected: `'${AT}'`,
+      lines: [
+        "generated: { by: claude-code/model, at: '2026-10-01T15:00:00Z' }",
+      ],
+    },
+    {
+      description: "a plain generated.at, over a quoted entry",
+      expected: AT,
+      lines: [
+        "generated: { by: claude-code/model, at: 2026-10-01T15:00:00Z }",
+        "verified: [{ by: human:someone, at: '2026-10-01T16:00:00Z' }]",
+      ],
+    },
+    {
+      description: "another entry's quoted at, with no generated",
+      expected: `"${AT}"`,
+      lines: ['verified: [{ by: human:someone, at: "2026-10-01T16:00:00Z" }]'],
+    },
+    {
+      description: "the first entry with an at, past one without",
+      expected: `'${AT}'`,
+      lines: [
+        "verified: [{ by: human:a }, { by: human:b, at: '2026-10-01T16:00:00Z' }]",
+      ],
+    },
+    {
+      description: "an entry's quoted at, past a generated.at that's an alias",
+      expected: `"${AT}"`,
+      lines: [
+        "first: &t '2026-10-01T15:00:00Z'",
+        "generated: { by: claude-code/model, at: *t }",
+        'verified: [{ by: human:someone, at: "2026-10-01T16:00:00Z" }]',
+      ],
+    },
+    {
+      description: "an entry's quoted at, past an empty generated.at",
+      expected: `"${AT}"`,
+      lines: [
+        "generated: { by: claude-code/model, at: }",
+        'verified: [{ by: human:someone, at: "2026-10-01T16:00:00Z" }]',
+      ],
+    },
+    {
+      description: "only a generated.at that's an alias",
+      expected: AT,
+      lines: [
+        "first: &t '2026-10-01T15:00:00Z'",
+        "generated: { by: claude-code/model, at: *t }",
+      ],
+    },
+  ])("quotes a new at as $description is", ({ expected, lines }) => {
+    // Given - a record whose other timestamps are written as given
+    const text = record(lines);
+
+    // When - verifying it
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - the new entry's at quoted the same way
+    expect(result.isOk && result.text).toContain(
+      `by: ${VERIFIED_BY}, at: ${expected} }`
+    );
+  });
+
+  test("quotes a new block entry's at too", () => {
+    // Given - a block generated with a quoted at
+    const text = record([
+      "generated:",
+      "  by: claude-code/model",
+      "  at: '2026-10-01T15:00:00Z'",
+    ]);
+
+    // When - verifying it, matching generated
+    const result = verifyRecord({ ...VERIFY_OPTIONS, text });
+
+    // Then - a block entry with its at quoted
+    expect(result.isOk && result.text).toContain(
+      `verified:\n  - by: ${VERIFIED_BY}\n    at: '${AT}'\n`
+    );
+  });
+
+  test.each([
+    {
+      description: "a null with a comment",
+      expected: ["verified: # none"],
+      lines: ["verified: ~ # none"],
+    },
+    {
+      description: "an empty null",
+      expected: ["verified:"],
+      lines: ["verified:"],
+    },
+    {
+      description: "an empty null with a comment",
+      expected: ["verified: # none"],
+      lines: ["verified: # none"],
+    },
+    {
+      description: "a null on the line after the key",
+      expected: ["verified:", "   # none"],
+      lines: ["verified:", "  null # none"],
+    },
+    {
+      description: "a null after a comment on the key's line",
+      expected: ["verified: # key"],
+      lines: ["verified: # key", "  ~"],
+    },
+    {
+      description: "a commented null after a comment on the key's line",
+      expected: ["verified: # key", "   # none"],
+      lines: ["verified: # key", "  ~ # none"],
+    },
+  ])("replaces $description with a block list", ({ expected, lines }) => {
+    // Given - a draft whose verified is null
+    const text = record(["status: draft", ...lines, "title: T"]);
+
+    // When - verifying it as a block
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: "block", text });
+
+    // Then - the key's line and comment kept, the list on the lines after it
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        "status: stable",
+        ...expected,
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
+        "title: T",
+      ]),
+    });
+  });
+
+  test.each([
+    {
+      description: "nothing",
+      expected: ["verified:", `  - by: ${VERIFIED_BY}`, `    at: ${AT}`],
+      lines: [],
+    },
+    {
+      description: "only a comment",
+      expected: [
+        "# a comment",
+        "verified:",
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
+      ],
+      lines: ["# a comment"],
+    },
+  ])("adds a block list to frontmatter of $description", (row) => {
+    // Given - frontmatter with no mapping
+    const text = `---\n${row.lines.map((line) => `${line}\n`).join("")}---\n`;
+
+    // When - verifying it as a block
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: "block", text });
+
+    // Then - the field written at the end
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: `---\n${row.expected.map((line) => `${line}\n`).join("")}---\n`,
+    });
+  });
+
+  test.each([
+    {
+      description: "a block list",
+      expected: [
+        "verified:",
+        "- { by: human:someone, at: 2026-10-01T16:00:00Z }",
+        `- by: ${VERIFIED_BY}`,
+        `  at: ${AT}`,
+      ],
+      lines: ["verified:", "- { by: human:someone, at: 2026-10-01T16:00:00Z }"],
+    },
+    {
+      description: "someone's entry on the key's line",
+      expected: [
+        "verified: # theirs",
+        "  - { by: human:someone, at: 2026-10-01T16:00:00Z }",
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
+      ],
+      lines: [
+        "verified: { by: human:someone, at: 2026-10-01T16:00:00Z } # theirs",
+      ],
+    },
+    {
+      description: "someone's entry on the line after the key",
+      expected: [
+        "verified:",
+        "  - { by: human:someone, at: 2026-10-01T16:00:00Z }",
+        `  - by: ${VERIFIED_BY}`,
+        `    at: ${AT}`,
+      ],
+      lines: ["verified:", "  { by: human:someone, at: 2026-10-01T16:00:00Z }"],
+    },
+  ])("adds a block entry to $description", ({ expected, lines }) => {
+    // Given - someone else's sign-off
+    const text = record(lines);
+
+    // When - verifying it as a block
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: "block", text });
+
+    // Then - a block item aligned under its list marker
+    expect(result).toStrictEqual({ isOk: true, text: record(expected) });
+  });
+
+  test("writes an inline entry into an inline list, even as a block", () => {
+    // Given - an inline list, which can't hold a block mapping
+    const text = record([
+      "verified: [{ by: human:someone, at: 2026-10-01T16:00:00Z }]",
+    ]);
+
+    // When - verifying it as a block
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: "block", text });
+
+    // Then - an inline entry in the list
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record([
+        `verified: [{ by: human:someone, at: 2026-10-01T16:00:00Z }, { by: ${VERIFIED_BY}, at: ${AT} }]`,
+      ]),
+    });
+  });
+
+  test("writes a block entry's lines with the record's CRLF breaks", () => {
+    // Given - a CRLF record with a null verified
+    const text = "---\r\nstatus: draft\r\nverified: ~\r\n---\r\nbody\r\n";
+
+    // When - verifying it as a block
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: "block", text });
+
+    // Then - every new line ends in CRLF
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: `---\r\nstatus: stable\r\nverified:\r\n  - by: ${VERIFIED_BY}\r\n    at: ${AT}\r\n---\r\nbody\r\n`,
+    });
+  });
+
+  test("renews the signer's own entry in its own layout, whatever the style", () => {
+    // Given - the signer's inline entry, beside a block generated
+    const text = record([
+      "generated:",
+      "  by: claude-code/model",
+      "  at: 2026-10-01T15:00:00Z",
+      `verified: { by: ${VERIFIED_BY}, at: "${OLD_AT}" }`,
+    ]);
+
+    // When - verifying it again as a block
+    const result = verifyRecord({ ...VERIFY_OPTIONS, style: "block", text });
+
+    // Then - only its at changes, quotes kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: text.replace(OLD_AT, AT),
+    });
+  });
+});
+
+describe("verifyRecord, given a style it doesn't know", () => {
+  test.each([
+    { description: "a misspelled style", style: "Block" },
+    { description: "null", style: null },
+  ])("refuses $description", ({ style }) => {
+    // Given - a draft, and a style from a caller without the types
+    const text = record(["status: draft"]);
+
+    // When - verifying it in that style
+    const result = verifyRecord({
+      ...VERIFY_OPTIONS,
+      style: style as unknown as "block",
+      text,
+    });
+
+    // Then - refused as a bad parameter, naming the styles
+    expect(result).toStrictEqual({
+      isOk: false,
+      kind: "invalidParams",
+      reason: `the style ${JSON.stringify(style)} isn't one of block, inline, match`,
     });
   });
 });

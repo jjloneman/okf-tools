@@ -1,3 +1,4 @@
+import type { EntryStyle } from "./frontmatter/types.ts";
 import type { Output } from "./output.ts";
 
 /** What both run modes need once the arguments and config are resolved. */
@@ -45,6 +46,13 @@ export type RunContext = {
    * @example true
    */
   shouldCommit: boolean;
+
+  /**
+   * How a new `verified` entry is laid out.
+   *
+   * @example "match"
+   */
+  style: EntryStyle;
 
   /**
    * The OKF actor a `verified` entry is recorded as.

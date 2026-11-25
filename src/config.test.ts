@@ -2,7 +2,12 @@ import { describe, expect, test } from "vitest";
 
 import { readOkfConfig, resolveSettings } from "./config.ts";
 
-const EMPTY = { bundles: undefined, exclude: undefined, verifiedBy: undefined };
+const EMPTY = {
+  bundles: undefined,
+  exclude: undefined,
+  style: undefined,
+  verifiedBy: undefined,
+};
 const REPO_ROOT = "/repo";
 
 describe("readOkfConfig", () => {
@@ -18,23 +23,18 @@ describe("readOkfConfig", () => {
     expect(readOkfConfig(text)).toStrictEqual({ config: EMPTY, isOk: true });
   });
 
-  test("reads the bundles, the exclusions, and the actor", () => {
+  test("reads the bundles, the exclusions, the style, and the actor", () => {
     // Given - a full okf block
-    const text = JSON.stringify({
-      okf: {
-        bundles: ["docs/decisions"],
-        exclude: ["docs/decisions/README.md"],
-        verifiedBy: "human:jjloneman",
-      },
-    });
+    const okf = {
+      bundles: ["docs/decisions"],
+      exclude: ["docs/decisions/README.md"],
+      style: "block",
+      verifiedBy: "human:jjloneman",
+    };
 
     // When/Then - every key
-    expect(readOkfConfig(text)).toStrictEqual({
-      config: {
-        bundles: ["docs/decisions"],
-        exclude: ["docs/decisions/README.md"],
-        verifiedBy: "human:jjloneman",
-      },
+    expect(readOkfConfig(JSON.stringify({ okf }))).toStrictEqual({
+      config: okf,
       isOk: true,
     });
   });
@@ -94,6 +94,12 @@ describe("readOkfConfig", () => {
         text: JSON.stringify({ okf: { exclude: [glob] } }),
       })
     ),
+    ...["Block", "", 1].map((style) => ({
+      description: `the style ${JSON.stringify(style)}`,
+      reason:
+        "`okf.style` in package.json must be one of block, inline, match.",
+      text: JSON.stringify({ okf: { style } }),
+    })),
     {
       description: "an actor that isn't a string",
       reason: "`okf.verifiedBy` in package.json must be a string.",
@@ -109,6 +115,7 @@ describe("resolveSettings", () => {
   const configured = {
     bundles: ["docs/decisions"],
     exclude: undefined,
+    style: undefined,
     verifiedBy: "human:jjloneman",
   };
 
@@ -127,6 +134,7 @@ describe("resolveSettings", () => {
       settings: {
         bundleDirs: ["/repo/docs/decisions"],
         excludeGlobs: [],
+        style: "match",
         verifiedBy: "human:jjloneman",
       },
     });
@@ -147,9 +155,23 @@ describe("resolveSettings", () => {
       settings: {
         bundleDirs: ["/repo/docs/references"],
         excludeGlobs: ["docs/decisions/drafts"],
+        style: "match",
         verifiedBy: "human:jjloneman",
       },
     });
+  });
+
+  test("takes the config's style", () => {
+    // When - resolving a config that names a style
+    const result = resolveSettings({
+      config: { ...configured, style: "inline" },
+      cwd: REPO_ROOT,
+      options: { bundles: [], by: undefined },
+      repoRoot: REPO_ROOT,
+    });
+
+    // Then - that style
+    expect(result).toMatchObject({ settings: { style: "inline" } });
   });
 
   test("lets the flags replace the config, bundles from the cwd", () => {
@@ -167,6 +189,7 @@ describe("resolveSettings", () => {
       settings: {
         bundleDirs: ["/repo/docs/references"],
         excludeGlobs: [],
+        style: "match",
         verifiedBy: "claude-code/2.1.316",
       },
     });
@@ -182,14 +205,24 @@ describe("resolveSettings", () => {
     },
     {
       by: undefined,
-      config: { bundles: ["docs"], exclude: undefined, verifiedBy: undefined },
+      config: {
+        bundles: ["docs"],
+        exclude: undefined,
+        style: undefined,
+        verifiedBy: undefined,
+      },
       description: "no actor anywhere",
       reason:
         "No one to sign as: pass --by <actor>, or set `okf.verifiedBy` in /repo/package.json.",
     },
     {
       by: "human:jj loneman",
-      config: { bundles: ["docs"], exclude: undefined, verifiedBy: undefined },
+      config: {
+        bundles: ["docs"],
+        exclude: undefined,
+        style: undefined,
+        verifiedBy: undefined,
+      },
       description: "an actor YAML can't hold unquoted",
       reason:
         '"human:jj loneman" isn\'t an actor a record can hold, such as human:jjloneman.',
@@ -208,7 +241,12 @@ describe("resolveSettings", () => {
       "12:30",
     ].map((by) => ({
       by,
-      config: { bundles: ["docs"], exclude: undefined, verifiedBy: undefined },
+      config: {
+        bundles: ["docs"],
+        exclude: undefined,
+        style: undefined,
+        verifiedBy: undefined,
+      },
       description: `the YAML-special actor ${by}`,
       reason: `"${by}" isn't an actor a record can hold, such as human:jjloneman.`,
     })),

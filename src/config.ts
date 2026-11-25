@@ -1,7 +1,10 @@
 import path from "node:path";
 
+import type { EntryStyle } from "./frontmatter/types.ts";
 import type { CliOptions } from "./options.ts";
 
+import { ENTRY_STYLE_NAMES, isEntryStyle } from "./frontmatter/shared.ts";
+import { ENTRY_STYLES } from "./frontmatter/types.ts";
 import { describeError } from "./output.ts";
 
 /** The `okf` block of a consumer's `package.json`. */
@@ -20,6 +23,13 @@ export type OkfConfig = {
    * @example `["docs/decisions/README.md", "docs/drafts"]`
    */
   exclude: readonly string[] | undefined;
+
+  /**
+   * How a new `verified` entry is laid out.
+   *
+   * @example "block"
+   */
+  style: EntryStyle | undefined;
 
   /**
    * The OKF actor a `verified` entry is recorded as.
@@ -78,6 +88,13 @@ export type Settings = {
    * @example `["docs/decisions/README.md", "docs/drafts"]`
    */
   excludeGlobs: readonly string[];
+
+  /**
+   * How a new `verified` entry is laid out; `match` unless configured.
+   *
+   * @example "match"
+   */
+  style: EntryStyle;
 
   /**
    * The OKF actor a `verified` entry is recorded as.
@@ -147,6 +164,7 @@ export function readOkfConfig(
   const empty = {
     bundles: undefined,
     exclude: undefined,
+    style: undefined,
     verifiedBy: undefined,
   };
 
@@ -175,7 +193,7 @@ export function readOkfConfig(
     return { isOk: false, reason: "`okf` in package.json must be an object." };
   }
 
-  const { bundles, exclude, verifiedBy } = block;
+  const { bundles, exclude, style, verifiedBy } = block;
 
   if (bundles !== undefined && !isStringList(bundles)) {
     return {
@@ -208,7 +226,14 @@ export function readOkfConfig(
     };
   }
 
-  return { config: { bundles, exclude, verifiedBy }, isOk: true };
+  if (style !== undefined && !isEntryStyle(style)) {
+    return {
+      isOk: false,
+      reason: `\`okf.style\` in package.json must be one of ${ENTRY_STYLE_NAMES}.`,
+    };
+  }
+
+  return { config: { bundles, exclude, style, verifiedBy }, isOk: true };
 }
 
 /**
@@ -219,6 +244,8 @@ export function readOkfConfig(
  *   repo root.
  *
  * - `okf.exclude` has no flag, so it always applies.
+ *
+ * - `okf.style` has no flag either, and is `match` unless configured.
  *
  * - There's no default bundle and no default actor: a run names both.
  */
@@ -261,7 +288,12 @@ export function resolveSettings(params: {
 
   return {
     isOk: true,
-    settings: { bundleDirs, excludeGlobs: config.exclude ?? [], verifiedBy },
+    settings: {
+      bundleDirs,
+      excludeGlobs: config.exclude ?? [],
+      style: config.style ?? ENTRY_STYLES.match,
+      verifiedBy,
+    },
   };
 }
 

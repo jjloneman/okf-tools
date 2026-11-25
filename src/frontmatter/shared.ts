@@ -22,9 +22,14 @@ import {
   parseDocument,
 } from "yaml";
 
-import type { RecordStatus, Timestamp, VerifyRecordParams } from "./types.ts";
+import type {
+  EntryStyle,
+  RecordStatus,
+  Timestamp,
+  VerifyRecordParams,
+} from "./types.ts";
 
-import { RECORD_STATUSES } from "./types.ts";
+import { ENTRY_STYLES, RECORD_STATUSES } from "./types.ts";
 
 /** The keys of one `verified` or `generated` entry. */
 export const ENTRY_KEYS = {
@@ -80,6 +85,14 @@ const NULL_SPELLINGS: ReadonlySet<string> = new Set([
  */
 const RECORD_STATUS_VALUES: ReadonlySet<string> = new Set(
   Object.values(RECORD_STATUSES)
+);
+
+/** The styles a new entry can take, as a refusal lists them. */
+export const ENTRY_STYLE_NAMES: string = Object.values(ENTRY_STYLES).join(", ");
+
+/** The styles a new entry can take, to check a value against. */
+const ENTRY_STYLE_VALUES: ReadonlySet<unknown> = new Set(
+  Object.values(ENTRY_STYLES)
 );
 
 /** The spaces and tabs that start or end a line, if any. */
@@ -416,6 +429,11 @@ export function findPair(params: FindPairParams): KeyedPair | undefined {
     (pair): pair is KeyedPair =>
       isScalar(pair.key) && isPlaced(pair.key) && pair.key.value === key
   );
+}
+
+/** Whether a value, from config or a caller, names a style a new entry can take. */
+export function isEntryStyle(value: unknown): value is EntryStyle {
+  return ENTRY_STYLE_VALUES.has(value);
 }
 
 /**
