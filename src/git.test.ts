@@ -143,7 +143,35 @@ describe("listDirtyPaths", () => {
     });
 
     // Then - the edited and the new one
-    expect(dirtyPaths).toStrictEqual(["c.md", "b.md"]);
+    expect(dirtyPaths).toStrictEqual({ isOk: true, value: ["c.md", "b.md"] });
+  });
+});
+
+describe("listDirtyPaths and listChangedPaths, when git status fails", () => {
+  test("both fail naming the paths and git's reason", () => {
+    // Given - an index git can't read
+    repo.write(".git/index", "garbage\n");
+
+    // When - asking for the dirty and the changed paths
+    const dirty = listDirtyPaths({ filePaths: ["a.md"], repoRoot: repo.root });
+    const changed = listChangedPaths({
+      bundleDirs: ["docs"],
+      repoRoot: repo.root,
+    });
+
+    // Then - each names what it was reading
+    const reason = ": fatal: .git/index: index file smaller than expected";
+
+    expect({ changed, dirty }).toStrictEqual({
+      changed: {
+        isOk: false,
+        reason: `Couldn't read git status for docs${reason}`,
+      },
+      dirty: {
+        isOk: false,
+        reason: `Couldn't read git status for a.md${reason}`,
+      },
+    });
   });
 });
 
@@ -166,8 +194,11 @@ describe("listChangedPaths", () => {
     });
 
     // Then - the branch's, the new, and the renamed path, but not the origin
-    expect(result.hasBranchDiff).toBe(true);
-    expect([...result.paths].sort()).toStrictEqual([
+    expect(result).toMatchObject({
+      isOk: true,
+      value: { hasBranchDiff: true },
+    });
+    expect([...(result.isOk ? result.value.paths : [])].sort()).toStrictEqual([
       "docs/branch.md",
       "docs/new.md",
       "docs/renamed.md",
@@ -195,9 +226,12 @@ describe("listChangedPaths", () => {
 
     // Then - the branch's record, from the diff
     expect(result).toStrictEqual({
-      hasBranchDiff: true,
-      paths: new Set(["docs/branch.md"]),
-      statusPaths: new Set(),
+      isOk: true,
+      value: {
+        hasBranchDiff: true,
+        paths: new Set(["docs/branch.md"]),
+        statusPaths: new Set(),
+      },
     });
   });
 
@@ -217,7 +251,9 @@ describe("listChangedPaths", () => {
 
     // Then - the new path, and not the old one read as a record
     expect(repo.git("status", "--porcelain")).toMatch(/^ R /u);
-    expect([...result.paths]).toStrictEqual(["docs/new.md"]);
+    expect(result.isOk && [...result.value.paths]).toStrictEqual([
+      "docs/new.md",
+    ]);
   });
 
   test("falls back to uncommitted changes when there is no base branch", () => {
@@ -233,9 +269,12 @@ describe("listChangedPaths", () => {
 
     // Then - no branch diff, but the uncommitted file
     expect(result).toStrictEqual({
-      hasBranchDiff: false,
-      paths: new Set(["docs/a.md"]),
-      statusPaths: new Set(["docs/a.md"]),
+      isOk: true,
+      value: {
+        hasBranchDiff: false,
+        paths: new Set(["docs/a.md"]),
+        statusPaths: new Set(["docs/a.md"]),
+      },
     });
   });
 });

@@ -2,6 +2,7 @@ import path from "node:path";
 
 import type { ExitCode } from "./exit-codes.ts";
 import type { CliOptions } from "./options.ts";
+import type { Outcome } from "./outcome.ts";
 import type { Candidate } from "./records.ts";
 import type { RunContext } from "./run-context.ts";
 
@@ -11,7 +12,7 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
-import { listChangedPaths } from "./git.ts";
+import { listChangedPaths, listDirtyPaths } from "./git.ts";
 import { printError, printInfo } from "./output.ts";
 import { needsSignOff } from "./records.ts";
 import { loadCandidate, loadCandidatesAt, resolveRecordPaths } from "./repo.ts";
@@ -104,12 +105,19 @@ function applySelection(params: {
   selected: readonly Candidate[];
   statusPaths: ReadonlySet<string> | undefined;
 }): ExitCode {
-  const { context, selected, statusPaths } = params;
+  const { context, selected } = params;
+  const statusPaths = readChosenStatus({ ...params, context });
+
+  if (!statusPaths.isOk) {
+    printError(statusPaths.reason);
+
+    return EXIT_CODES.failure;
+  }
 
   const plan = planVerification({
     context,
     selected,
-    ...(statusPaths === undefined ? {} : { statusPaths }),
+    statusPaths: statusPaths.value,
   });
 
   if (plan.dirtyPaths.length > 0) {
@@ -157,10 +165,13 @@ function applySelection(params: {
 /** Load every changed record in the bundles. */
 function loadChanged(context: RunContext): LoadResult {
   const { bundleDirs, repoRoot, verifiedBy } = context;
-  const { hasBranchDiff, paths, statusPaths } = listChangedPaths({
-    bundleDirs,
-    repoRoot,
-  });
+  const changes = listChangedPaths({ bundleDirs, repoRoot });
+
+  if (!changes.isOk) {
+    return changes;
+  }
+
+  const { hasBranchDiff, paths, statusPaths } = changes.value;
 
   if (!hasBranchDiff) {
     printInfo(
@@ -226,4 +237,31 @@ function loadNamed(params: {
   }
 
   return { candidates, isOk: true };
+}
+
+/**
+ * Read what `git status` reports for the chosen records, for the warning
+ * about other uncommitted changes.
+ *
+ * - Asks git only when the run commits and loading didn't already ask, so a
+ *   run that never commits never needs `git status`.
+ */
+function readChosenStatus(params: {
+  context: RunContext;
+  selected: readonly Candidate[];
+  statusPaths: ReadonlySet<string> | undefined;
+}): Outcome<ReadonlySet<string>> {
+  const { context, selected, statusPaths } = params;
+  const { repoRoot, shouldCommit } = context;
+
+  if (statusPaths !== undefined || !shouldCommit) {
+    return { isOk: true, value: statusPaths ?? new Set() };
+  }
+
+  const dirty = listDirtyPaths({
+    filePaths: selected.map(({ filePath }) => filePath),
+    repoRoot,
+  });
+
+  return dirty.isOk ? { isOk: true, value: new Set(dirty.value) } : dirty;
 }

@@ -11,6 +11,8 @@ import { execFileSync } from "node:child_process";
 
 import type { Outcome } from "./outcome.ts";
 
+import { describeError } from "./output.ts";
+
 /** The changed files under the bundles, and whether the branch diff worked. */
 export type ChangedPaths = {
   /**
@@ -112,6 +114,9 @@ const REMOTE_MAIN = "origin/main";
 /** A porcelain status entry marked as a rename or copy, in either column. */
 const RENAME_OR_COPY = /^(?:[CR].|.[CR])/u;
 
+/** The hash a commit reports when git can't read it back. */
+const UNKNOWN_HASH = "(hash unknown)";
+
 /**
  * Commit just the given files, so nothing else staged rides along.
  *
@@ -149,8 +154,11 @@ export function commitFiles(params: {
     return { isOk: false, reason: [stdout, stderr].join("") };
   }
 
+  // The commit is made by now, so a hash git can't read isn't a failure.
   return {
-    hash: runGit({ args: ["rev-parse", "--short", "HEAD"], repoRoot }).trim(),
+    hash:
+      tryGit({ args: ["rev-parse", "--short", "HEAD"], repoRoot }) ??
+      UNKNOWN_HASH,
     isOk: true,
   };
 }
@@ -182,11 +190,17 @@ export function findRepoRoot(cwd: string): Outcome<string> {
   }
 }
 
-/** List the changed files under the bundles, from the branch diff and the working tree. */
+/**
+ * List the changed files under the bundles, from the branch diff and the
+ * working tree.
+ *
+ * - A branch diff that fails only narrows the list; a `git status` that
+ *   fails is an error, since the working tree is what most runs sign.
+ */
 export function listChangedPaths(params: {
   bundleDirs: readonly string[];
   repoRoot: string;
-}): ChangedPaths {
+}): Outcome<ChangedPaths> {
   const { bundleDirs, repoRoot } = params;
   const paths = new Set<string>();
   const baseRef = readBaseRef(repoRoot);
@@ -211,13 +225,17 @@ export function listChangedPaths(params: {
     hasBranchDiff = false;
   }
 
-  const statusPaths = new Set(
-    readStatusPaths({ pathspecs: bundleDirs, repoRoot })
-  );
+  const status = readStatusPaths({ pathspecs: bundleDirs, repoRoot });
+
+  if (!status.isOk) {
+    return status;
+  }
+
+  const statusPaths = new Set(status.value);
 
   statusPaths.forEach((changedPath) => paths.add(changedPath));
 
-  return { hasBranchDiff, paths, statusPaths };
+  return { isOk: true, value: { hasBranchDiff, paths, statusPaths } };
 }
 
 /**
@@ -227,13 +245,20 @@ export function listChangedPaths(params: {
 export function listDirtyPaths(params: {
   filePaths: readonly string[];
   repoRoot: string;
-}): string[] {
+}): Outcome<string[]> {
   const { filePaths, repoRoot } = params;
-  const dirtyPaths = new Set(
-    readStatusPaths({ pathspecs: filePaths, repoRoot })
-  );
+  const status = readStatusPaths({ pathspecs: filePaths, repoRoot });
 
-  return filePaths.filter((filePath) => dirtyPaths.has(filePath));
+  if (!status.isOk) {
+    return status;
+  }
+
+  const dirtyPaths = new Set(status.value);
+
+  return {
+    isOk: true,
+    value: filePaths.filter((filePath) => dirtyPaths.has(filePath)),
+  };
 }
 
 /**
@@ -304,25 +329,45 @@ export function runGit(params: {
   });
 }
 
+/** Say why a git call failed: what it printed to stderr, else its error. */
+function describeGitFailure(error: unknown): string {
+  const stderr = readGitFailure(error).stderr?.trim();
+
+  return stderr === undefined || stderr === "" ? describeError(error) : stderr;
+}
+
 /**
  * List the paths `git status` reports under the pathspecs, untracked files
  * included.
  *
  * - A rename or copy, marked in either status column, is followed by an extra
  *   entry holding its origin path, which is skipped.
+ *
+ * - A failure names the pathspecs, so the person knows which files it was
+ *   reading.
  */
 function readStatusPaths(params: {
   pathspecs: readonly string[];
   repoRoot: string;
-}): string[] {
+}): Outcome<string[]> {
   const { pathspecs, repoRoot } = params;
   const statusPaths: string[] = [];
+  let output: string;
   let isOriginPath = false;
 
-  runGit({
-    args: ["status", "--porcelain", "-z", "-uall", "--", ...pathspecs],
-    repoRoot,
-  })
+  try {
+    output = runGit({
+      args: ["status", "--porcelain", "-z", "-uall", "--", ...pathspecs],
+      repoRoot,
+    });
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't read git status for ${pathspecs.join(", ")}: ${describeGitFailure(error)}`,
+    };
+  }
+
+  output
     .split("\0")
     .filter(Boolean)
     .forEach((entry) => {
@@ -336,7 +381,7 @@ function readStatusPaths(params: {
       isOriginPath = RENAME_OR_COPY.test(entry);
     });
 
-  return statusPaths;
+  return { isOk: true, value: statusPaths };
 }
 
 /**
