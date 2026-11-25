@@ -4,12 +4,13 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 ## 🎯 Purpose of this repo
 
-`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) bundles. Today it ships `okf-verify`, which signs records off (see [README.md](README.md)).
+`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) bundles. Today it ships `okf-verify`, which signs records off (see [README.md](README.md)).
 
 - **Interactive by default.** Without `--yes`, it prompts in a terminal and refuses to start without one.
 - **`--yes` runs without prompts**, but only against an explicit selection: `--changed`, or named record paths. `--yes` alone is a usage error.
 - **Verification is the person's call.** An agent runs `--yes` only when the person has asked it to verify those records, naming the files rather than passing `--changed` unless they asked for all of them. Never verify a record as a side effect of drafting or editing it.
 - **It never pushes and never passes `--no-verify`** to git, in either mode.
+- **Spec links are permalinks to commit `62432a0`**, the v0.2 text okf-tools was written against, which the README names. Never link the spec by branch, since it has moved homes; a new pin changes every link at once.
 
 ## 🗂️ Project layout
 
@@ -134,7 +135,7 @@ Releases use [changesets](https://github.com/changesets/changesets), and the pac
 
 ## 📚 Design decisions
 
-Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) v0.2 bundle that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
+Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62432a095456147ee71e70ac6e4dc0d2dea3ac30/okf/SPEC.md) v0.2 bundle that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
 
 - One Markdown file per decision, listed in [docs/decisions/index.md](docs/decisions/index.md), with tags from its vocabulary.
 - **Base a record on the code and the closed threads**, not on memory: re-read the code before stating a flag, an exit code, or a fallback order, and date-stamp facts that can drift ("as of 2026-11-11").
