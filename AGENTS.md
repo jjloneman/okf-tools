@@ -32,10 +32,13 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
     - `edit.ts` — `verifyRecord`: edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text. A lone CR, and an `at` `isWritableTimestamp` refuses, are refused here, each refusal with a `kind`. `findEditProblem` runs the same refusals when records are listed, so `repo.ts` reports a refused record before anyone chooses it.
   - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts`, `outcome.ts`, and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
+- `scripts/spec-watch/` — the spec watch that `spec-watch.yml` runs (see [Spec watch](#-spec-watch)), covered like `src/` and never published; `bin.ts` is its entry.
+- `spec/upstream.json` — the pin: the upstream spec okf-tools supports.
 - `docs/decisions/` — the repo's own OKF bundle of design decisions (see [Design decisions](#-design-decisions)).
 - `test/repo.ts` — scratch git repos, fabricated records, and the shared `VERIFIED_BY` for the tests, imported as `#test/repo`.
+- `test/spec-watch.ts` — a fake `fetch` that answers for GitHub and ntfy, and a fabricated upstream, for the spec watch's tests, imported as `#test/spec-watch`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
-- `.github/workflows/` — `ci.yml` and `release.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
+- `.github/workflows/` — `ci.yml`, `release.yml`, and `spec-watch.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
 - `eslint-rules/` — the local `no-dotted-jsdoc-param` rule, loaded by `eslint.config.ts`.
 - `dist/` — build output (gitignored), the only directory published; `CHANGELOG.md` is published beside it.
 
@@ -99,8 +102,20 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - On a PR it also runs `pnpm changeset status --since=origin/main`, which fails when the PR adds no changeset.
   - It skips the version PR (`changeset-release/main`), which only consumes changesets.
 - `release.yml` runs on every push to `main` (see below).
+- `spec-watch.yml` runs daily and on demand, never on a PR (see [Spec watch](#-spec-watch)).
 - Every action is pinned to an exact `vX.Y.Z`, and every job declares its own `permissions`.
-- **Every job is a required check** in [.github/rulesets/main.json](.github/rulesets/main.json), by its display name. Renaming a job or changing the test matrix means updating `required_status_checks` there and reapplying the ruleset, or every PR waits on a check that never reports.
+- **Every `ci.yml` job is a required check** in [.github/rulesets/main.json](.github/rulesets/main.json), by its display name; `spec-watch.yml` never runs on a PR, so it isn't one. Renaming a job or changing the test matrix means updating `required_status_checks` there and reapplying the ruleset, or every PR waits on a check that never reports.
+
+## 🔭 Spec watch
+
+The OKF spec has no releases or tags, so `spec-watch.yml` checks it daily against the pin in `spec/upstream.json`: the watched `repo`, the spec's `path`, the `sha` of the last commit to it that okf-tools follows, its `version`, and the `candidates` that may become its next home.
+
+- **It reports:** new commits to the spec, a changed `**Version …**` line, the spec's file going missing, the repo archived, renamed or gone, new README or spec lines that may announce a deprecation, open upstream PRs that touch the spec, and candidates that are public.
+- **It opens one issue per run**, titled with the short SHA of the newest commit to the spec, listing only what no earlier spec-watch issue reported, open or closed. Each issue records its findings' keys in a `<!-- spec-watch: … -->` marker, so keep that line when editing one.
+- **It sends an ntfy push** to the topic in the `NTFY_TOPIC` Actions secret; without the secret it sends none. The topic is its only access control, so never echo it or write it in the repo.
+- **The PR that closes its issue bumps the pin:** set `sha` and `version` to the commit okf-tools now follows, and re-pin every spec link to the same commit (see [Purpose of this repo](#-purpose-of-this-repo)). To stop watching a candidate, or to watch the spec's new home, edit `candidates` or `repo` and `path`.
+- **Try it without writing anything:** run it from the Actions tab with `dry-run`, or locally with `GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=jjloneman/okf-tools SPEC_WATCH_DRY_RUN=true node scripts/spec-watch/bin.ts`. The `sha` input (`SPEC_WATCH_SHA` locally) compares against an older commit instead of the pin; without `dry-run` that opens a real issue, whose findings later runs count as reported.
+- **GitHub disables a scheduled workflow after 60 days without repo activity**, and emails the owner first; re-enable it from the Actions tab.
 
 ## 🕒 7-day dependency moratorium
 

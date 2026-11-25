@@ -1,0 +1,51 @@
+name: 🔭 Spec watch
+
+on:
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        default: false
+        description: Print the issue it would open, and open nothing.
+        type: boolean
+      sha:
+        default: ""
+        description: Compare against this full SHA instead of the pin, to test.
+        type: string
+
+# Two runs at once could both find a change unreported and open two issues.
+concurrency:
+  cancel-in-progress: false
+  group: ${{ github.workflow }}
+
+# Nothing by default; the job grants only what it uses.
+permissions: {}
+
+jobs:
+  watch:
+    name: 🔭 Watch the OKF spec
+    # Never on a fork, which would open issues in its own copy.
+    if: ${{ github.repository == 'jjloneman/okf-tools' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      # The script imports nothing from node_modules, so there is no install;
+      # Node 26 runs TypeScript under type stripping.
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "26"
+
+      # The inputs pass through `env`, never into the script's text.
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SPEC_WATCH_DRY_RUN: ${{ inputs.dry-run }}
+          SPEC_WATCH_SHA: ${{ inputs.sha }}
+        run: node scripts/spec-watch/bin.ts
