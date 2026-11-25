@@ -368,6 +368,109 @@ describe.each([
   });
 });
 
+describe("run as okf check", () => {
+  /** A valid root `index.md`. */
+  const rootIndex = '---\nokf_version: "0.3"\n---\n# Index\n';
+
+  beforeEach(() => {
+    vi.stubEnv("GITHUB_ACTIONS", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** Run `okf check` from the repo root. */
+  function runCheck(args: string[]): Promise<number> {
+    return run({
+      args: ["check", ...args],
+      cwd: repo.root,
+      isInteractive: false,
+      program: "okf",
+    });
+  }
+
+  test("prints its usage for --help", async () => {
+    // When - asking for help
+    const code = await runCheck(["--help"]);
+
+    // Then - its own usage on stdout
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos.join("\n")).toContain("[okf] usage: okf check [options]");
+    expect(errors).toStrictEqual([]);
+  });
+
+  test("prints why and its usage for a usage error", async () => {
+    // When - passing a verify flag
+    const code = await runCheck(["--yes"]);
+
+    // Then - a usage error, with the usage
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toMatch(/--yes[\s\S]*usage: okf check/u);
+  });
+
+  test("checks the configured bundles", async () => {
+    // Given - two clean bundles
+    repo.write("docs/decisions/index.md", rootIndex);
+    repo.write("docs/decisions/a.md", record(["type: Decision", 'title: "A"']));
+    repo.write("docs/references/index.md", rootIndex);
+
+    // When - checking them strictly
+    const code = await runCheck(["--strict"]);
+
+    // Then - the totals alone
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([]);
+    expect(infos).toStrictEqual([
+      "[okf] 3 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("prints annotations in GitHub Actions", async () => {
+    // Given - a bundle named with --bundle, with a bad log heading
+    repo.write("notes/index.md", rootIndex);
+    repo.write("notes/log.md", "## May 1\n");
+    vi.stubEnv("GITHUB_ACTIONS", "true");
+
+    // When - checking it
+    const code = await runCheck(["--bundle", "notes"]);
+
+    // Then - the annotation, unprefixed, and a failure
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(infos).toStrictEqual([
+      '::error file=notes/log.md,line=1,title=E005 log-date-heading::a log.md date heading must be YYYY-MM-DD (§9); found "May 1"',
+      '[okf] notes/log.md:1: error E005 log-date-heading: a log.md date heading must be YYYY-MM-DD (§9); found "May 1"',
+      "[okf] 2 files checked: 1 error, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("fails when no bundles are configured", async () => {
+    // Given - a config naming no bundles
+    repo.write("package.json", "{}\n");
+
+    // When - checking
+    const code = await runCheck([]);
+
+    // Then - why, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("package.json");
+    expect(infos).toStrictEqual([]);
+  });
+
+  test("reports an unexpected error instead of throwing", async () => {
+    // Given - a package.json that's a folder, so reading it throws
+    rmSync(path.join(repo.root, "package.json"));
+    mkdirSync(path.join(repo.root, "package.json"));
+
+    // When - checking
+    const code = await runCheck([]);
+
+    // Then - the error, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("EISDIR");
+  });
+});
+
 describe("run as okf --version", () => {
   test("prints the installed version, unprefixed, outside any repo", async () => {
     // When - asking for the version from a folder that doesn't exist

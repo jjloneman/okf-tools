@@ -538,16 +538,9 @@ export function listIndexPaths(repoRoot: string): string[] {
  * - Not trimmed, since a file name may start with a space.
  */
 export function listWorkingPaths(repoRoot: string): string[] {
-  try {
-    return runGit({
-      args: ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-      repoRoot,
-    })
-      .split("\0")
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  const listed = readWorkingPaths(repoRoot);
+
+  return listed.isOk ? listed.value : [];
 }
 
 /**
@@ -643,6 +636,31 @@ export function readTextAt(params: {
     return {
       isOk: false,
       reason: `Couldn't read ${filePath} at ${ref}: ${describeGitFailure(error)}`,
+    };
+  }
+}
+
+/**
+ * List every path in the working tree git would track, as `listWorkingPaths`
+ * does, each once, or say why git couldn't be asked.
+ *
+ * - Each once, since git lists a conflicted path once per stage.
+ */
+export function readWorkingPaths(repoRoot: string): Outcome<string[]> {
+  try {
+    const output = runGit({
+      args: ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+      repoRoot,
+    });
+
+    return {
+      isOk: true,
+      value: [...new Set(output.split("\0"))].filter(Boolean),
+    };
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't list the files git tracks: ${describeGitFailure(error)}`,
     };
   }
 }

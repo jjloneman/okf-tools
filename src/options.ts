@@ -5,6 +5,34 @@ import type { MigrateMode } from "./migrate.ts";
 
 import { describeError } from "./output.ts";
 
+/** How `okf check` prints its report: the formats `okf status` takes. */
+export type CheckFormat = StatusFormat;
+
+/** The flags an `okf check` run was given. */
+export type CheckOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * How to print the report, from `--format`.
+   *
+   * @example "json"
+   */
+  format: CheckFormat;
+
+  /**
+   * Whether a warning fails the run too, from `--strict`.
+   *
+   * @example true
+   */
+  isStrict: boolean;
+};
+
 /** The flags and record paths a run was given. */
 export type CliOptions = {
   /**
@@ -211,6 +239,7 @@ export type ParsedCommand =
        * @example "verify"
        */
       kind:
+        | "check"
         | "deprecate"
         | "diff"
         | "guide"
@@ -356,6 +385,8 @@ export type VerifyCommand = "okf-verify" | "okf verify";
 export const OKF_USAGE = `usage: okf <command> [options]
 
 commands:
+  check   report problems in the bundles against OKF's spec rules,
+          writing nothing
   deprecate
           mark records \`status: deprecated\`, naming what replaces them
   diff    print what changed in records since their last sign-off
@@ -573,6 +604,24 @@ options:
   --check         write nothing; fail when a bundle still needs migrating
   --help, -h      print this help`;
 
+/** How to call `okf check`, printed for `--help` and after a usage error. */
+export const CHECK_USAGE = `usage: okf check [options]
+
+Reports problems in the bundles against the rules OKF's spec states: every
+Markdown file git would track, records, index.md and log.md alike. Each
+finding names its file, line, severity, and rule. It writes nothing. In
+GitHub Actions, text findings also print as annotations on the files.
+
+It exits 1 on an error-level finding or a file it can't read, and under
+--strict on a warning too; otherwise 0.
+
+options:
+  --bundle <dir>     a bundle directory to check; repeat for more
+                     (default: \`okf.bundles\` in package.json)
+  --format <format>  text (the default) or json
+  --strict           fail on warnings too
+  --help, -h         print this help`;
+
 /** How to call `okf tags`, printed for `--help` and after a usage error. */
 export const TAGS_USAGE = `usage: okf tags [options]
 
@@ -611,6 +660,51 @@ options:
 An agent runs --yes only when the person asks it to, naming the files they
 approved, and passes --changed only when they asked for every changed
 record; \`okf guide\` prints the rules.`;
+}
+
+/** Read `okf check`'s command line into options, or say why it can't run. */
+export function parseCheckArgs(
+  args: readonly string[]
+): ParsedArgs<CheckOptions> {
+  let parsed: ReturnType<typeof parseCheckLine>;
+
+  try {
+    parsed = parseCheckLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const bundles = values.bundle ?? [];
+  const problem = findBundlesProblem({
+    bundles,
+    command: "okf check",
+    positionals,
+  });
+
+  if (problem !== undefined) {
+    return { kind: "invalid", message: problem };
+  }
+
+  const format = values.format ?? "text";
+
+  return isStatusFormat(format)
+    ? {
+        kind: "options",
+        options: { bundles, format, isStrict: values.strict === true },
+      }
+    : {
+        kind: "invalid",
+        message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
+      };
 }
 
 /** Read the command line into options, or say why it can't run. */
@@ -667,6 +761,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
   }
 
   if (
+    name === "check" ||
     name === "deprecate" ||
     name === "diff" ||
     name === "guide" ||
@@ -1288,6 +1383,26 @@ export function parseInitArgs(args: readonly string[]): ParsedInitArgs {
   }
 
   return { kind: "options", options };
+}
+
+/**
+ * Run `parseArgs` over `okf check`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseCheckLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      format: { type: "string" },
+      help: { short: "h", type: "boolean" },
+      strict: { type: "boolean" },
+    },
+    strict: true,
+  });
 }
 
 /**
