@@ -3,8 +3,8 @@ type: Decision
 title: What `--yes` verifies, and how it exits
 description: "`--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified, and exits `0` worked, `1` failed, `2` nothing to verify."
 tags: [agents, cli]
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T04:21:00Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:40:00Z }
 verified: { by: human:jjloneman, at: 2026-11-12T07:03:21Z }
 ---
 
@@ -14,11 +14,12 @@ The non-interactive mode has no prompt to confirm a choice, so the command line 
 
 ## Decision
 
-As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit-codes.ts`:
+As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit-codes.ts`, and as of 2026-11-25, `src/working-directory.ts`:
 
 - **`--yes` needs exactly one selection:**
   - `--changed`: every changed record in the configured bundles that still needs a sign-off, either never verified by the signer or regenerated since they verified it;
   - or one or more record paths, relative to where the command runs, each an existing `.md` file directly inside a bundle, other than `index.md`.
+    - Under pnpm or npm, that's the folder the script was called from (`INIT_CWD`) only when it's in the package's repo; otherwise, as with `pnpm --dir <package>` from another repo, it's the package root.
 - **Every other combination is a usage error:**
   - `--yes` alone selects nothing;
   - `--changed` together with record paths;
@@ -37,6 +38,7 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
 - `--changed` and paths are two different selections; accepting both would leave it unclear which one won.
 - A record already signed off needs nothing, so skipping it lets an agent pass the same list twice safely.
 - A changed record that's skipped because it can't be read or parsed would look signed off once the run succeeds, so the run fails instead (issue #8).
+- `pnpm --dir` and `npm --prefix` set `INIT_CWD` to the caller's folder, so trusting it anywhere let `--yes --changed` read another repo's config and sign its drafts (issue #26).
 - A separate exit code for "nothing to verify" lets a script or workflow tell an idle run from a failed one without parsing output.
 
 ## Consequences
