@@ -11,6 +11,7 @@ Tools for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowled
   - [🤖 Non-interactive](#-non-interactive)
   - [🏳️ Flags](#️-flags)
 - [🧭 Agents](#-agents)
+- [🏷️ Writing tags](#️-writing-tags)
 - [📚 Library](#-library)
 - [🛠️ Development](#️-development)
 - [📄 License](#-license)
@@ -117,6 +118,23 @@ What the agent should do:
 - **Sign as the person** (the configured `okf.verifiedBy`), since the approval is theirs.
 
 A repo that wants a stricter rule can say so in its own agent instructions.
+
+## 🏷️ Writing tags
+
+Write a record's `tags` as a block list, one tag per line:
+
+```yaml
+tags:
+  - ai-models
+  - claude-code
+  - git
+```
+
+- **Prettier rewraps a long one-line list.** At its default width of 80, `tags: [a, b, c, …]` past 80 characters becomes one bracket and one tag per line, so a one-line list caps a record at about 7 short tags.
+- **A block list holds at any length**, with no Prettier config in the bundle, and adding a tag is a one-line diff.
+- **Any valid layout still works**: okf-tools reads flow and block lists alike.
+
+The full reasoning is in [How a record's tags are laid out](docs/decisions/tags-layout.md).
 
 ## 📚 Library
 
