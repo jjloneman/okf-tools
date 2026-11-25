@@ -3,6 +3,7 @@ import path from "node:path";
 
 import type { ExitCode } from "./exit-codes.ts";
 import type { CliOptions } from "./options.ts";
+import type { Output, Program } from "./output.ts";
 import type { RunContext } from "./run-context.ts";
 
 import { readOkfConfig, resolveSettings } from "./config.ts";
@@ -10,8 +11,13 @@ import { EXIT_CODES } from "./exit-codes.ts";
 import { findRepoRoot } from "./git.ts";
 import { runInteractive } from "./interactive.ts";
 import { runNonInteractive } from "./non-interactive.ts";
-import { parseCliArgs, USAGE } from "./options.ts";
-import { describeError, printError, printInfo } from "./output.ts";
+import {
+  formatVerifyUsage,
+  OKF_USAGE,
+  parseCliArgs,
+  parseCommand,
+} from "./options.ts";
+import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
 import { spellLikeRepoRoot } from "./working-directory.ts";
 
@@ -39,69 +45,59 @@ export type RunParams = {
    * @example true
    */
   isInteractive: boolean;
+
+  /**
+   * The command the package was run as: `okf`, which takes a command as its
+   * first argument, or the `okf-verify` alias for `okf verify`; leaving it out
+   * runs as `okf-verify`.
+   *
+   * @example "okf"
+   */
+  program?: Program;
 };
 
 /**
- * Run `okf-verify`: read the arguments and config, then verify records with
- * prompts, or with none under `--yes`.
+ * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command.
+ *
+ * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
+ *   own name.
  *
  * - Never throws; an unexpected error prints and ends with exit code `1`.
  *
  * @returns the exit code.
  */
 export async function run(params: RunParams): Promise<ExitCode> {
-  const { args, cwd, isInteractive } = params;
-  const parsed = parseCliArgs(args);
+  const { args, cwd, isInteractive, program = "okf-verify" } = params;
+  const output = createOutput(program);
+
+  if (program === "okf-verify") {
+    return runVerify({ args, cwd, isInteractive, output, program });
+  }
+
+  const parsed = parseCommand(args);
 
   if (parsed.kind === "help") {
-    printInfo(USAGE);
+    output.info(OKF_USAGE);
 
     return EXIT_CODES.ok;
   }
 
   if (parsed.kind === "invalid") {
-    printError(`${parsed.message}\n\n${USAGE}`);
+    output.error(`${parsed.message}\n\n${OKF_USAGE}`);
 
     return EXIT_CODES.failure;
   }
 
-  const { options } = parsed;
-
-  try {
-    const context = buildContext({ cwd, options });
-
-    if (!context.isOk) {
-      printError(context.reason);
-
-      return EXIT_CODES.failure;
-    }
-
-    if (options.isYes) {
-      return runNonInteractive({ context: context.value, options });
-    }
-
-    if (!isInteractive) {
-      printError(
-        "Prompts need an interactive terminal. To run without one, pass --yes with --changed or record paths."
-      );
-
-      return EXIT_CODES.failure;
-    }
-
-    return await runInteractive(context.value);
-  } catch (error) {
-    printError(describeError(error));
-
-    return EXIT_CODES.failure;
-  }
+  return runVerify({ args: parsed.args, cwd, isInteractive, output, program });
 }
 
 /** Resolve the repo, config, bundles, and actor a run works with. */
 function buildContext(params: {
   cwd: string;
   options: CliOptions;
+  output: Output;
 }): { isOk: false; reason: string } | { isOk: true; value: RunContext } {
-  const { options } = params;
+  const { options, output } = params;
   const root = findRepoRoot(params.cwd);
 
   if (!root.isOk) {
@@ -145,9 +141,68 @@ function buildContext(params: {
     value: {
       bundleDirs: bundles.value,
       cwd,
+      output,
       repoRoot,
       shouldCommit: options.shouldCommit,
       verifiedBy,
     },
   };
+}
+
+/**
+ * Run the verify command: read its arguments and config, then verify records
+ * with prompts, or with none under `--yes`.
+ */
+async function runVerify(params: {
+  args: readonly string[];
+  cwd: string;
+  isInteractive: boolean;
+  output: Output;
+  program: Program;
+}): Promise<ExitCode> {
+  const { args, cwd, isInteractive, output, program } = params;
+  const command = program === "okf" ? "okf verify" : "okf-verify";
+  const parsed = parseCliArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(formatVerifyUsage(command));
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${formatVerifyUsage(command)}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildContext({ cwd, options, output });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    if (options.isYes) {
+      return runNonInteractive({ context: context.value, options });
+    }
+
+    if (!isInteractive) {
+      output.error(
+        "Prompts need an interactive terminal. To run without one, pass --yes with --changed or record paths."
+      );
+
+      return EXIT_CODES.failure;
+    }
+
+    return await runInteractive(context.value);
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
 }

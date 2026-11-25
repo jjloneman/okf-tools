@@ -15,7 +15,6 @@ import {
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { listChangedPaths, listDirtyPaths, toPathKey } from "./git.ts";
-import { printError, printInfo } from "./output.ts";
 import { describeState, needsSignOff } from "./records.ts";
 import { loadCandidate, loadCandidatesAt, resolveRecordPaths } from "./repo.ts";
 
@@ -73,12 +72,13 @@ export function runNonInteractive(params: {
   options: Pick<CliOptions, "isChanged" | "recordPaths">;
 }): ExitCode {
   const { context, options } = params;
+  const { output } = context;
   const loaded = options.isChanged
     ? loadChanged(context)
     : loadNamed({ context, recordPaths: options.recordPaths });
 
   if (!loaded.isOk) {
-    printError(loaded.reason);
+    output.error(loaded.reason);
 
     return EXIT_CODES.failure;
   }
@@ -88,7 +88,7 @@ export function runNonInteractive(params: {
     : undefined;
 
   if (found?.isOk === false) {
-    printError(found.reason);
+    output.error(found.reason);
 
     return EXIT_CODES.failure;
   }
@@ -106,16 +106,18 @@ export function runNonInteractive(params: {
     const { filePath } = candidate;
 
     if (uncommittedPaths.has(filePath)) {
-      printInfo(`committing ${filePath}: already verified, not yet committed`);
+      output.info(
+        `committing ${filePath}: already verified, not yet committed`
+      );
     } else if (!isChosen(candidate)) {
-      printInfo(`skipped ${filePath}: ${describeState(candidate)}`);
+      output.info(`skipped ${filePath}: ${describeState(candidate)}`);
     }
   });
 
   const selected = loaded.candidates.filter(isChosen);
 
   if (selected.length === 0) {
-    printInfo("Nothing to verify.");
+    output.info("Nothing to verify.");
 
     return EXIT_CODES.nothingToVerify;
   }
@@ -136,10 +138,11 @@ function applySelection(params: {
   uncommitted: UncommittedSignOffs;
 }): ExitCode {
   const { context, selected, uncommitted } = params;
+  const { output } = context;
   const statusPaths = readChosenStatus(params);
 
   if (!statusPaths.isOk) {
-    printError(statusPaths.reason);
+    output.error(statusPaths.reason);
 
     return EXIT_CODES.failure;
   }
@@ -152,22 +155,22 @@ function applySelection(params: {
   });
 
   if (plan.dirtyPaths.length > 0) {
-    printInfo(describeDirtyPaths(plan.dirtyPaths));
+    output.info(describeDirtyPaths(plan.dirtyPaths));
   }
 
   const outcome = applyVerification({ context, plan });
 
   const printVerified = (): void => {
     plan.candidates.forEach(({ filePath }) => {
-      printInfo(`verified ${filePath}`);
+      output.info(`verified ${filePath}`);
     });
   };
 
   switch (outcome.kind) {
     case "commitFailed": {
       printVerified();
-      printError(outcome.message);
-      printInfo(
+      output.error(outcome.message);
+      output.info(
         "Once the commit can go through, run the same command again to commit it."
       );
 
@@ -176,20 +179,20 @@ function applySelection(params: {
 
     case "committed": {
       printVerified();
-      printInfo(`committed ${outcome.hash}`);
+      output.info(`committed ${outcome.hash}`);
 
       return EXIT_CODES.ok;
     }
 
     case "notWritten": {
-      printError(outcome.message);
+      output.error(outcome.message);
 
       return EXIT_CODES.failure;
     }
 
     case "written": {
       printVerified();
-      printInfo("Left uncommitted (--no-commit).");
+      output.info("Left uncommitted (--no-commit).");
 
       return EXIT_CODES.ok;
     }
@@ -198,7 +201,7 @@ function applySelection(params: {
 
 /** Load every changed record in the bundles. */
 function loadChanged(context: RunContext): LoadResult {
-  const { bundleDirs, repoRoot, verifiedBy } = context;
+  const { bundleDirs, output, repoRoot, verifiedBy } = context;
   const changes = listChangedPaths({ bundleDirs, repoRoot });
 
   if (!changes.isOk) {
@@ -208,7 +211,7 @@ function loadChanged(context: RunContext): LoadResult {
   const { hasBranchDiff, paths, statusPaths } = changes.value;
 
   if (!hasBranchDiff) {
-    printInfo(
+    output.info(
       "Can't diff against the base branch; using uncommitted changes only."
     );
   }

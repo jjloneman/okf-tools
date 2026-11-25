@@ -26,6 +26,7 @@ import {
 import type { RunContext } from "./run-context.ts";
 
 import { runInteractive } from "./interactive.ts";
+import { createOutput } from "./output.ts";
 
 /*
  * Stands in for clack's cancel value, which it types as its own
@@ -82,6 +83,7 @@ function context(overrides: Partial<RunContext> = {}): RunContext {
   return {
     bundleDirs: ["docs/decisions", "docs/references"],
     cwd: repo.root,
+    output: createOutput("okf"),
     repoRoot: repo.root,
     shouldCommit: true,
     verifiedBy: VERIFIED_BY,

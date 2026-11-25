@@ -69,9 +69,9 @@ export type LoadedRecord =
       reason: string;
     };
 
-/** Why okf-verify edits a file only at its own path. */
+/** Why a file is edited only at its own path. */
 const LINK_EXPLANATION =
-  "okf-verify edits records only at their own path, since git commits a symlink, not the file it points to.";
+  "Records are edited only at their own path, since git commits a symlink, not the file it points to.";
 
 /** The records read from a set of paths, and the ones left out. */
 export type LoadedRecords = {

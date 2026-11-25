@@ -29,3 +29,4 @@ export type {
   VerifyRecordParams,
 } from "./frontmatter/types.ts";
 export { RECORD_STATUSES, REFUSAL_KINDS } from "./frontmatter/types.ts";
+export type { Program } from "./output.ts";
