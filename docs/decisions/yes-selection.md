@@ -10,7 +10,7 @@ tags:
   - selection
   - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:38:56Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:59:22Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -34,6 +34,9 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
     - As of 2026-11-25, at any depth inside a bundle, other than `index.md` and `log.md` at every level, and other than a path `okf.exclude` matches, which is refused as excluded (issue #42; see [Which files in a bundle are records](bundle-contents.md)).
     - Under pnpm or npm, that's the folder the script was called from (`INIT_CWD`) only when it's in the package's repo; otherwise, as with `pnpm --dir <package>` from another repo, it's the package root.
     - As of 2026-11-25, a record path and a configured bundle may take any spelling the disk resolves to the same file, such as another case on macOS: each is kept as given when git's index holds that spelling, and otherwise spelled as the disk spells it, since git compares paths byte for byte and, after a rename only in case, follows the index (issue #30).
+      - As of 2026-11-25, name by name, folders first: a name git's index doesn't hold as given takes the spelling of an index entry in the same folder that differs from it only in case or Unicode form, when the disk resolves both to the same file, so a record or bundle folder renamed only in case on disk without `git mv` is spelled as git knows it, the interactive checklist lists such a record as changed, and a new record in such a folder is in its bundle (issue #100).
+        - The disk decides, not the case: the index's spelling is taken only when the disk resolves it to the same file without listing it as a name of its own, so on a case-sensitive disk two names that differ only in case stay two paths, even when one is a hard link to the other.
+        - `--changed` still misses a record git doesn't know yet in a bundle folder renamed only in case on disk, since `git status` matches the index's spelling of the folder byte for byte and lists nothing under it (issue #105).
       - The folder the command runs from is resolved through symlinks and into the disk's spelling when it isn't already inside the repo as git spells its root, so running from a link to the repo works; one already inside is kept as given, so a record path through a link inside the repo is still refused.
       - An absolute record path or `--bundle` is still read as given, so one that reaches the repo through a symlink above it counts as outside the repo.
       - Names from the disk and names git prints are compared by their Unicode NFC form, since git on macOS composes the names it prints while the disk keeps the form a file was created with; on a disk that tells the forms apart, two names that differ only in form count as one.

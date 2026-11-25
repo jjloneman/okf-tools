@@ -116,6 +116,9 @@ const FALLBACK_BASE_REF = "main";
 /** The options every git call shares. */
 const GIT_EXEC_OPTIONS = {
   encoding: "utf8",
+
+  // Unbounded, since Node's 1 MiB default fails a listing of a large repo.
+  maxBuffer: Infinity,
   stdio: ["ignore", "pipe", "pipe"],
 } satisfies ExecFileSyncOptionsWithStringEncoding;
 
@@ -245,21 +248,6 @@ export function findRepoRoot(cwd: string): Outcome<string> {
           : `Couldn't find the repo root: ${stderr?.trim() ?? "git failed"}`,
     };
   }
-}
-
-/**
- * Whether git's index holds the path, or a file under it, spelled exactly
- * this way; false when git can't be asked.
- */
-export function isKnownToGit(params: {
-  filePath: string;
-  repoRoot: string;
-}): boolean {
-  const { filePath, repoRoot } = params;
-
-  return Boolean(
-    tryGit({ args: ["ls-files", "-z", "--", filePath], repoRoot })
-  );
 }
 
 /**
@@ -393,6 +381,22 @@ export function listIgnoredFolders(params: {
         .map((ignoredPath) => toPathKey(ignoredPath.slice(0, -1)))
     ),
   };
+}
+
+/**
+ * List every path git's index holds, spelled as the index does, in one
+ * `git ls-files` call; empty when git can't be asked.
+ *
+ * - Not trimmed, since a file name may start with a space.
+ */
+export function listIndexPaths(repoRoot: string): string[] {
+  try {
+    return runGit({ args: ["ls-files", "-z"], repoRoot })
+      .split("\0")
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 /**

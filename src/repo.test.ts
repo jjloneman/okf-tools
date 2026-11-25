@@ -1,5 +1,13 @@
 import fc from "fast-check";
-import { chmodSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  linkSync,
+  readFileSync,
+  renameSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -980,6 +988,173 @@ describe("resolveRecordPaths", () => {
       })
     ).toStrictEqual({ isOk: false, reason });
   });
+});
+
+describe("resolveRecordPaths, given a name git's index spells another way", () => {
+  /** The records `resolveRecordPaths` resolves the names to. */
+  function resolveNames(...recordPaths: string[]): Outcome<string[]> {
+    return resolveRecordPaths({
+      bundleDirs: ["docs/decisions"],
+      cwd: repo.root,
+      excludeGlobs: [],
+      recordPaths,
+      repoRoot: repo.root,
+    });
+  }
+
+  /** The paths `loadCandidates` lists in the bundle. */
+  function listCandidatePaths(): string[] {
+    return unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    ).candidates.map(({ filePath }) => filePath);
+  }
+
+  beforeEach(() => {
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+    repo.commitAll("add records");
+  });
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "takes the index's spelling of a record renamed only in case on disk",
+    () => {
+      // Given - a committed record renamed only in case on disk
+      renameSync(
+        path.join(repo.root, "docs/decisions/a.md"),
+        path.join(repo.root, "docs/decisions/A.md")
+      );
+
+      // When - naming it as the disk spells it, and listing the bundle
+      const resolved = resolveNames("docs/decisions/A.md");
+      const listed = listCandidatePaths();
+
+      // Then - both spelled as git's index does
+      expect({ listed, resolved }).toStrictEqual({
+        listed: ["docs/decisions/a.md", "docs/decisions/b.md"],
+        resolved: { isOk: true, value: ["docs/decisions/a.md"] },
+      });
+    }
+  );
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "takes the index's folder for a new record in a folder renamed in case",
+    () => {
+      // Given - the bundle's folder renamed only in case on disk, and a new
+      // record in it
+      renameSync(
+        path.join(repo.root, "docs/decisions"),
+        path.join(repo.root, "docs/Decisions")
+      );
+      repo.write("docs/Decisions/c.md", draftRecord("C"));
+
+      // When - resolving the bundle and the record as the disk spells them
+      const bundles = resolveBundleDirs({
+        bundleDirs: [path.join(repo.root, "docs/Decisions")],
+        repoRoot: repo.root,
+      });
+      const resolved = resolveNames("docs/Decisions/c.md");
+
+      // Then - both in the index's spelling of the folder
+      expect({ bundles, resolved }).toStrictEqual({
+        bundles: { isOk: true, value: ["docs/decisions"] },
+        resolved: { isOk: true, value: ["docs/decisions/c.md"] },
+      });
+    }
+  );
+
+  test.skipIf(DISK_SPELLING.isCaseInsensitive)(
+    "keeps the disk's spelling of a hard link differing only in case",
+    () => {
+      // Given - a hard link to a committed record, named in another case,
+      // which git counts as a separate path
+      linkSync(
+        path.join(repo.root, "docs/decisions/a.md"),
+        path.join(repo.root, "docs/decisions/A.md")
+      );
+
+      // When - naming the link, and listing the bundle
+      const resolved = resolveNames("docs/decisions/A.md");
+      const listed = listCandidatePaths();
+
+      // Then - each kept as the disk spells it
+      expect({ listed, resolved }).toStrictEqual({
+        listed: [
+          "docs/decisions/A.md",
+          "docs/decisions/a.md",
+          "docs/decisions/b.md",
+        ],
+        resolved: { isOk: true, value: ["docs/decisions/A.md"] },
+      });
+    }
+  );
+
+  test("lists a folder whose names can't be looked up, skipping them", () => {
+    // Given - a committed record renamed only in case on disk, in a folder
+    // that can be listed but not searched
+    const folder = path.join(repo.root, "docs/decisions");
+
+    renameSync(path.join(folder, "a.md"), path.join(folder, "A.md"));
+
+    chmodSync(folder, 0o444);
+
+    // When - listing the bundle
+    const loaded = loadCandidates({
+      bundleDirs: ["docs/decisions"],
+      excludeGlobs: [],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    chmodSync(folder, 0o755);
+
+    // Then - listed without throwing, none of its records readable
+    expect(loaded).toStrictEqual({
+      isOk: true,
+      value: { candidates: [], skipped: [] },
+    });
+  });
+
+  test.skipIf(DISK_SPELLING.isCaseInsensitive)(
+    "keeps the disk's spelling of another file differing only in case",
+    () => {
+      // Given - a new record whose name differs from a committed one's only
+      // in case
+      repo.write("docs/decisions/A.md", draftRecord("Other A"));
+
+      // When - naming it
+      const resolved = resolveNames("docs/decisions/A.md");
+
+      // Then - kept, since it's another file
+      expect(resolved).toStrictEqual({
+        isOk: true,
+        value: ["docs/decisions/A.md"],
+      });
+    }
+  );
+
+  test.skipIf(DISK_SPELLING.isCaseInsensitive)(
+    "keeps the disk's spelling when the index's file is gone from disk",
+    () => {
+      // Given - a committed record deleted, and a new one differing from it
+      // only in case
+      unlinkSync(path.join(repo.root, "docs/decisions/a.md"));
+      repo.write("docs/decisions/A.md", draftRecord("Other A"));
+
+      // When - naming the new one
+      const resolved = resolveNames("docs/decisions/A.md");
+
+      // Then - kept as the disk spells it
+      expect(resolved).toStrictEqual({
+        isOk: true,
+        value: ["docs/decisions/A.md"],
+      });
+    }
+  );
 });
 
 describe("writeRecords", () => {

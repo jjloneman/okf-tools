@@ -9,11 +9,12 @@ import {
   select,
   updateSettings,
 } from "@clack/prompts";
-import { chmodSync, unlinkSync } from "node:fs";
+import { chmodSync, renameSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
+  DISK_SPELLING,
   draftRecord,
   record,
   REFUSAL_REASON,
@@ -213,6 +214,30 @@ describe("runInteractive", () => {
       expect.stringContaining("These also have other uncommitted changes")
     );
   });
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "lists and commits a changed record renamed only in case on disk",
+    async () => {
+      // Given - a committed draft renamed only in case on disk, and edited
+      renameSync(
+        path.join(repo.root, "docs/decisions/a.md"),
+        path.join(repo.root, "docs/decisions/A.md")
+      );
+      repo.write("docs/decisions/A.md", `${draftRecord("A")}\nMore.\n`);
+      vi.mocked(select).mockResolvedValue("changed");
+
+      // When - running and picking the changed records
+      await runInteractive(context());
+
+      // Then - listed as the one changed record, signed and committed under
+      // git's spelling
+      expect(vi.mocked(multiselect).mock.calls[0]?.[0].options).toHaveLength(1);
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+        "docs/decisions/a.md\n"
+      );
+    }
+  );
 
   test("skips the scope question when every record changed", async () => {
     // Given - one bundle whose only record changed
