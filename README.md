@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles. Today that's one command, `okf-verify`, which signs records off.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's one command, `okf verify`, which signs records off; `okf-verify` is its alias, and prints its lines under its own name.
 
 It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
 
@@ -25,7 +25,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 - **OKF v0.2 reads a record with no `status` as `stable`**, so a repo that keeps drafts apart writes `status: draft` on everything an agent produces.
 - **The owner moves a record to `stable`** once they've reviewed it.
 
-`okf-verify` makes that sign-off one step:
+`okf verify` makes that sign-off one step:
 
 - it sets `status: draft` to `stable` (any other status is left alone);
 - it adds or renews the signer's `verified` entry with the current UTC time;
@@ -55,7 +55,7 @@ Then configure it in `package.json`:
 ```json
 {
   "scripts": {
-    "okf:verify": "okf-verify"
+    "okf:verify": "okf verify"
   },
   "okf": {
     "bundles": ["docs/decisions", "docs/references"],
@@ -72,6 +72,11 @@ Both can be given on the command line instead (`--bundle`, `--by`); there is no 
 Node 22 or later, and git, are required.
 
 ## 🚀 Usage
+
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below.
+- `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
+- Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
+- `okf-verify <args>` runs as `okf verify <args>` does, with the same exit codes.
 
 ### 🖐️ Interactive
 
@@ -163,7 +168,7 @@ import {
 - A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
 - `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`), and never reads the clock: a `generated.at` ahead of it is judged like any other.
 
-`run` is the CLI itself, for calling it in-process; it never throws and resolves to the exit code.
+`run` is the CLI itself, for calling it in-process; it never throws and resolves to the exit code. Its `program` is `okf` or `okf-verify`, which takes the command as the first argument or not, and runs as `okf-verify` when left out.
 
 ## 🛠️ Development
 

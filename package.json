@@ -1,7 +1,7 @@
 {
   "name": "@jjloneman/okf-tools",
   "version": "0.1.0",
-  "description": "✅ Sign off Open Knowledge Format records: mark them stable with a verified entry, interactively or from an agent.",
+  "description": "✅ Tools for Open Knowledge Format bundles, run as okf <command>: okf verify signs records off, marking them stable with a verified entry, interactively or from an agent.",
   "keywords": [
     "frontmatter",
     "knowledge",
@@ -35,6 +35,7 @@
   },
   "types": "./dist/index.d.ts",
   "bin": {
+    "okf": "dist/okf-bin.js",
     "okf-verify": "dist/bin.js"
   },
   "files": [

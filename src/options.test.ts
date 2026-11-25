@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { parseCliArgs } from "./options.ts";
+import { parseCliArgs, parseCommand } from "./options.ts";
 
 const DEFAULTS = {
   bundles: [],
@@ -97,5 +97,47 @@ describe("parseCliArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseCliArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseCommand", () => {
+  test.each([
+    {
+      args: ["verify", "--yes", "--changed"],
+      description: "verify, with the arguments after it",
+      expected: { args: ["--yes", "--changed"], kind: "verify" },
+    },
+    {
+      args: ["--help"],
+      description: "--help",
+      expected: { kind: "help" },
+    },
+    {
+      args: ["-h", "verify"],
+      description: "-h before a command",
+      expected: { kind: "help" },
+    },
+    {
+      args: [],
+      description: "no command",
+      expected: { kind: "invalid", message: "Name a command." },
+    },
+    {
+      args: ["sign"],
+      description: "an unknown command",
+      expected: { kind: "invalid", message: "Unknown command: sign." },
+    },
+    {
+      args: ["--yes", "verify"],
+      description: "a flag before the command",
+      expected: {
+        kind: "invalid",
+        message:
+          "--yes isn't a command; options follow the command, as in okf <command> --yes.",
+      },
+    },
+  ])("reads $description", ({ args, expected }) => {
+    // Given/When/Then - the command and its arguments, or why there's none
+    expect(parseCommand(args)).toStrictEqual(expected);
   });
 });

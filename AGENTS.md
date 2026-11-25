@@ -4,7 +4,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 ## 🎯 Purpose of this repo
 
-`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundles. Today it ships `okf-verify`, which signs records off (see [README.md](README.md)).
+`@jjloneman/okf-tools` is a small, public npm package of tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundles. It ships one binary, `okf`, whose first argument names a command; today that's `okf verify`, which signs records off, with `okf-verify` kept as its alias (see [README.md](README.md)).
 
 - **Interactive by default.** Without `--yes`, it prompts in a terminal and refuses to start without one.
 - **`--yes` runs without prompts**, but only against an explicit selection: `--changed`, or named record paths. `--yes` alone is a usage error.
@@ -15,9 +15,9 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 ## 🗂️ Project layout
 
 - `src/` — the package, one concern per file, each with its `*.test.ts` beside it.
-  - `bin.ts` — the `okf-verify` entry: reads the process, calls `run`, sets the exit code.
-  - `cli.ts` — `run`: parses the arguments, resolves the repo, config, and bundles, then dispatches to a mode. It never throws.
-  - `options.ts` — the flags, the usage text, and which combinations are valid.
+  - `okf-bin.ts` and `bin.ts` — the `okf` and `okf-verify` entries, each calling `start` in `start.ts`, which reads the process, calls `run`, and sets the exit code.
+  - `cli.ts` — `run`: reads `okf`'s command (`okf-verify` goes straight to `verify`), parses the verify arguments, resolves the repo, config, and bundles, then dispatches to a mode. It never throws.
+  - `options.ts` — `okf`'s commands, the verify flags, the usage text for each, and which combinations are valid.
   - `config.ts` — reads the `okf` block of `package.json` and merges the flags over it.
   - `interactive.ts` and `non-interactive.ts` — the two modes.
   - `records.ts` — pure record logic: the candidate type, the commit message, the edits.
@@ -30,7 +30,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
     - `meaning.ts` — before any edit, `findAmbiguity` refuses a frontmatter whose meaning is ambiguous (an unresolved alias, two keys that mean the same); after it, `checkMeaning` refuses any result that isn't valid YAML or doesn't parse to the original plus the intended changes.
     - `layout.ts` — the allowlist (`readEditableLayout`), which refuses any `status` or `verified` layout outside the README's list.
     - `edit.ts` — `verifyRecord`: edits replace only the characters they change, at the positions the parser reports, all planned against one parse and applied from the end of the text. A lone CR, and an `at` `isWritableTimestamp` refuses, are refused here, each refusal with a `kind`. `findEditProblem` runs the same refusals when records are listed, so `repo.ts` reports a refused record before anyone chooses it.
-  - `output.ts` — the `[okf-verify]`-prefixed output lines; `exit-codes.ts`, `outcome.ts`, and `run-context.ts` are shared types.
+  - `output.ts` — the output lines, prefixed `[okf]`, or `[okf-verify]` under the alias, carried on the `RunContext`; `exit-codes.ts`, `outcome.ts`, and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
 - `scripts/spec-watch/` — the spec watch that `spec-watch.yml` runs (see [Spec watch](#-spec-watch)), covered like `src/` and never published; `bin.ts` is its entry.
 - `spec/upstream.json` — the pin: the upstream spec okf-tools supports.
@@ -51,7 +51,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - **Function parameters**: one positional parameter is fine; with two or more, take a single object with sorted keys.
 - **Named functions are `function` declarations**; arrows are for callbacks and closures.
 - **Lexicographic ordering** of everything perfectionist's `recommended-alphabetical` preset sorts; module constants are `SCREAMING_SNAKE_CASE`; boolean names read as questions, opening with an auxiliary verb (`are`, `can`, `did`, `does`, `has`, `have`, `is`, `should`, `was`, `were`, `will`): `isYes`, `shouldCommit`, `areAllVerified`.
-- **Every output line starts with `[okf-verify]`**, outside the prompts; a git call sets `stdio` explicitly, so its stderr never prints over the prompts.
+- **Every output line starts with `[okf]`**, or `[okf-verify]` under the alias, outside the prompts; a git call sets `stdio` explicitly, so its stderr never prints over the prompts.
 - **Dates go through luxon.**
 - **Comments say only _why_.** A comment of three lines or more is a block comment: a lead sentence, then `-` bullets.
 - **TSDoc every export**, and give every property of a named type its own doc comment with one `@example`.

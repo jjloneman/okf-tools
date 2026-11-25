@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { describeError, formatLines, printError, printInfo } from "./output.ts";
+import { createOutput, describeError, formatLines } from "./output.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -24,29 +24,34 @@ describe("formatLines", () => {
     const message = "first\n\nsecond\n";
 
     // When - formatting it
-    const formatted = formatLines(message);
+    const formatted = formatLines({ message, prefix: "[okf]" });
 
     // Then - each line prefixed, the blank one with no trailing space
-    expect(formatted).toBe(
-      "[okf-verify] first\n[okf-verify]\n[okf-verify] second"
-    );
+    expect(formatted).toBe("[okf] first\n[okf]\n[okf] second");
   });
 });
 
-describe("printError and printInfo", () => {
-  test("print to stderr and stdout", () => {
-    // Given - spies on the console
-    const error = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
-    const info = vi.spyOn(console, "log").mockImplementation(() => undefined);
+describe("createOutput", () => {
+  test.each([
+    { prefix: "[okf]", program: "okf" },
+    { prefix: "[okf-verify]", program: "okf-verify" },
+  ] as const)(
+    "prints to stderr and stdout under $prefix",
+    ({ prefix, program }) => {
+      // Given - spies on the console, and the program's output
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      const info = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const output = createOutput(program);
 
-    // When - printing one of each
-    printError("bad");
-    printInfo("good");
+      // When - printing one of each
+      output.error("bad");
+      output.info("good");
 
-    // Then - each reaches its stream, prefixed
-    expect(error).toHaveBeenCalledWith("[okf-verify] bad");
-    expect(info).toHaveBeenCalledWith("[okf-verify] good");
-  });
+      // Then - each reaches its stream, prefixed with the program's name
+      expect(error).toHaveBeenCalledWith(`${prefix} bad`);
+      expect(info).toHaveBeenCalledWith(`${prefix} good`);
+    }
+  );
 });

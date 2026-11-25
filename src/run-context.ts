@@ -1,3 +1,5 @@
+import type { Output } from "./output.ts";
+
 /** What both run modes need once the arguments and config are resolved. */
 export type RunContext = {
   /**
@@ -14,6 +16,13 @@ export type RunContext = {
    * @example "/repo/docs"
    */
   cwd: string;
+
+  /**
+   * Where the run prints its non-prompt lines.
+   *
+   * @example `createOutput("okf")`
+   */
+  output: Output;
 
   /**
    * The repo's root directory.

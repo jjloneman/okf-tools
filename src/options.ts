@@ -89,9 +89,67 @@ export type ParsedArgs =
       options: CliOptions;
     };
 
-/** How to call the CLI, printed for `--help` and after a usage error. */
-export const USAGE = `usage: okf-verify [options]
-       okf-verify --yes (--changed | <record>...) [options]
+/** What `okf`'s first argument asked for: help, a command, or nothing valid. */
+export type ParsedCommand =
+  | {
+      /**
+       * `--help` was passed before any command.
+       *
+       * @example "help"
+       */
+      kind: "help";
+    }
+  | {
+      /**
+       * The arguments after the command's name.
+       *
+       * @example `["--yes", "--changed"]`
+       */
+      args: readonly string[];
+
+      /**
+       * A command was named.
+       *
+       * @example "verify"
+       */
+      kind: "verify";
+    }
+  | {
+      /**
+       * The arguments name no command.
+       *
+       * @example "invalid"
+       */
+      kind: "invalid";
+
+      /**
+       * Why, without the usage text.
+       *
+       * @example "Unknown command: sign."
+       */
+      message: string;
+    };
+
+/** The name the verify command is called by: under `okf`, or as its alias. */
+export type VerifyCommand = "okf-verify" | "okf verify";
+
+/** How to call `okf`, printed for `okf --help` and after a usage error. */
+export const OKF_USAGE = `usage: okf <command> [options]
+
+commands:
+  verify  mark records \`status: stable\` with a \`verified\` entry, then
+          commit just those files
+
+Run \`okf <command> --help\` for a command's options. \`okf-verify\` is the
+same as \`okf verify\`.`;
+
+/**
+ * How to call the verify command, printed for `--help` and after a usage
+ * error, under the name it was called by.
+ */
+export function formatVerifyUsage(command: VerifyCommand): string {
+  return `usage: ${command} [options]
+       ${command} --yes (--changed | <record>...) [options]
 
 Marks OKF records \`status: stable\` with a \`verified\` entry, then commits
 just those files. Without --yes it asks which records, in a terminal.
@@ -108,6 +166,7 @@ options:
 An agent should run --yes only when the person has asked it to verify those
 records, and should name the files rather than pass --changed unless they
 asked for all of them.`;
+}
 
 /** Read the command line into options, or say why it can't run. */
 export function parseCliArgs(args: readonly string[]): ParsedArgs {
@@ -142,6 +201,34 @@ export function parseCliArgs(args: readonly string[]): ParsedArgs {
   return problem === undefined
     ? { kind: "options", options }
     : { kind: "invalid", message: problem };
+}
+
+/**
+ * Read `okf`'s first argument as the command to run.
+ *
+ * - Options come after the command, so a flag in its place names none.
+ */
+export function parseCommand(args: readonly string[]): ParsedCommand {
+  const [name, ...rest] = args;
+
+  if (name === "--help" || name === "-h") {
+    return { kind: "help" };
+  }
+
+  if (name === "verify") {
+    return { args: rest, kind: "verify" };
+  }
+
+  if (name === undefined) {
+    return { kind: "invalid", message: "Name a command." };
+  }
+
+  return {
+    kind: "invalid",
+    message: name.startsWith("-")
+      ? `${name} isn't a command; options follow the command, as in okf <command> ${name}.`
+      : `Unknown command: ${name}.`,
+  };
 }
 
 /**
