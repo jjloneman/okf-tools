@@ -60,6 +60,7 @@ export const FRONTMATTER_KEYS = {
   generated: "generated",
   staleAfter: "stale_after",
   status: "status",
+  supersededBy: "superseded_by",
   tags: "tags",
   title: "title",
   type: "type",
@@ -154,6 +155,10 @@ export type FindOwnEntryParams = {
 /** A record's frontmatter, parsed with every value as text. */
 export type Frontmatter = Document.Parsed;
 
+/** A frontmatter key the frontmatter modules read or write. */
+export type FrontmatterKey =
+  (typeof FRONTMATTER_KEYS)[keyof typeof FRONTMATTER_KEYS];
+
 /** A mapping's pair whose key is a single value, with where it sits. */
 export type KeyedPair = Pair<Placed<Scalar>>;
 
@@ -243,9 +248,6 @@ type FrontmatterBlock = {
    */
   text: string;
 };
-
-/** A frontmatter key the frontmatter modules read or write. */
-type FrontmatterKey = (typeof FRONTMATTER_KEYS)[keyof typeof FRONTMATTER_KEYS];
 
 /** What `isSignersBy` needs: an entry's `by`, and the signer. */
 type IsSignersByParams = {

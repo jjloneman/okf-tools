@@ -38,12 +38,14 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
 - **\`okf diff <record>...\`** prints what changed in each record since its last sign-off, and writes nothing. Run it to show the person what they would be signing off.
 - **\`okf verify --yes <record>...\`** signs records off and commits just those files, or with \`--no-commit\` leaves committing to the person. Run it only when the person asks you to, as the rules above say.
   - It signs as the configured \`okf.verifiedBy\`, the person, since the approval is theirs; never pass \`--by\` with your own name.
+  - Pass \`--stale-in <duration>\`, such as \`P90D\`, only when the person says how long the sign-off holds; it sets each record's \`stale_after\` that long after the sign-off.
 - **\`okf verify\`** without \`--yes\` asks in a terminal which records to sign off. It's for the person, not for you.
 - **\`okf tags\`** lists every tag in the bundles with its record count, and writes nothing. Run it whenever you choose a record's tags; \`--format json\` prints it for a program.
 - **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, or retitle a record, in the same change.
   - \`okf index --check\` writes nothing, so run it whenever you like.
 - **\`okf new <record>\`** writes a draft record's frontmatter, stamped from the clock, and its index line. Run it whenever you start a record, before writing its body.
 - **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, in the same change.
+- **\`okf deprecate <record>... --by <producer>/<version>\`** marks records \`status: deprecated\`, kept for links and history, and re-stamps \`generated\` as \`okf touch\` does; \`--superseded-by <record>\` names the record that replaces them. Run it when a change retires or replaces a record, in place of deleting it.
 - **\`okf migrate\`** prints the changes that move each bundle from OKF v0.1 or v0.2 to v0.3, and writes nothing; \`--write\` applies them. Run it bare whenever you like, but pass \`--write\` only when the person asks you to migrate.
   - \`okf migrate --check\` writes nothing, and fails while a bundle still needs migrating.
 - **\`okf init\`** writes the \`okf\` config, the agent block, and the okf skills in \`.claude/skills\`. Run it only when the person asks you to set up okf-tools, or to refresh the block or the skills.

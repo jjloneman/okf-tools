@@ -234,6 +234,7 @@ describe("prepareEdits", () => {
     const result = prepareEdits({
       at: AT,
       candidates,
+      staleIn: undefined,
       style: "match",
       verifiedBy: VERIFIED_BY,
     });
@@ -265,6 +266,7 @@ describe("prepareEdits", () => {
     const result = prepareEdits({
       at: AT,
       candidates,
+      staleIn: undefined,
       style: "match",
       verifiedBy: VERIFIED_BY,
     });
@@ -276,5 +278,60 @@ describe("prepareEdits", () => {
     expect(result.failures).toStrictEqual([
       expect.stringMatching(/^docs\/decisions\/b\.md: /u),
     ]);
+  });
+  test.each([
+    { description: "days", expected: "2026-05-01T09:30:00Z", staleIn: "P90D" },
+    {
+      description: "a month, kept within February",
+      expected: "2026-02-28T09:30:00Z",
+      staleIn: "P1M",
+    },
+  ])(
+    "adds stale_after $description after the sign-off",
+    ({ expected, staleIn }) => {
+      // Given - a draft
+      const candidates = [candidate({ filePath: "docs/decisions/a.md" })];
+
+      // When - preparing its edit to go stale after a while
+      const result = prepareEdits({
+        at: "2026-01-31T09:30:00+00:00",
+        candidates,
+        staleIn,
+        style: "match",
+        verifiedBy: VERIFIED_BY,
+      });
+
+      // Then - stable, signed off, with stale_after after the entry, in UTC
+      expect(result.edits.map(({ text }) => text)).toStrictEqual([
+        `---\nstatus: stable\nverified: { by: ${VERIFIED_BY}, at: 2026-01-31T09:30:00+00:00 }\nstale_after: ${expected}\n---\n`,
+      ]);
+    }
+  );
+
+  test("refuses a stale_after it can't overwrite", () => {
+    // Given - a draft whose stale_after is a list
+    const candidates = [
+      candidate({
+        filePath: "docs/decisions/a.md",
+        text: "---\nstatus: draft\nstale_after: [a]\n---\n",
+      }),
+    ];
+
+    // When - preparing its edit with --stale-in
+    const result = prepareEdits({
+      at: AT,
+      candidates,
+      staleIn: "P90D",
+      style: "match",
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - refused, saying why
+    expect(result).toStrictEqual({
+      edits: [],
+      failures: [
+        "docs/decisions/a.md: `stale_after` isn't a single value; edit the record by hand",
+      ],
+    });
   });
 });

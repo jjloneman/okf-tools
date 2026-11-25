@@ -1,3 +1,4 @@
+import { DateTime, Duration } from "luxon";
 import { parseArgs } from "node:util";
 
 import type { MigrateMode } from "./migrate.ts";
@@ -48,6 +49,48 @@ export type CliOptions = {
    * @example true
    */
   shouldCommit: boolean;
+
+  /**
+   * How long a sign-off holds, from `--stale-in`, as an ISO 8601 duration;
+   * each record signed off gets a `stale_after` that far past its sign-off.
+   * `undefined` leaves any `stale_after` as it is.
+   *
+   * @example "P90D"
+   */
+  staleIn: string | undefined;
+};
+
+/** The flags and record paths an `okf deprecate` run was given. */
+export type DeprecateOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * The producer passed with `--by`, written as `generated.by`.
+   *
+   * @example "claude-code/claude-opus-5-5"
+   */
+  by: string;
+
+  /**
+   * Record files named on the command line, relative to where it was run.
+   *
+   * @example `["docs/decisions/old-pin.md"]`
+   */
+  recordPaths: readonly string[];
+
+  /**
+   * The record passed with `--superseded-by`, relative to where the command
+   * was run, that replaces them; `undefined` when none was.
+   *
+   * @example "docs/decisions/spec-pin.md"
+   */
+  supersededBy: string | undefined;
 };
 
 /** The flags and record paths `okf diff` was given. */
@@ -168,6 +211,7 @@ export type ParsedCommand =
        * @example "verify"
        */
       kind:
+        | "deprecate"
         | "diff"
         | "guide"
         | "index"
@@ -312,6 +356,8 @@ export type VerifyCommand = "okf-verify" | "okf verify";
 export const OKF_USAGE = `usage: okf <command> [options]
 
 commands:
+  deprecate
+          mark records \`status: deprecated\`, naming what replaces them
   diff    print what changed in records since their last sign-off
   guide   print when an agent may run each command, and the rules for
           writing records
@@ -332,6 +378,27 @@ commands:
 Run \`okf <command> --help\` for a command's options, and \`okf --version\`
 for the installed version and the OKF version it supports. \`okf-verify\` is
 the same as \`okf verify\`.`;
+
+/**
+ * How to call `okf deprecate`, printed for its `--help` and after a usage
+ * error.
+ */
+export const DEPRECATE_USAGE = `usage: okf deprecate <record>... --by <producer> [options]
+
+Marks each record \`status: deprecated\`: kept for links and history, but no
+longer current. It re-stamps \`generated\`, \`by\` from --by and \`at\` from
+the clock, so a signed-off record shows as changed until it's signed off
+again. With --superseded-by, it sets \`superseded_by\` to the record that
+replaces it, as a path from the bundle root. It never adds or changes
+\`verified\`, and writes nothing when any record refuses.
+
+options:
+  --by <producer>           who deprecated it, as \`<producer>/<version>\`
+  --superseded-by <record>  the record that replaces it, in the same bundle
+  --bundle <dir>            a bundle directory the records are in; repeat
+                            for more (default: \`okf.bundles\` in
+                            package.json)
+  --help, -h                print this help`;
 
 /** How to call `okf diff`, printed for its `--help` and after a usage error. */
 export const DIFF_USAGE = `usage: okf diff [options] <record>...
@@ -536,6 +603,9 @@ options:
   --yes, -y       run with no prompts; needs --changed or record paths
   --changed       with --yes: every changed record still needing a sign-off
   --no-commit     edit the files but leave committing to you
+  --stale-in <duration>
+                  set each record's \`stale_after\` that long after its
+                  sign-off, as an ISO 8601 duration such as P90D or P6M
   --help, -h      print this help
 
 An agent runs --yes only when the person asks it to, naming the files they
@@ -569,9 +639,11 @@ export function parseCliArgs(args: readonly string[]): ParsedArgs {
     isYes: values.yes === true,
     recordPaths: positionals,
     shouldCommit: values["no-commit"] !== true,
+    staleIn: values["stale-in"],
   };
 
-  const problem = findSelectionProblem(options);
+  const problem =
+    findSelectionProblem(options) ?? findStaleInProblem(options.staleIn);
 
   return problem === undefined
     ? { kind: "options", options }
@@ -595,6 +667,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
   }
 
   if (
+    name === "deprecate" ||
     name === "diff" ||
     name === "guide" ||
     name === "index" ||
@@ -619,6 +692,53 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
       ? `${name} isn't a command; options follow the command, as in okf <command> ${name}.`
       : `Unknown command: ${name}.`,
   };
+}
+
+/** Read `okf deprecate`'s command line into options, or say why it can't run. */
+export function parseDeprecateArgs(
+  args: readonly string[]
+): ParsedArgs<DeprecateOptions> {
+  let parsed: ReturnType<typeof parseDeprecateLine>;
+
+  try {
+    parsed = parseDeprecateLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const bundles = values.bundle ?? [];
+  const { by } = values;
+  const supersededBy = values["superseded-by"];
+
+  if (positionals.length === 0) {
+    return { kind: "invalid", message: "Name at least one record." };
+  }
+
+  if (by === undefined) {
+    return { kind: "invalid", message: "okf deprecate needs --by." };
+  }
+
+  const problem =
+    findBundleFlagProblem(bundles) ??
+    (supersededBy === ""
+      ? "--superseded-by needs a record, not an empty string."
+      : undefined);
+
+  return problem === undefined
+    ? {
+        kind: "options",
+        options: { bundles, by, recordPaths: positionals, supersededBy },
+      }
+    : { kind: "invalid", message: problem };
 }
 
 /** Read `okf diff`'s arguments into options, or say why they can't run. */
@@ -951,7 +1071,28 @@ function parseCommandLine(args: readonly string[]) {
       changed: { type: "boolean" },
       help: { short: "h", type: "boolean" },
       "no-commit": { type: "boolean" },
+      "stale-in": { type: "string" },
       yes: { short: "y", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf deprecate`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseDeprecateLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      by: { type: "string" },
+      help: { short: "h", type: "boolean" },
+      "superseded-by": { type: "string" },
     },
     strict: true,
   });
@@ -1392,6 +1533,33 @@ function findBundleFlagProblem(bundles: readonly string[]): string | undefined {
   return bundles.includes("")
     ? "--bundle needs a directory, not an empty string."
     : undefined;
+}
+
+/**
+ * Check `--stale-in`: an ISO 8601 duration, such as `P90D`, of a second or
+ * more that goes forward, and lands within the four-digit years a record's
+ * times are written in.
+ *
+ * @returns the problem, or `undefined` when there is none or no flag.
+ */
+function findStaleInProblem(staleIn: string | undefined): string | undefined {
+  if (staleIn === undefined) {
+    return undefined;
+  }
+
+  const duration = Duration.fromISO(staleIn);
+
+  // A sum past what a date can hold reads its year as NaN, which fails the
+  // comparison too.
+  const isWritable =
+    duration.isValid &&
+    Object.values(duration.toObject()).every((amount) => amount >= 0) &&
+    duration.toMillis() >= 1000 &&
+    DateTime.utc().plus(duration).year <= 9999;
+
+  return isWritable
+    ? undefined
+    : `--stale-in ${JSON.stringify(staleIn)} isn't an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.`;
 }
 
 /**

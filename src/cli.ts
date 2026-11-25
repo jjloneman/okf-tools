@@ -14,6 +14,7 @@ import {
   resolveSettings,
   selectBundleDirs,
 } from "./config.ts";
+import { runDeprecate } from "./deprecate.ts";
 import { runDiff } from "./diff.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { findRepoRoot } from "./git.ts";
@@ -25,6 +26,7 @@ import { runMigrate } from "./migrate.ts";
 import { runNew } from "./new-record.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
+  DEPRECATE_USAGE,
   DIFF_USAGE,
   formatVerifyUsage,
   INDEX_USAGE,
@@ -33,6 +35,7 @@ import {
   OKF_USAGE,
   parseCliArgs,
   parseCommand,
+  parseDeprecateArgs,
   parseDiffArgs,
   parseIndexArgs,
   parseMigrateArgs,
@@ -89,9 +92,9 @@ export type RunParams = {
 
 /**
  * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
- * `okf diff`, `okf guide`, `okf index`, `okf init`, `okf migrate`, `okf new`,
- * `okf status`, `okf tags`, `okf touch`, or `okf verify`; `okf --version`
- * prints the installed version.
+ * `okf deprecate`, `okf diff`, `okf guide`, `okf index`, `okf init`,
+ * `okf migrate`, `okf new`, `okf status`, `okf tags`, `okf touch`, or
+ * `okf verify`; `okf --version` prints the installed version.
  *
  * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
  *   own name.
@@ -160,6 +163,10 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runTouchCommand({ args: parsed.args, cwd, output });
   }
 
+  if (parsed.kind === "deprecate") {
+    return runDeprecateCommand({ args: parsed.args, cwd, output });
+  }
+
   if (parsed.kind === "migrate") {
     return runMigrateCommand({ args: parsed.args, cwd, output });
   }
@@ -169,8 +176,8 @@ export async function run(params: RunParams): Promise<ExitCode> {
 
 /**
  * Resolve the repo and bundles a command works with when it needs no one's
- * sign-off: `okf index`, `okf migrate`, `okf new`, `okf tags`, and
- * `okf touch`.
+ * sign-off: `okf deprecate`, `okf index`, `okf migrate`, `okf new`,
+ * `okf tags`, and `okf touch`.
  */
 function buildBundleContext(params: {
   bundles: readonly string[];
@@ -220,7 +227,7 @@ function buildBundleContext(params: {
 /** Resolve the repo, config, bundles, and actor a run works with. */
 function buildContext(params: {
   cwd: string;
-  options: Pick<CliOptions, "bundles" | "by" | "shouldCommit">;
+  options: Pick<CliOptions, "bundles" | "by" | "shouldCommit" | "staleIn">;
   output: Output;
 }): { isOk: false; reason: string } | { isOk: true; value: RunContext } {
   const { options, output } = params;
@@ -259,6 +266,7 @@ function buildContext(params: {
       output,
       repoRoot,
       shouldCommit: options.shouldCommit,
+      staleIn: options.staleIn,
       style,
       verifiedBy,
     },
@@ -296,6 +304,53 @@ function readRepo(
 }
 
 /**
+ * Run `okf deprecate`: read its arguments and config, then deprecate each
+ * record.
+ */
+function runDeprecateCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseDeprecateArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(DEPRECATE_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${DEPRECATE_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runDeprecate({ context: context.value, options });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
  * Run the diff command: read its arguments and config, then print each
  * record's changes since its last sign-off.
  */
@@ -324,7 +379,7 @@ function runDiffCommand(params: {
   try {
     const context = buildContext({
       cwd,
-      options: { ...options, shouldCommit: false },
+      options: { ...options, shouldCommit: false, staleIn: undefined },
       output,
     });
 
@@ -518,7 +573,7 @@ function runStatusCommand(params: {
   try {
     const context = buildContext({
       cwd,
-      options: { ...options, shouldCommit: false },
+      options: { ...options, shouldCommit: false, staleIn: undefined },
       output,
     });
 

@@ -31,6 +31,7 @@ import {
   currentTimestamp,
   needsSignOff,
   prepareEdits,
+  writeStaleAfter,
 } from "./records.ts";
 import { isRecordUnchanged, writeRecords } from "./repo.ts";
 
@@ -169,12 +170,12 @@ export type VerificationPlan = {
 export function applyVerification(params: {
   context: Pick<
     RunContext,
-    "repoRoot" | "shouldCommit" | "style" | "verifiedBy"
+    "repoRoot" | "shouldCommit" | "staleIn" | "style" | "verifiedBy"
   >;
   plan: VerificationPlan;
 }): ApplyOutcome {
   const { context, plan } = params;
-  const { repoRoot, shouldCommit, style, verifiedBy } = context;
+  const { repoRoot, shouldCommit, staleIn, style, verifiedBy } = context;
   const { candidates, filePaths, message, uncommitted } = plan;
 
   const changedPaths: string[] = [];
@@ -214,11 +215,14 @@ export function applyVerification(params: {
     }
   }
 
-  // Listing checked these same texts, so this only guards against the two
-  // checks ever disagreeing: all or nothing, as before.
+  // Listing checked these same texts for the sign-off, so this guards
+  // against the two checks ever disagreeing, and refuses a `stale_after` that
+  // `--stale-in` can't overwrite, which listing doesn't check: all or nothing,
+  // as before.
   const { edits, failures } = prepareEdits({
     at: currentTimestamp(),
     candidates,
+    staleIn,
     style,
     verifiedBy,
   });
@@ -409,6 +413,9 @@ function isLater(params: {
  *
  * - Every style is tried, so a sign-off written before `okf.style` changed
  *   still counts as one.
+ *
+ * - The disk's own `stale_after` is written too, so a sign-off made with
+ *   `--stale-in` still counts as one.
  */
 function isSignOffOf(params: {
   at: Timestamp;
@@ -417,10 +424,25 @@ function isSignOffOf(params: {
   verifiedBy: string;
 }): boolean {
   const { at, headText, text, verifiedBy } = params;
+  const staleAfter = readRecordSummary({ text, verifiedBy })?.staleAfter;
 
   return Object.values(ENTRY_STYLES).some((style) => {
     const result = verifyRecord({ at, style, text: headText, verifiedBy });
 
-    return result.isOk && result.text === text;
+    if (!result.isOk) {
+      return false;
+    }
+
+    if (result.text === text) {
+      return true;
+    }
+
+    if (staleAfter === undefined) {
+      return false;
+    }
+
+    const withStaleAfter = writeStaleAfter({ staleAfter, text: result.text });
+
+    return withStaleAfter.isOk && withStaleAfter.text === text;
   });
 }

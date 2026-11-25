@@ -490,6 +490,15 @@ describe.each([
   },
   {
     args: ["docs/decisions/a.md", "--by", "claude-code/2.2.0"],
+    command: "deprecate",
+    expected: /^\[okf\] Deprecated docs\/decisions\/a\.md\.$/u,
+    setUp: (): void => {
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+    },
+    usage: "[okf] usage: okf deprecate <record>... --by <producer>",
+  },
+  {
+    args: ["docs/decisions/a.md", "--by", "claude-code/2.2.0"],
     command: "touch",
     expected: /^\[okf\] Re-stamped docs\/decisions\/a\.md at /u,
     setUp: (): void => {
@@ -1179,6 +1188,54 @@ describe.each(INVOCATIONS)("as $command", (current) => {
         `${invocation.prefix} committing docs/decisions/a.md: already verified, not yet committed`,
         expect.stringMatching(prefixed(/committed [0-9a-f]+$/u)),
       ]);
+    });
+
+    test("--stale-in sets stale_after that long after the sign-off", async () => {
+      // When - verifying a record to go stale in 90 days
+      const code = await runIn([
+        "--yes",
+        "--stale-in",
+        "P90D",
+        "docs/decisions/a.md",
+      ]);
+
+      // Then - stale_after after the sign-off, 90 days on, committed
+      const text = repo.read("docs/decisions/a.md");
+      const signedAt =
+        /^verified: \{ by: \S+, at: (?<at>\S+) \}$/mu.exec(text)?.groups?.at ??
+        "";
+      const staleAfter = DateTime.fromISO(signedAt, { zone: "utc" })
+        .plus({ days: 90 })
+        .toFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+      expect(code).toBe(0);
+      expect(text).toMatch(
+        new RegExp(`^verified: .+\\nstale_after: ${staleAfter}\\n`, "mu")
+      );
+      expect(repo.git("status", "--porcelain")).toBe("");
+    });
+
+    test("a re-run after a rejected commit commits a sign-off with stale_after", async () => {
+      // Given - a sign-off with stale_after left on disk by a rejected commit
+      repo.installFailingHook({ output: "hook says no" });
+      await runIn(["--yes", "--stale-in", "P1Y", "docs/decisions/a.md"]);
+      unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+
+      const signedOff = repo.read("docs/decisions/a.md");
+
+      infos.length = 0;
+
+      // When - running it again, without --stale-in
+      const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+      // Then - committed as it is, stale_after included
+      expect(code).toBe(0);
+      expect(signedOff).toContain("stale_after: ");
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.read("docs/decisions/a.md")).toBe(signedOff);
+      expect(infos[0]).toBe(
+        `${invocation.prefix} committing docs/decisions/a.md: already verified, not yet committed`
+      );
     });
 
     test("writes and re-commits a sign-off in the configured style", async () => {

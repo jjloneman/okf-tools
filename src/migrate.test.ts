@@ -98,6 +98,7 @@ function readStatus(bundleDirs: readonly string[]): StatusReport {
     },
     repoRoot: repo.root,
     shouldCommit: false,
+    staleIn: undefined,
     style: "match",
     verifiedBy: VERIFIED_BY,
   };

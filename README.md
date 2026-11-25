@@ -19,6 +19,7 @@ It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-f
 - [🗂️ Index](#️-index)
   - [🔖 Tag index](#-tag-index)
 - [✏️ New and touch](#️-new-and-touch)
+- [🪦 Deprecate](#-deprecate)
 - [🚚 Migrate](#-migrate)
 - [🧭 Agents](#-agents)
   - [🧩 Skills](#-skills)
@@ -100,7 +101,7 @@ Node 22 or later, and git, are required.
 
 ## 🚀 Usage
 
-- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), `okf tags --help` the ones in [Listing tags](#-listing-tags), `okf new --help` and `okf touch --help` the ones in [New and touch](#️-new-and-touch), and `okf migrate --help` the ones in [Migrate](#-migrate).
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), `okf tags --help` the ones in [Listing tags](#-listing-tags), `okf new --help` and `okf touch --help` the ones in [New and touch](#️-new-and-touch), `okf deprecate --help` the ones in [Deprecate](#-deprecate), and `okf migrate --help` the ones in [Migrate](#-migrate).
 - `okf --version` prints the installed version and the OKF version it follows, such as `okf-tools 0.1.0 (OKF v0.3)`.
 - `okf guide` prints the guidance for agents (see [Agents](#-agents)).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
@@ -159,18 +160,22 @@ pnpm okf:verify --yes --changed
 - "Where you run it" is the folder you call `pnpm` from, when that's in the package's repo. With `pnpm --dir <package>` or `npm --prefix <package>` from another repo or no repo, paths resolve from the package root instead.
 - A record whose `generated.at` is ahead of the clock, as a wrong time zone writes it, fails the run until its time is fixed.
 - A sign-off whose `verified.at` is ahead of the clock counts as changed, so the record is offered again, and signing it renews that entry with the real time.
+- With `--stale-in <duration>`, each record signed off gets a `stale_after` that long after its sign-off, replacing any it has; `okf status` reports it as stale from then on. Without it, a record's `stale_after` is left as it is.
+  - The duration is ISO 8601, such as `P90D` or `P6M`, added in the calendar, so a month from January 31 is February 28.
+  - `stale_after` is written in UTC to the second, after `verified`, as OKF v0.3's absolute instant.
 - Exit codes: `0` worked, `1` failed, `2` nothing needed verifying.
 
 ### 🏳️ Flags
 
-| Flag             | Does                                                             |
-| ---------------- | ---------------------------------------------------------------- |
-| `--bundle <dir>` | A bundle to scan, relative to where you run it; repeat for more. |
-| `--by <actor>`   | Who signs off, overriding `okf.verifiedBy`.                      |
-| `--yes`, `-y`    | Run with no prompts; needs `--changed` or record paths.          |
-| `--changed`      | With `--yes`: every changed record still needing a sign-off.     |
-| `--no-commit`    | Edit the files, but leave committing to you.                     |
-| `--help`, `-h`   | Print the usage.                                                 |
+| Flag                    | Does                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `--bundle <dir>`        | A bundle to scan, relative to where you run it; repeat for more.              |
+| `--by <actor>`          | Who signs off, overriding `okf.verifiedBy`.                                   |
+| `--yes`, `-y`           | Run with no prompts; needs `--changed` or record paths.                       |
+| `--changed`             | With `--yes`: every changed record still needing a sign-off.                  |
+| `--no-commit`           | Edit the files, but leave committing to you.                                  |
+| `--stale-in <duration>` | Set each record's `stale_after` that long after its sign-off, such as `P90D`. |
+| `--help`, `-h`          | Print the usage.                                                              |
 
 ### 🔍 Diff
 
@@ -350,6 +355,31 @@ pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft
 | `--draft`              | `okf touch`: set a `stable` record back to `status: draft`.            |
 | `--bundle <dir>`       | A bundle the records are in, relative to where you run it; repeatable. |
 | `--help`, `-h`         | Print the usage.                                                       |
+
+## 🪦 Deprecate
+
+```sh
+# Retire a record that another replaces, keeping it for links and history
+pnpm okf deprecate docs/decisions/caching.md --by claude-code/2.1.316 \
+  --superseded-by docs/decisions/cache-layers.md
+```
+
+OKF v0.3 retires a record by keeping the file with `status: deprecated`, and names the record that replaces it, if any, in `superseded_by`, so links and stored paths to the old one still lead somewhere.
+
+- **It sets `status: deprecated`**, whatever the status was, adding `status` at the end of the frontmatter when there's none.
+- **`--superseded-by <record>` sets `superseded_by`** to the record that replaces it, written from the bundle root with a leading `/`, which v0.3 reads the same from any folder in the bundle.
+  - The replacement must be a record in the same bundle as every record it replaces, and not one of them.
+  - Without it, any `superseded_by` is left as it is.
+- **It re-stamps `generated`** as `okf touch` does, since a deprecation changes what the record means to its readers: a signed-off record shows as changed until it's signed off again, and signing it off keeps it deprecated.
+- It edits in place, keeping every other byte, never adds or changes `verified`, never commits, and writes nothing when any record refuses.
+- Exit codes: `0` worked, `1` failed.
+
+| Flag                       | Does                                                                   |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `--by <producer>`          | Who deprecated the record, an actor. Required.                         |
+| `--superseded-by <record>` | The record that replaces it, in the same bundle.                       |
+| `--bundle <dir>`           | A bundle the records are in, relative to where you run it; repeatable. |
+| `--help`, `-h`             | Print the usage.                                                       |
 
 ## 🚚 Migrate
 

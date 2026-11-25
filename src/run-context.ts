@@ -57,6 +57,14 @@ export type RunContext = {
   shouldCommit: boolean;
 
   /**
+   * How long a sign-off holds, as an ISO 8601 duration, from `--stale-in`;
+   * `undefined` leaves `stale_after` as it is.
+   *
+   * @example "P90D"
+   */
+  staleIn: string | undefined;
+
+  /**
    * How a new `verified` entry is laid out.
    *
    * @example "match"

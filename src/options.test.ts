@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   parseCliArgs,
   parseCommand,
+  parseDeprecateArgs,
   parseDiffArgs,
   parseGuideArgs,
   parseIndexArgs,
@@ -29,6 +30,7 @@ const DEFAULTS = {
   isYes: false,
   recordPaths: [],
   shouldCommit: true,
+  staleIn: undefined,
 };
 
 describe("parseCliArgs", () => {
@@ -56,6 +58,16 @@ describe("parseCliArgs", () => {
       args: ["--yes", "docs/a.md", "docs/b.md"],
       description: "--yes with record paths",
       options: { isYes: true, recordPaths: ["docs/a.md", "docs/b.md"] },
+    },
+    {
+      args: ["--yes", "docs/a.md", "--stale-in", "P90D"],
+      description: "--stale-in in days",
+      options: { isYes: true, recordPaths: ["docs/a.md"], staleIn: "P90D" },
+    },
+    {
+      args: ["--stale-in", "P1Y2M"],
+      description: "--stale-in in years and months",
+      options: { staleIn: "P1Y2M" },
     },
   ])("reads $description", ({ args, options }) => {
     // When - parsing the arguments
@@ -114,6 +126,48 @@ describe("parseCliArgs", () => {
       message:
         "--changed and record paths need --yes; without it, records are picked in the prompts.",
     },
+    {
+      args: ["--stale-in", "90d"],
+      description: "a --stale-in that isn't an ISO 8601 duration",
+      message:
+        '--stale-in "90d" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
+    {
+      args: ["--stale-in", "P0D"],
+      description: "a --stale-in of nothing",
+      message:
+        '--stale-in "P0D" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
+    {
+      args: ["--stale-in", "P2M-1D"],
+      description: "a --stale-in that goes back in part",
+      message:
+        '--stale-in "P2M-1D" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
+    {
+      args: ["--stale-in", "PT0.5S"],
+      description: "a --stale-in under a second",
+      message:
+        '--stale-in "PT0.5S" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
+    {
+      args: ["--stale-in", "P8000Y"],
+      description: "a --stale-in past the year 9999",
+      message:
+        '--stale-in "P8000Y" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
+    {
+      args: ["--stale-in", "P300000Y"],
+      description: "a --stale-in past what a date can hold",
+      message:
+        '--stale-in "P300000Y" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
+    {
+      args: ["--stale-in", "P-1D"],
+      description: "a --stale-in that goes back",
+      message:
+        '--stale-in "P-1D" isn\'t an ISO 8601 duration from a second to the year 9999, such as P90D or P6M.',
+    },
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseCliArgs(args)).toStrictEqual({ kind: "invalid", message });
@@ -146,6 +200,11 @@ describe("parseCommand", () => {
       args: ["touch", "docs/decisions/a.md"],
       description: "touch, with the arguments after it",
       expected: { args: ["docs/decisions/a.md"], kind: "touch" },
+    },
+    {
+      args: ["deprecate", "docs/decisions/a.md"],
+      description: "deprecate, with the arguments after it",
+      expected: { args: ["docs/decisions/a.md"], kind: "deprecate" },
     },
     {
       args: ["--help"],
@@ -865,5 +924,96 @@ describe("parseTouchArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseTouchArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseDeprecateArgs", () => {
+  test.each([
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0"],
+      description: "one record",
+      options: {
+        bundles: [],
+        by: "claude-code/2.2.0",
+        recordPaths: ["a.md"],
+        supersededBy: undefined,
+      },
+    },
+    {
+      args: [
+        "a.md",
+        "b.md",
+        "--by",
+        "claude-code/2.2.0",
+        "--superseded-by",
+        "c.md",
+        "--bundle",
+        "docs",
+      ],
+      description: "two records, a replacement, and a bundle",
+      options: {
+        bundles: ["docs"],
+        by: "claude-code/2.2.0",
+        recordPaths: ["a.md", "b.md"],
+        supersededBy: "c.md",
+      },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When/Then - the options
+    expect(parseDeprecateArgs(args)).toStrictEqual({
+      kind: "options",
+      options,
+    });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "a.md"], description: "-h beside a record" },
+    {
+      args: ["--help", "--yes"],
+      description: "--help beside a flag deprecate doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseDeprecateArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--yes"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--superseded-by"],
+      description: "--superseded-by with no value",
+      message: expect.stringContaining("--superseded-by") as unknown,
+    },
+    {
+      args: ["--by", "claude-code/2.2.0"],
+      description: "no record",
+      message: "Name at least one record.",
+    },
+    {
+      args: ["a.md"],
+      description: "no --by",
+      message: "okf deprecate needs --by.",
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--superseded-by", ""],
+      description: "an empty --superseded-by",
+      message: "--superseded-by needs a record, not an empty string.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseDeprecateArgs(args)).toStrictEqual({
+      kind: "invalid",
+      message,
+    });
   });
 });
