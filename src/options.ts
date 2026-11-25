@@ -138,7 +138,16 @@ export type ParsedCommand =
        *
        * @example "verify"
        */
-      kind: "diff" | "guide" | "index" | "init" | "status" | "tags" | "verify";
+      kind:
+        | "diff"
+        | "guide"
+        | "index"
+        | "init"
+        | "new"
+        | "status"
+        | "tags"
+        | "touch"
+        | "verify";
     }
   | {
       /**
@@ -280,8 +289,11 @@ commands:
           records' frontmatter, or check they're current
   init    write the \`okf\` config and the agent-instructions block, or
           check the block is current
+  new     write a new draft record's frontmatter, stamped from the clock,
+          and its index line
   status  list every record's trust state, writing nothing
   tags    list every tag in the bundles with its record count
+  touch   re-stamp records' \`generated\` from the clock after an edit
   verify  mark records \`status: stable\` with a \`verified\` entry, then
           commit just those files
 
@@ -528,8 +540,10 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     name === "guide" ||
     name === "index" ||
     name === "init" ||
+    name === "new" ||
     name === "status" ||
     name === "tags" ||
+    name === "touch" ||
     name === "verify"
   ) {
     return { args: rest, kind: name };
@@ -887,6 +901,91 @@ options:
   --check         write nothing; fail when a block is missing or out of date
   --help, -h      print this help`;
 
+/** The flags and path an `okf new` run was given. */
+export type NewOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * The producer passed with `--by`, written as `generated.by`.
+   *
+   * @example "claude-code/claude-opus-5-5"
+   */
+  by: string;
+
+  /**
+   * The `description` passed with `--description`, if any.
+   *
+   * @example "Every export returns a fallback instead of throwing."
+   */
+  description: string | undefined;
+
+  /**
+   * The record's path, relative to where the command was run.
+   *
+   * @example "docs/decisions/package-promise.md"
+   */
+  recordPath: string;
+
+  /**
+   * The tags passed with `--tag`, sorted, each once.
+   *
+   * @example `["api", "cli"]`
+   */
+  tags: readonly string[];
+
+  /**
+   * The `title` passed with `--title`, if any.
+   *
+   * @example "What every export promises"
+   */
+  title: string | undefined;
+
+  /**
+   * The record's `type`, passed with `--type`.
+   *
+   * @example "Decision"
+   */
+  type: string;
+};
+
+/** The flags and record paths an `okf touch` run was given. */
+export type TouchOptions = {
+  /**
+   * Bundle directories passed with `--bundle`, relative to where the command
+   * was run; empty means "use the config".
+   *
+   * @example `["docs/decisions"]`
+   */
+  bundles: readonly string[];
+
+  /**
+   * The producer passed with `--by`, written as `generated.by`.
+   *
+   * @example "claude-code/claude-opus-5-5"
+   */
+  by: string;
+
+  /**
+   * Record files named on the command line, relative to where it was run.
+   *
+   * @example `["docs/decisions/package-promise.md"]`
+   */
+  recordPaths: readonly string[];
+
+  /**
+   * Whether `--draft` asked to set a `stable` record back to `draft`.
+   *
+   * @example true
+   */
+  shouldDraft: boolean;
+};
+
 /** Read `okf init`'s command line into options, or say why it can't run. */
 export function parseInitArgs(args: readonly string[]): ParsedInitArgs {
   let parsed: ReturnType<typeof parseInitCommandLine>;
@@ -1017,6 +1116,230 @@ function parseTagsLine(args: readonly string[]) {
     options: {
       bundle: { multiple: true, type: "string" },
       format: { type: "string" },
+      help: { short: "h", type: "boolean" },
+    },
+    strict: true,
+  });
+}
+
+/** How to call `okf new`, printed for `--help` and after a usage error. */
+export const NEW_USAGE = `usage: okf new <record> --type <type> --by <producer> [options]
+
+Writes a new record with only its frontmatter: its \`type\`, any title,
+description, and tags given, \`status: draft\`, and \`generated\` stamped
+with --by and the time from the clock. Then it syncs the index.md that
+lists it, as \`okf index\` does. It never overwrites a file, never adds
+\`verified\`, and writes nothing when either step can't be done.
+
+options:
+  --type <type>         the record's \`type\`, such as Decision
+  --by <producer>       who wrote it, as \`<producer>/<version>\`
+  --title <title>       its \`title\`
+  --description <text>  its \`description\`, one sentence
+  --tag <tag>           a tag; repeat for more
+  --bundle <dir>        a bundle directory it goes in; repeat for more
+                        (default: \`okf.bundles\` in package.json)
+  --help, -h            print this help`;
+
+/** How to call `okf touch`, printed for `--help` and after a usage error. */
+export const TOUCH_USAGE = `usage: okf touch <record>... --by <producer> [--draft] [options]
+
+Re-stamps each record's \`generated\` after an edit: \`by\` from --by, and
+\`at\` from the clock, never a typed time. It changes nothing else, so a
+signed-off record shows as changed until it's signed off again. It never
+adds or changes \`verified\`, and writes nothing when any record refuses.
+
+options:
+  --by <producer>  who edited it, as \`<producer>/<version>\`
+  --draft          set a \`stable\` record back to \`status: draft\`
+  --bundle <dir>   a bundle directory the records are in; repeat for more
+                   (default: \`okf.bundles\` in package.json)
+  --help, -h       print this help`;
+
+/** Read `okf new`'s command line into options, or say why it can't run. */
+export function parseNewArgs(args: readonly string[]): ParsedArgs<NewOptions> {
+  let parsed: ReturnType<typeof parseNewLine>;
+
+  try {
+    parsed = parseNewLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const [recordPath, extra] = positionals;
+  const bundles = values.bundle ?? [];
+  const tags = [...new Set(values.tag ?? [])].sort();
+  const { by, description, title, type } = values;
+
+  if (recordPath === undefined || extra !== undefined) {
+    return { kind: "invalid", message: "Name exactly one record to write." };
+  }
+
+  if (type === undefined || by === undefined) {
+    return { kind: "invalid", message: "okf new needs --type and --by." };
+  }
+
+  const problem =
+    findBundleFlagProblem(bundles) ??
+    findTagProblem(tags) ??
+    findTextProblem({
+      "--by": [by],
+      "--description": description === undefined ? [] : [description],
+      "--tag": tags,
+      "--title": title === undefined ? [] : [title],
+      "--type": [type],
+    });
+
+  return problem === undefined
+    ? {
+        kind: "options",
+        options: { bundles, by, description, recordPath, tags, title, type },
+      }
+    : { kind: "invalid", message: problem };
+}
+
+/** Read `okf touch`'s command line into options, or say why it can't run. */
+export function parseTouchArgs(
+  args: readonly string[]
+): ParsedArgs<TouchOptions> {
+  let parsed: ReturnType<typeof parseTouchLine>;
+
+  try {
+    parsed = parseTouchLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const bundles = values.bundle ?? [];
+  const { by } = values;
+
+  if (positionals.length === 0) {
+    return { kind: "invalid", message: "Name at least one record." };
+  }
+
+  if (by === undefined) {
+    return { kind: "invalid", message: "okf touch needs --by." };
+  }
+
+  const problem = findBundleFlagProblem(bundles);
+
+  return problem === undefined
+    ? {
+        kind: "options",
+        options: {
+          bundles,
+          by,
+          recordPaths: positionals,
+          shouldDraft: values.draft === true,
+        },
+      }
+    : { kind: "invalid", message: problem };
+}
+
+/**
+ * Check the `--bundle` values.
+ *
+ * @returns the problem, or `undefined` when there is none.
+ */
+function findBundleFlagProblem(bundles: readonly string[]): string | undefined {
+  return bundles.includes("")
+    ? "--bundle needs a directory, not an empty string."
+    : undefined;
+}
+
+/**
+ * Check the `--tag` values: a tag holds no whitespace or backtick, since the
+ * tag index writes each one in backticks and reads it back by them.
+ *
+ * @returns the problem with the first tag that has one, or `undefined`.
+ */
+function findTagProblem(tags: readonly string[]): string | undefined {
+  const bad = tags.find((tag) => /[\s`]/u.test(tag));
+
+  return bad === undefined
+    ? undefined
+    : `--tag ${JSON.stringify(bad)} can't hold whitespace or a backtick.`;
+}
+
+/**
+ * Check the text flags `okf new` writes into the frontmatter: each must hold
+ * something, on one line.
+ *
+ * @returns the problem with the first flag that has one, or `undefined`.
+ */
+function findTextProblem(
+  values: Readonly<Record<string, readonly string[]>>
+): string | undefined {
+  for (const [flag, texts] of Object.entries(values)) {
+    for (const text of texts) {
+      if (text.trim() === "") {
+        return `${flag} needs a value, not an empty string.`;
+      }
+
+      if (/[\n\r]/u.test(text)) {
+        return `${flag} must be one line.`;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Run `parseArgs` over `okf new`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseNewLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      by: { type: "string" },
+      description: { type: "string" },
+      help: { short: "h", type: "boolean" },
+      tag: { multiple: true, type: "string" },
+      title: { type: "string" },
+      type: { type: "string" },
+    },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf touch`'s flags.
+ *
+ * - It throws on an unknown flag or a missing value, which the caller turns
+ *   into a usage error.
+ */
+function parseTouchLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: {
+      bundle: { multiple: true, type: "string" },
+      by: { type: "string" },
+      draft: { type: "boolean" },
       help: { short: "h", type: "boolean" },
     },
     strict: true,

@@ -73,6 +73,16 @@ const QUOTE_MARKS: ReadonlyMap<string | undefined, string> = new Map([
   ["QUOTE_SINGLE", "'"],
 ]);
 
+/** What `applyEdits` needs: the edits, and the text they were planned on. */
+export type ApplyEditsParams = {
+  /**
+   * The edits, in any order, none overlapping another.
+   *
+   * @example `[{ end: 13, start: 8, text: "stable" }]`
+   */
+  edits: TextEdit[];
+} & TextParams;
+
 /** What `findEditProblem` needs: the record, and who would sign it. */
 export type FindEditProblemParams = Pick<
   VerifyRecordParams,
@@ -119,6 +129,47 @@ export type RecordVerification =
       text: string;
     };
 
+/** One change to the frontmatter: a range of characters, and its new text. */
+export type TextEdit = {
+  /**
+   * Where the replaced characters end, exclusive.
+   *
+   * @example 13
+   */
+  end: number;
+
+  /**
+   * Where the replaced characters start; equal to `end` for an insertion.
+   *
+   * @example 8
+   */
+  start: number;
+
+  /**
+   * The text written in their place.
+   *
+   * @example "stable"
+   */
+  text: string;
+};
+
+/** What `writeScalar` needs: the scalar, its text, and the new value. */
+export type WriteScalarParams = {
+  /**
+   * The scalar to overwrite.
+   *
+   * @example `doc.get("status", true)`
+   */
+  node: Placed<Scalar>;
+
+  /**
+   * The new value, without quotes.
+   *
+   * @example "stable"
+   */
+  value: string;
+} & TextParams;
+
 /** What `addVerifiedField` needs: the top-level mapping, and the entry. */
 type AddVerifiedFieldParams = {
   /**
@@ -138,16 +189,6 @@ type AppendToSequenceParams = {
    */
   sequence: Placed<YAMLSeq>;
 } & EntryEditParams;
-
-/** What `applyEdits` needs: the edits, and the text they were planned on. */
-type ApplyEditsParams = {
-  /**
-   * The edits, in any order, none overlapping another.
-   *
-   * @example `[{ end: 13, start: 8, text: "stable" }]`
-   */
-  edits: TextEdit[];
-} & TextParams;
 
 /** What `convertToList` needs: the `verified` value and key, and the entry. */
 type ConvertToListParams = {
@@ -297,30 +338,6 @@ type ReplaceNullParams = {
   node: Placed<Scalar>;
 } & EntryEditParams;
 
-/** One change to the frontmatter: a range of characters, and its new text. */
-type TextEdit = {
-  /**
-   * Where the replaced characters end, exclusive.
-   *
-   * @example 13
-   */
-  end: number;
-
-  /**
-   * Where the replaced characters start; equal to `end` for an insertion.
-   *
-   * @example 8
-   */
-  start: number;
-
-  /**
-   * The text written in their place.
-   *
-   * @example "stable"
-   */
-  text: string;
-};
-
 /** The edits, or why they can't be made. */
 type TextEditResult =
   | {
@@ -378,22 +395,21 @@ type WriteFieldParams = {
   lineBreak: string;
 };
 
-/** What `writeScalar` needs: the scalar, its text, and the new value. */
-type WriteScalarParams = {
-  /**
-   * The scalar to overwrite.
-   *
-   * @example `doc.get("status", true)`
-   */
-  node: Placed<Scalar>;
+/**
+ * Apply edits planned against one text, from the last to the first, so each
+ * edit's positions still hold when it's applied.
+ */
+export function applyEdits(params: ApplyEditsParams): string {
+  const { edits, text } = params;
 
-  /**
-   * The new value, without quotes.
-   *
-   * @example "stable"
-   */
-  value: string;
-} & TextParams;
+  return [...edits]
+    .sort((first, second) => second.start - first.start)
+    .reduce(
+      (edited, { end, start, text: replacement }) =>
+        `${edited.slice(0, start)}${replacement}${edited.slice(end)}`,
+      text
+    );
+}
 
 /**
  * Say why a record can't be signed off by `verifiedBy` as it stands, so a
@@ -571,6 +587,27 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   };
 }
 
+/**
+ * Plan the edit that overwrites a scalar, keeping its quotes, or fills an
+ * empty one after its key.
+ */
+export function writeScalar(params: WriteScalarParams): TextEdit {
+  const { node, text, value } = params;
+  const [start, end] = node.range;
+
+  if (start === end) {
+    const keyEnd = readContentEnd({ index: start, text });
+    const gap = /^[#}]/.test(text.slice(end)) ? " " : "";
+
+    return { end, start: keyEnd, text: ` ${value}${gap}` };
+  }
+
+  const quote = QUOTE_MARKS.get(node.type) ?? "";
+  const contentEnd = readContentEnd({ index: end, text });
+
+  return { end: contentEnd, start, text: `${quote}${value}${quote}` };
+}
+
 /** Plan the edit that adds an `at` to the signer's entry, which has none. */
 function addTimestamp(params: RenewOwnEntryParams): TextEdit {
   const { at, entry, text } = params;
@@ -683,22 +720,6 @@ function appendVerifiedField(
     start: text.length,
     text: `${writeField({ entry, indent: "", lineBreak })}${lineBreak}`,
   };
-}
-
-/**
- * Apply edits planned against one text, from the last to the first, so each
- * edit's positions still hold when it's applied.
- */
-function applyEdits(params: ApplyEditsParams): string {
-  const { edits, text } = params;
-
-  return [...edits]
-    .sort((first, second) => second.start - first.start)
-    .reduce(
-      (edited, { end, start, text: replacement }) =>
-        `${edited.slice(0, start)}${replacement}${edited.slice(end)}`,
-      text
-    );
 }
 
 /**
@@ -997,25 +1018,4 @@ function writeListItem(params: WriteFieldParams): string {
         `${lineBreak}${indent}${index === 0 ? LIST_MARKER : continuation}${line}`
     )
     .join("");
-}
-
-/**
- * Plan the edit that overwrites a scalar, keeping its quotes, or fills an
- * empty one after its key.
- */
-function writeScalar(params: WriteScalarParams): TextEdit {
-  const { node, text, value } = params;
-  const [start, end] = node.range;
-
-  if (start === end) {
-    const keyEnd = readContentEnd({ index: start, text });
-    const gap = /^[#}]/.test(text.slice(end)) ? " " : "";
-
-    return { end, start: keyEnd, text: ` ${value}${gap}` };
-  }
-
-  const quote = QUOTE_MARKS.get(node.type) ?? "";
-  const contentEnd = readContentEnd({ index: end, text });
-
-  return { end: contentEnd, start, text: `${quote}${value}${quote}` };
 }

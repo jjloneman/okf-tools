@@ -13,6 +13,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -1159,5 +1160,171 @@ function writeRecordFile(params: { filePath: string; text: string }): void {
     writeFileSync(descriptor, text);
   } finally {
     closeSync(descriptor);
+  }
+}
+
+/** How a new record is opened: created, never over a file or a symlink. */
+const CREATE_FLAGS =
+  constants.O_WRONLY |
+  constants.O_CREAT |
+  constants.O_EXCL |
+  constants.O_NOFOLLOW;
+
+/**
+ * Write a new record's text at a path from the repo root, failing when
+ * anything is there already, a symlink included.
+ *
+ * - A file it created but couldn't fill is removed again, so a failed write
+ *   leaves nothing behind.
+ */
+export function createRecordFile(params: {
+  filePath: string;
+  repoRoot: string;
+  text: string;
+}): Outcome<undefined> {
+  const { filePath, repoRoot, text } = params;
+  let descriptor: number;
+
+  try {
+    descriptor = openSync(path.join(repoRoot, filePath), CREATE_FLAGS);
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't write ${filePath}: ${describeError(error)}`,
+    };
+  }
+
+  try {
+    writeFileSync(descriptor, text);
+
+    return { isOk: true, value: undefined };
+  } catch (error) {
+    const unremoved = removeRecordFile({ filePath, repoRoot });
+
+    return {
+      isOk: false,
+      reason: [
+        `Couldn't write ${filePath}: ${describeError(error)}`,
+        unremoved === undefined
+          ? "No files changed."
+          : `It's left behind, since removing it failed: ${unremoved}`,
+      ].join("\n"),
+    };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/**
+ * Remove a record this run created, when a later write failed.
+ *
+ * @returns why it couldn't be removed, or `undefined` once it's gone.
+ */
+export function removeRecordFile(params: {
+  filePath: string;
+  repoRoot: string;
+}): string | undefined {
+  const { filePath, repoRoot } = params;
+
+  try {
+    rmSync(path.join(repoRoot, filePath));
+
+    return undefined;
+  } catch (error) {
+    return describeError(error);
+  }
+}
+
+/**
+ * Turn a new record's path from the command line into a path from the repo
+ * root.
+ *
+ * - It must be named like a record, an `.md` at any depth inside a bundle
+ *   other than `index.md` and `log.md`, and not be a path `excludeGlobs`
+ *   matches.
+ *
+ * - Nothing may be at the path yet, not even a broken symlink, and its folder
+ *   must already exist at its own path, not through a symlink, since git
+ *   commits the link, not the file it points to.
+ *
+ * - The folder is spelled as git will match it (see `spellForGit`); the file
+ *   name is kept as typed.
+ */
+export function resolveNewRecordPath(params: {
+  bundleDirs: readonly string[];
+  cwd: string;
+  excludeGlobs: readonly string[];
+  recordPath: string;
+  repoRoot: string;
+}): Outcome<string> {
+  const { bundleDirs, cwd, excludeGlobs, recordPath, repoRoot } = params;
+  const absolutePath = path.resolve(cwd, recordPath);
+  const typedPath = toRepoPath({ absolutePath, repoRoot });
+  const typedFolder =
+    typedPath === undefined ? undefined : path.posix.dirname(typedPath);
+  const isFolderOwn =
+    typedFolder !== undefined &&
+    isDirectory(path.dirname(absolutePath)) &&
+    findLinkedPath({ filePath: typedFolder, repoRoot }) === undefined;
+
+  // The folder as git spells it, before any check, so a folder typed in
+  // another case is judged, excluded, and indexed as its neighbors are.
+  const filePath =
+    typedPath !== undefined && typedFolder !== undefined && isFolderOwn
+      ? path.posix.join(
+          spellForGit({
+            filePath: typedFolder,
+            index: readGitIndex(repoRoot),
+            readName: (givenPath) =>
+              readRealName({ filePath: givenPath, repoRoot }),
+            repoRoot,
+          }),
+          path.posix.basename(typedPath)
+        )
+      : typedPath;
+
+  if (filePath === undefined || !isRecordName({ bundleDirs, filePath })) {
+    return {
+      isOk: false,
+      reason: `${recordPath} isn't a record path in ${bundleDirs.join(", ")}.`,
+    };
+  }
+
+  if (matchExcluded(excludeGlobs)(filePath)) {
+    return {
+      isOk: false,
+      reason: `${recordPath} is excluded by \`okf.exclude\`.`,
+    };
+  }
+
+  if (doesPathExist(absolutePath)) {
+    return { isOk: false, reason: `${recordPath} already exists.` };
+  }
+
+  const folder = path.posix.dirname(filePath);
+
+  if (!isDirectory(path.dirname(absolutePath))) {
+    return {
+      isOk: false,
+      reason: `No folder at ${folder}; make it before writing a record there.`,
+    };
+  }
+
+  return isFolderOwn
+    ? { isOk: true, value: filePath }
+    : {
+        isOk: false,
+        reason: `The folder ${folder} is a symlink, or inside one, to ${realpathSync(path.dirname(absolutePath))}. ${LINK_EXPLANATION}`,
+      };
+}
+
+/** Whether anything is at a path, a broken symlink included. */
+function doesPathExist(absolutePath: string): boolean {
+  try {
+    lstatSync(absolutePath);
+
+    return true;
+  } catch {
+    return false;
   }
 }
