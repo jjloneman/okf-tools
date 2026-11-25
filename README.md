@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's one command, `okf verify`, which signs records off; `okf-verify` is its alias, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off, and `okf diff`, which shows what changed since a sign-off; `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
 
@@ -12,6 +12,7 @@ It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-f
   - [🖐️ Interactive](#️-interactive)
   - [🤖 Non-interactive](#-non-interactive)
   - [🏳️ Flags](#️-flags)
+  - [🔍 Diff](#-diff)
 - [🧭 Agents](#-agents)
 - [🏷️ Writing tags](#️-writing-tags)
 - [📚 Library](#-library)
@@ -90,7 +91,7 @@ Node 22 or later, and git, are required.
 
 ## 🚀 Usage
 
-- `okf --help` lists the commands, and `okf verify --help` prints the flags below.
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
 - `okf-verify <args>` runs as `okf verify <args>` does, with the same exit codes.
@@ -102,7 +103,7 @@ pnpm okf:verify
 ```
 
 - Lists the records changed on the branch (against the remote's default branch, or `main`) plus uncommitted ones, with a choice to widen to every record.
-- You pick records, review the files and commit message, and confirm.
+- You pick records, review what changed in each since your last sign-off (see [Diff](#-diff)), review the files and commit message, and confirm.
 - It needs a terminal on both stdin and stdout, and refuses to start without one.
 
 ### 🤖 Non-interactive
@@ -132,6 +133,23 @@ pnpm okf:verify --yes --changed
 | `--changed`      | With `--yes`: every changed record still needing a sign-off.     |
 | `--no-commit`    | Edit the files, but leave committing to you.                     |
 | `--help`, `-h`   | Print the usage.                                                 |
+
+### 🔍 Diff
+
+```sh
+pnpm exec okf diff docs/decisions/package-promise.md
+```
+
+- Prints what changed in each record you name since the signer last signed it off: the diff from the commit that set their `verified.at`, in a record not generated again after it, to the file on disk, uncommitted changes included.
+  - That commit may be the one that added the record, as when `okf verify` commits a new record or a branch with a signed record is squash-merged.
+  - A merge, or a branch's commits interleaved with it by date, don't hide it, and neither does git's `log.follow` or `log.showSignature`.
+- When no commit shows what was signed, it says so and prints the whole record: a sign-off made by hand and not committed, or one committed in a record generated again after it, such as a sign-off restored by hand after a regeneration. A shallow clone that cuts off the sign-off's history counts too.
+- Control characters in a record print as escapes, such as `\x1b`, so a record can't redraw the lines you're reviewing.
+- A record the signer never signed off is printed whole, too.
+- It changes nothing. `--bundle` and `--by` work as they do for `okf verify`, and `--by` picks whose sign-off to diff from.
+- Every line is prefixed `[okf]`, like the rest of its output.
+- The interactive `okf verify` shows the same, for each record you pick, before you confirm.
+- Exit codes: `0` worked, `1` failed.
 
 ## 🧭 Agents
 
