@@ -38,7 +38,8 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `test/repo.ts` — scratch git repos, fabricated records, and the shared `VERIFIED_BY` for the tests, imported as `#test/repo`.
 - `test/spec-watch.ts` — a fake `fetch` that answers for GitHub and ntfy, and a fabricated upstream, for the spec watch's tests, imported as `#test/spec-watch`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
-- `.github/workflows/` — `ci.yml`, `release.yml`, and `spec-watch.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
+- `.github/workflows/` — `ci.yml`, `release.yml`, `spec-watch.yml`, and `product-review-reminder.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
+- `.claude/skills/product-review/` — the product review skill (see [Product review](#-product-review)).
 - `eslint-rules/` — the local `no-dotted-jsdoc-param` rule, loaded by `eslint.config.ts`.
 - `dist/` — build output (gitignored), the only directory published; `CHANGELOG.md` is published beside it.
 
@@ -74,7 +75,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 - **Branches**: `feature/`, `bugfix/`, or `release/`, then `gh-<n>-` for the issue, then a kebab-case slug (`feature/gh-1-extract-okf-verify`).
 - **Stale branches**: `pnpm prune-branches` lists the local branches whose remote branch is gone, and deletes nothing; `pnpm prune-branches:force` deletes them all, unpushed commits included, so read the list first, and an agent runs it only with the owner's confirmation (see [Deleting things](#-deleting-things)).
-- **Issues and PRs** are assigned to `jjloneman` and labeled with a type (`✨ feature`, `🐞 bug`, `📦 dependencies`); spell the emoji-prefixed labels exactly.
+- **Issues and PRs** are assigned to `jjloneman` and labeled with a type (`✨ feature`, `🐞 bug`, `📦 dependencies`, or `💡 idea` for a product review's ideas); spell the emoji-prefixed labels exactly.
 - **PRs are squash-merged**, so the PR title becomes the commit on `main`.
 - **`main` is protected** by [.github/rulesets/main.json](.github/rulesets/main.json): changes land through a squash-merged PR, unresolved review threads block the merge, every CI job must pass, and there are no force pushes or deletion. After editing the file, reapply it with `gh api --method PUT repos/jjloneman/okf-tools/rulesets/<id> --input .github/rulesets/main.json`.
 - **AI-written text on GitHub opens with a disclaimer banner**: `> **🤖 Disclaimer**: This description was generated with AI. (**Model**: _<model name and version>_)`, with "comment" in place of "description" for a comment.
@@ -103,8 +104,9 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - It skips the version PR (`changeset-release/main`), which only consumes changesets.
 - `release.yml` runs on every push to `main` (see below).
 - `spec-watch.yml` runs daily and on demand, never on a PR (see [Spec watch](#-spec-watch)).
+- `product-review-reminder.yml` runs weekly and on demand, never on a PR (see [Product review](#-product-review)).
 - Every action is pinned to an exact `vX.Y.Z`, and every job declares its own `permissions`.
-- **Every `ci.yml` job is a required check** in [.github/rulesets/main.json](.github/rulesets/main.json), by its display name; `spec-watch.yml` never runs on a PR, so it isn't one. Renaming a job or changing the test matrix means updating `required_status_checks` there and reapplying the ruleset, or every PR waits on a check that never reports.
+- **Every `ci.yml` job is a required check** in [.github/rulesets/main.json](.github/rulesets/main.json), by its display name; `spec-watch.yml` never runs on a PR, and neither does `product-review-reminder.yml`, so neither is one. Renaming a job or changing the test matrix means updating `required_status_checks` there and reapplying the ruleset, or every PR waits on a check that never reports.
 
 ## 🔭 Spec watch
 
@@ -125,6 +127,21 @@ The OKF spec has no releases or tags, so `spec-watch.yml` checks it daily agains
 - **When the spec moves homes, move the pin first, to the same text at the new home**, re-pinning every link; adopting a newer version is a PR of its own (see [Which OKF spec okf-tools follows](docs/decisions/spec-pin.md)).
 - **Try it without writing anything:** run it from the Actions tab with `dry-run`, or locally with `GITHUB_TOKEN=$(gh auth token) GITHUB_REPOSITORY=jjloneman/okf-tools SPEC_WATCH_DRY_RUN=true node scripts/spec-watch/bin.ts`. The `sha` input (`SPEC_WATCH_SHA` locally) compares against an older commit instead of the pin; without `dry-run` that opens a real issue, whose findings later runs count as reported.
 - **GitHub disables a scheduled workflow after 60 days without repo activity**, and emails the owner first; re-enable it from the Actions tab.
+
+## 💡 Product review
+
+`/product-review`, the skill in `.claude/skills/product-review/`, reads the README, the decision records, the changelog, this repo's issues, the spec's new issues and PRs, and the landscape record, then opens one issue labeled `💡 idea` with at most three ranked ideas and the ones it dropped.
+
+- **It runs only when the owner types it,** since a run spends the owner's subscription: never from a schedule, a hook, another session, or an agent's own judgment.
+- **It builds nothing it suggests.** An idea taken becomes its own issue, planned like any other.
+- **`product-review-reminder.yml` says when one is due,** with an ntfy push to the `NTFY_TOPIC` topic (see [Spec watch](#-spec-watch)) every fourth Monday, counted in weeks since the Unix epoch.
+  - Run it from the Actions tab to send one now, such as when GitHub skipped a scheduled run; without the secret it sends none.
+  - GitHub disables it after 60 days without repo activity, like the spec watch; re-enable it from the Actions tab.
+- **A rejected idea gets a one-line reason, and an issue with no idea taken closes as not planned.**
+  - A review issue closes once each of its ideas is decided, with one comment giving each idea's outcome: the issue it became, or its one-line reason.
+  - It closes as completed when any idea was taken, and as not planned when none was.
+  - The next run reads those comments first, so it doesn't offer a rejected idea again.
+- **Revisit the four-weekly cadence after three reviews** (see [How product ideas are found and decided](docs/decisions/product-review.md)).
 
 ## 🕒 7-day dependency moratorium
 
