@@ -86,14 +86,14 @@ export type UpstreamState = {
    * The watched repo's name as GitHub now reports it, or `undefined` when the
    * repo is gone.
    *
-   * @example "GoogleCloudPlatform/knowledge-catalog"
+   * @example "open-knowledge-format/open-knowledge-format"
    */
   fullName: string | undefined;
 
   /**
    * The newest commit to the spec's path, or `undefined` when there is none.
    *
-   * @example "62432a095456147ee71e70ac6e4dc0d2dea3ac30"
+   * @example "0b87c52c6ef999286c745e19998fdfcd03d5dbee"
    */
   headSha: string | undefined;
 
@@ -129,7 +129,7 @@ export type UpstreamState = {
   /**
    * The candidate homes that are now public.
    *
-   * @example ["open-knowledge-format/open-knowledge-format"]
+   * @example ["okf-community/okf-spec"]
    */
   publicCandidates: string[];
 

@@ -12,28 +12,28 @@ export type SpecPin = {
   /**
    * Repos that may become the spec's next home, reported once they are public.
    *
-   * @example ["open-knowledge-format/open-knowledge-format"]
+   * @example ["okf-community/okf-spec"]
    */
   candidates: string[];
 
   /**
    * The spec's path in the watched repo.
    *
-   * @example "okf/SPEC.md"
+   * @example "SPEC.md"
    */
   path: string;
 
   /**
    * The watched repo, as `<owner>/<name>`.
    *
-   * @example "GoogleCloudPlatform/knowledge-catalog"
+   * @example "open-knowledge-format/open-knowledge-format"
    */
   repo: string;
 
   /**
    * The full SHA of the last commit to the spec that okf-tools follows.
    *
-   * @example "62432a095456147ee71e70ac6e4dc0d2dea3ac30"
+   * @example "0b87c52c6ef999286c745e19998fdfcd03d5dbee"
    */
   sha: string;
 
@@ -57,7 +57,7 @@ type PinAnswer = {
   /**
    * The parsed pin.
    *
-   * @example `{ candidates: [], path: "okf/SPEC.md", … }`
+   * @example `{ candidates: [], path: "SPEC.md", … }`
    */
   pin: SpecPin;
 };
