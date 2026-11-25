@@ -9,9 +9,9 @@ tags:
   - safety
   - selection
   - verification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # What `--yes` verifies, and how it exits

@@ -13,9 +13,9 @@ sources:
   - id: changesets-empty
     resource: https://github.com/changesets/changesets/blob/main/docs/command-line-options.md
     title: Changesets, command line options
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # Why every PR adds a changeset

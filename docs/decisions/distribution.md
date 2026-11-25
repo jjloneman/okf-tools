@@ -13,9 +13,9 @@ sources:
   - id: pnpm-minimum-release-age
     resource: https://pnpm.io/settings#minimumreleaseage
     title: pnpm settings, minimumReleaseAge
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-12T00:34:41Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # How okf-tools is distributed

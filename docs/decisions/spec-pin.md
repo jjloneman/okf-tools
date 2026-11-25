@@ -19,8 +19,9 @@ sources:
   - id: gcp-deprecated
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # Which OKF spec okf-tools follows

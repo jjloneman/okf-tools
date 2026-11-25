@@ -9,9 +9,9 @@ tags:
   - status
   - timestamps
   - validation
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-25T16:26:24Z }
+verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
 # What the library accepts, and how it refuses
