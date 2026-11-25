@@ -158,8 +158,8 @@ export function createFakeFetch(routes: FakeRoute[]): FakeFetch {
  * - The spec's commits are `headSha`, then `pinSha` when they differ; the spec
  *   at `headSha` reads `version`, and at `pinSha` the pin's `0.2`.
  *
- * - The README never changes, no pull request is open, and the one candidate
- *   home is private.
+ * - The READMEs never change, no pull request, release, or tag exists, the
+ *   one candidate home is private, and the owner has no newer repo.
  */
 export function createUpstreamRoutes({
   headSha,
@@ -177,6 +177,7 @@ export function createUpstreamRoutes({
 }): FakeRoute[] {
   const commitShas = headSha === pinSha ? [headSha] : [headSha, pinSha];
   const specUrl = `${API}/repos/acme/spec/contents/okf/SPEC.md`;
+  const folderReadmeUrl = `${API}/repos/acme/spec/readme/okf`;
 
   return [
     {
@@ -187,6 +188,7 @@ export function createUpstreamRoutes({
       body: commitShas.map((sha) => ({
         commit: {
           author: { date: "2026-08-21T10:00:00Z" },
+          committer: { date: "2026-08-21T10:00:00Z" },
           message: `Update the spec at ${sha.slice(0, 7)}`,
         },
         html_url: `https://github.com/acme/spec/commit/${sha}`,
@@ -198,6 +200,17 @@ export function createUpstreamRoutes({
     { body: "**Version 0.2**\n", url: `${specUrl}?ref=${pinSha}` },
     { body: "# Spec\n", url: `${API}/repos/acme/spec/readme` },
     { body: "# Spec\n", url: `${API}/repos/acme/spec/readme?ref=${pinSha}` },
+    { body: "# Folder\n", url: folderReadmeUrl },
+    { body: "# Folder\n", url: `${folderReadmeUrl}?ref=${pinSha}` },
+    {
+      body: [],
+      url: `${API}/repos/acme/spec/releases?per_page=100&page=1`,
+    },
+    { body: [], url: `${API}/repos/acme/spec/tags?per_page=100&page=1` },
+    {
+      body: [],
+      url: `${API}/users/acme/repos?sort=created&direction=desc&per_page=100`,
+    },
     {
       body: [],
       url: `${API}/repos/acme/spec/pulls?state=open&per_page=100&page=1`,

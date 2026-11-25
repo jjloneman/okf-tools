@@ -35,6 +35,7 @@ function makeCommit({
 function makeUpstream(changes: Partial<UpstreamState> = {}): UpstreamState {
   return {
     commits: [],
+    foundHomes: [],
     fullName: "acme/spec",
     headSha: PIN_SHA,
     isArchived: false,
@@ -43,6 +44,8 @@ function makeUpstream(changes: Partial<UpstreamState> = {}): UpstreamState {
     notices: [],
     publicCandidates: [],
     pullRequests: [],
+    releases: [],
+    tags: [],
     version: "0.2",
     ...changes,
   };
@@ -60,23 +63,36 @@ describe("findSignals", () => {
     expect(signals).toStrictEqual([]);
   });
 
-  test("reports that the repo is gone, then any public candidate", () => {
-    // Given - a repo that no longer exists, and a candidate home that is public
+  test("reports that the repo is gone, then any found home and public candidate", () => {
+    // Given - a repo that no longer exists, a repo beside it with a spec, and
+    // a candidate home that is public
     const upstream = makeUpstream({
+      foundHomes: [
+        {
+          linkedFrom: undefined,
+          repo: "acme/sibling",
+          spec: { path: "SPEC.md", version: "0.3" },
+        },
+      ],
       fullName: undefined,
       isArchived: true,
-      publicCandidates: ["acme/next-home"],
+      publicCandidates: [{ repo: "acme/next-home", spec: undefined }],
     });
 
     // When - finding signals
     const signals = findSignals({ pin: PIN, upstream });
 
-    // Then - the gone signal, then the candidate's
+    // Then - the gone signal, then the found home's, then the candidate's
     expect(signals).toStrictEqual([
       {
         key: "gone:acme%2Fspec",
         kind: "gone",
         text: "- **`acme/spec` is gone**, or the workflow's token can no longer see it.",
+      },
+      {
+        key: "sibling:acme%2Fsibling",
+        kind: "sibling",
+        text: "- **New repo [`acme/sibling`](https://github.com/acme/sibling), beside the home, holds a spec:** `SPEC.md` reads version `0.3`.",
       },
       {
         key: "public:acme%2Fnext-home",
@@ -130,10 +146,10 @@ describe("findSignals", () => {
       headSha: HEAD_SHA,
       isArchived: true,
       notices: [
-        { file: "README", line: "Deprecated." },
-        { file: "SPEC", line: "Moved to @someone." },
+        { file: "README", line: "Deprecated.", repos: [] },
+        { file: "SPEC", line: "Moved to @someone.", repos: [] },
       ],
-      publicCandidates: ["acme/next-home"],
+      publicCandidates: [{ repo: "acme/next-home", spec: undefined }],
       pullRequests: [{ number: 4, title: "" }],
       version: "0.3",
     });
@@ -210,12 +226,27 @@ describe("findSignals", () => {
     );
   });
 
+  test("names the spec folder's README in its notice", () => {
+    // Given - a notice in the README beside the spec
+    const upstream = makeUpstream({
+      notices: [{ file: "FOLDER_README", line: "Frozen.", repos: [] }],
+    });
+
+    // When - finding signals
+    const [signal] = findSignals({ pin: PIN, upstream });
+
+    // Then - the folder's README, by name
+    expect(signal?.text).toBe(
+      "- **The spec folder's README gained a line that may be a deprecation notice:** `Frozen.`"
+    );
+  });
+
   test("keeps the same notice key on every run, and a distinct one per file", () => {
     // Given - the same line in two files
     const upstream = makeUpstream({
       notices: [
-        { file: "README", line: "Deprecated." },
-        { file: "SPEC", line: "Deprecated." },
+        { file: "README", line: "Deprecated.", repos: [] },
+        { file: "SPEC", line: "Deprecated.", repos: [] },
       ],
     });
 
@@ -273,6 +304,128 @@ describe("findSignals", () => {
 
     // Then - the one file signal
     expect(signals).toStrictEqual([expected]);
+  });
+
+  test.each([
+    {
+      description: "gained",
+      pinVersion: "0.2",
+      version: "0.3 (draft)",
+    },
+    {
+      description: "lost",
+      pinVersion: "0.3 (Draft)",
+      version: "0.3",
+    },
+  ])(
+    "reports a version line that $description its draft suffix",
+    ({ description, pinVersion, version }) => {
+      // Given - a version line whose draft suffix changed
+      const pin = { ...PIN, version: pinVersion };
+      const upstream = makeUpstream({ version });
+
+      // When - finding signals
+      const signals = findSignals({ pin, upstream });
+
+      // Then - the version signal, then the draft one
+      expect(signals.map((signal) => signal.kind)).toStrictEqual([
+        "version",
+        "draft",
+      ]);
+      expect(signals[1]).toStrictEqual({
+        key: `draft:acme%2Fspec:${encodeURIComponent(version)}`,
+        kind: "draft",
+        text: `- **The version line ${description} its \`(draft)\` suffix.**`,
+      });
+    }
+  );
+
+  test("reports no draft change when both versions are drafts", () => {
+    // Given - a draft pin and a newer draft
+    const pin = { ...PIN, version: "0.2 (draft)" };
+    const upstream = makeUpstream({ version: "0.3 (draft)" });
+
+    // When - finding signals
+    const signals = findSignals({ pin, upstream });
+
+    // Then - only the version signal
+    expect(signals.map((signal) => signal.kind)).toStrictEqual(["version"]);
+  });
+
+  test("reports found homes, releases, tags, and candidates' versions", () => {
+    // Given - a linked home, a sibling, a release with a title and one
+    // untitled, whose tag holds marks that would break a link,
+    // a tag, and candidates at the pin's version, at another, and with none
+    const upstream = makeUpstream({
+      foundHomes: [
+        {
+          linkedFrom: "acme/spec",
+          repo: "acme/moved",
+          spec: { path: "SPEC.md", version: "0.4" },
+        },
+        {
+          linkedFrom: undefined,
+          repo: "acme/sibling",
+          spec: { path: "okf/SPEC.md", version: "0.3" },
+        },
+      ],
+      publicCandidates: [
+        { repo: "acme/same", spec: { path: "okf/SPEC.md", version: "0.2" } },
+        { repo: "acme/newer", spec: { path: "SPEC.md", version: "0.3" } },
+      ],
+      releases: [
+        { name: "OKF v0.3", tag: "v0.3" },
+        { name: "", tag: "rc(1)'!*" },
+      ],
+      tags: ["v0.2"],
+    });
+
+    // When - finding signals
+    const signals = findSignals({ pin: PIN, upstream });
+
+    // Then - one signal each, candidates last
+    expect(signals).toStrictEqual([
+      {
+        key: "linked:acme%2Fmoved",
+        kind: "linked",
+        text: "- **A notice in `acme/spec` links to [`acme/moved`](https://github.com/acme/moved), which holds a spec:** `SPEC.md` reads version `0.4`.",
+      },
+      {
+        key: "sibling:acme%2Fsibling",
+        kind: "sibling",
+        text: "- **New repo [`acme/sibling`](https://github.com/acme/sibling), beside the home, holds a spec:** `okf/SPEC.md` reads version `0.3`.",
+      },
+      {
+        key: "release:acme%2Fspec:v0.3",
+        kind: "release",
+        text: "- **Release [`OKF v0.3`](https://github.com/acme/spec/releases/tag/v0.3) is published** from tag `v0.3`.",
+      },
+      {
+        key: "release:acme%2Fspec:rc(1)'!*",
+        kind: "release",
+        text: "- **Release [`rc(1)'!*`](https://github.com/acme/spec/releases/tag/rc%281%29%27%21%2A) is published** from tag `rc(1)'!*`.",
+      },
+      {
+        key: "tag:acme%2Fspec:v0.2",
+        kind: "tag",
+        text: "- **`acme/spec` has tag `v0.2`**, with no release.",
+      },
+      {
+        key: "public:acme%2Fsame",
+        kind: "public",
+        text: "- **Candidate home [`acme/same`](https://github.com/acme/same) is public.**",
+      },
+      {
+        key: "public:acme%2Fnewer",
+        kind: "public",
+        text: "- **Candidate home [`acme/newer`](https://github.com/acme/newer) is public.**",
+      },
+      {
+        key: "candidate-version:acme%2Fnewer:0.3",
+        kind: "candidate-version",
+        text: "- **Candidate home `acme/newer`'s spec, `SPEC.md`, reads version `0.3`**; the pin reads `0.2`.",
+      },
+    ]);
   });
 });
 

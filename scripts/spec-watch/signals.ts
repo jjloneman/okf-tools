@@ -11,6 +11,8 @@
  */
 import { createHash } from "node:crypto";
 
+import type { FoundHome } from "./homes.ts";
+import type { NoticeFile } from "./notices.ts";
 import type { SpecPin } from "./pin.ts";
 import type { UpstreamState } from "./upstream.ts";
 
@@ -41,13 +43,19 @@ export type Signal = {
 /** What kind of change a signal reports. */
 export type SignalKind =
   | "archived"
+  | "candidate-version"
   | "commits"
+  | "draft"
   | "gone"
+  | "linked"
   | "missing"
   | "notice"
   | "public"
   | "pull-request"
+  | "release"
   | "renamed"
+  | "sibling"
+  | "tag"
   | "version";
 
 /** An issue to open. */
@@ -70,15 +78,31 @@ export type SpecIssue = {
 /** The short phrase each kind of signal gets in a push. */
 const SUMMARIES: Record<SignalKind, string> = {
   archived: "the repo is archived",
+  "candidate-version": "a candidate home's spec has another version",
   commits: "new commits to the spec",
+  draft: "the version line's draft suffix changed",
   gone: "the repo is gone",
+  linked: "a notice links to another spec",
   missing: "the spec's file is missing",
   notice: "a possible deprecation notice",
   public: "a candidate home is public",
   "pull-request": "open pull requests touch the spec",
+  release: "a new release",
   renamed: "the repo was renamed",
+  sibling: "a new repo beside the home holds a spec",
+  tag: "a new tag",
   version: "the version line changed",
 };
+
+/** What an issue calls each file a notice can be in. */
+const NOTICE_FILE_NAMES: Record<NoticeFile, string> = {
+  FOLDER_README: "spec folder's README",
+  README: "README",
+  SPEC: "spec",
+};
+
+/** A version line's draft suffix, such as `0.3 (draft)`. */
+const DRAFT_PATTERN = /\(draft\)$/iu;
 
 /*
  * The marker that carries an issue's signal keys.
@@ -110,11 +134,7 @@ export function findSignals({
 }): Signal[] {
   const { fullName } = upstream;
   const scope = encodeURIComponent(pin.repo);
-  const candidateSignals = upstream.publicCandidates.map((candidate) => ({
-    key: `public:${encodeURIComponent(candidate)}`,
-    kind: "public" as const,
-    text: `- **Candidate home [\`${candidate}\`](https://github.com/${candidate}) is public.**`,
-  }));
+  const candidateSignals = findCandidateSignals({ pin, upstream });
 
   if (fullName === undefined) {
     return [
@@ -123,6 +143,7 @@ export function findSignals({
         kind: "gone",
         text: `- **\`${pin.repo}\` is gone**, or the workflow's token can no longer see it.`,
       },
+      ...upstream.foundHomes.map((home) => findHomeSignal(home)),
       ...candidateSignals,
     ];
   }
@@ -151,7 +172,18 @@ export function findSignals({
     ...upstream.notices.map((notice) => ({
       key: `notice:${hashText(`${pin.repo}\n${notice.file}\n${notice.line}`)}`,
       kind: "notice" as const,
-      text: `- **The ${notice.file === "README" ? "README" : "spec"} gained a line that may be a deprecation notice:** ${toCodeSpan(notice.line)}`,
+      text: `- **The ${NOTICE_FILE_NAMES[notice.file]} gained a line that may be a deprecation notice:** ${toCodeSpan(notice.line)}`,
+    })),
+    ...upstream.foundHomes.map((home) => findHomeSignal(home)),
+    ...upstream.releases.map((release) => ({
+      key: `release:${scope}:${encodeURIComponent(release.tag)}`,
+      kind: "release" as const,
+      text: `- **Release [${toCodeSpan(release.name === "" ? release.tag : release.name)}](https://github.com/${fullName}/releases/tag/${encodeUrlPart(release.tag)}) is published** from tag ${toCodeSpan(release.tag)}.`,
+    })),
+    ...upstream.tags.map((tag) => ({
+      key: `tag:${scope}:${encodeURIComponent(tag)}`,
+      kind: "tag" as const,
+      text: `- **\`${fullName}\` has tag ${toCodeSpan(tag)}**, with no release.`,
     })),
     ...upstream.pullRequests.map((pullRequest) => ({
       key: `pr:${scope}:${pullRequest.number}`,
@@ -241,6 +273,48 @@ export function summarizeSignals(signals: Signal[]): string {
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
 
+/*
+ * Encode upstream text for a URL in a Markdown link.
+ *
+ * - `encodeURIComponent` leaves `(` and `)` alone, and either would end or
+ *   nest the link, so they and the other marks it skips are encoded too.
+ */
+function encodeUrlPart(text: string): string {
+  return encodeURIComponent(text).replaceAll(
+    /[!'()*]/gu,
+    (mark) => `%${mark.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+}
+
+/*
+ * The signals about the candidate homes: each public one, and its spec's
+ * version when it differs from the pin's.
+ */
+function findCandidateSignals({
+  pin,
+  upstream,
+}: {
+  pin: SpecPin;
+  upstream: UpstreamState;
+}): Signal[] {
+  return upstream.publicCandidates.flatMap(({ repo, spec }) => [
+    {
+      key: `public:${encodeURIComponent(repo)}`,
+      kind: "public" as const,
+      text: `- **Candidate home [\`${repo}\`](https://github.com/${repo}) is public.**`,
+    },
+    ...(spec === undefined || spec.version === pin.version
+      ? []
+      : [
+          {
+            key: `candidate-version:${encodeURIComponent(repo)}:${encodeURIComponent(spec.version)}`,
+            kind: "candidate-version" as const,
+            text: `- **Candidate home \`${repo}\`'s spec, \`${spec.path}\`, reads version ${toCodeSpan(spec.version)}**; the pin reads \`${pin.version}\`.`,
+          },
+        ]),
+  ]);
+}
+
 /** The signals about the spec's commits: new commits since the pin. */
 function findCommitSignals({
   fullName,
@@ -301,16 +375,50 @@ function findFileSignals({
     return [];
   }
 
+  const versionSignal: Signal = {
+    key: `version:${scope}:${encodeURIComponent(version ?? "none")}`,
+    kind: "version",
+    text:
+      version === undefined
+        ? `- **\`${pin.path}\` has no \`**Version …**\` line**; the pin reads \`${pin.version}\`.`
+        : `- **The version line reads ${toCodeSpan(version)}**; the pin reads \`${pin.version}\`.`,
+  };
+  const isDraft = version !== undefined && DRAFT_PATTERN.test(version);
+
+  if (version === undefined || isDraft === DRAFT_PATTERN.test(pin.version)) {
+    return [versionSignal];
+  }
+
   return [
+    versionSignal,
     {
-      key: `version:${scope}:${encodeURIComponent(version ?? "none")}`,
-      kind: "version",
-      text:
-        version === undefined
-          ? `- **\`${pin.path}\` has no \`**Version …**\` line**; the pin reads \`${pin.version}\`.`
-          : `- **The version line reads ${toCodeSpan(version)}**; the pin reads \`${pin.version}\`.`,
+      key: `draft:${scope}:${encodeURIComponent(version)}`,
+      kind: "draft",
+      text: `- **The version line ${isDraft ? "gained" : "lost"} its \`(draft)\` suffix.**`,
     },
   ];
+}
+
+/*
+ * The signals about a repo outside the pin that holds a spec: linked from a
+ * notice, or new beside the home.
+ */
+function findHomeSignal(home: FoundHome): Signal {
+  const { linkedFrom, repo, spec } = home;
+  const link = `[\`${repo}\`](https://github.com/${repo})`;
+  const holds = `\`${spec.path}\` reads version ${toCodeSpan(spec.version)}.`;
+
+  return linkedFrom === undefined
+    ? {
+        key: `sibling:${encodeURIComponent(repo)}`,
+        kind: "sibling",
+        text: `- **New repo ${link}, beside the home, holds a spec:** ${holds}`,
+      }
+    : {
+        key: `linked:${encodeURIComponent(repo)}`,
+        kind: "linked",
+        text: `- **A notice in \`${linkedFrom}\` links to ${link}, which holds a spec:** ${holds}`,
+      };
 }
 
 /** A short, stable hash of a text, for a key that must not hold the text. */
