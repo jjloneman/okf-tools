@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: What `okf guide` prints, and where the agent rules are written
-description: "`okf guide` prints the record rules and each command with when an agent may run it, as unprefixed Markdown from the installed version; the rules are one text in `src/guide.ts`, shared with the `okf init` block and the README, and `okf verify --help` points at the guide."
+description: "`okf guide` prints the record rules, each command with when an agent may run it, and the skills `okf init` installs, as unprefixed Markdown from the installed version; the rules are one text in `src/guide.ts`, shared with the `okf init` block and the README, and `okf verify --help` points at the guide."
 tags:
   - agents
   - cli
@@ -10,7 +10,7 @@ tags:
   - instructions
   - selection
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:56:09Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T23:28:20Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written
@@ -25,7 +25,7 @@ As of 2026-11-25, from `src/guide.ts`, `src/agent-block.ts`, `src/options.ts`, `
   - `okf verify --yes` signs as the configured `okf.verifiedBy`, the person, so an agent never passes `--by` with its own name.
   - Read-only commands (`okf status`, `okf diff`, `okf init --check`, `okf guide`) may run whenever an agent likes; `okf verify --yes` only when the person asks; `okf init` only when the person asks to set up or refresh; `okf verify` without `--yes` is the person's.
   - It reads nothing, needs no repo or config, takes no arguments but `--help`, and exits `0`; an argument is a usage error that exits `1`.
-  - It lists no skills yet: none ship, and #51 adds their lines when they do.
+  - It ends with each skill `okf init` installs and when to load it, built from the skills' own descriptions (#51); see [Which skills okf-tools ships](skills.md).
 - **The guide prints with no `[okf]` prefix,** like `okf status --format json`, so it reads, and pastes, as the Markdown it is. Its `--help` and usage errors are prefixed like any other line.
   - **Rejected:** prefixing every line, which breaks the Markdown an agent reads.
 - **The intro and the rules are one text, `RECORDS_INTRO` and `RECORD_RULES` in `src/guide.ts`.** The guide prints them, `AGENT_BLOCK` is built from them, and the README's Agents section quotes the block, with tests keeping all three the same.
