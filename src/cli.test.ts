@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -18,6 +19,7 @@ import type { TestRepo } from "#test/repo";
 
 import {
   createTestRepo,
+  DISK_SPELLING,
   draftRecord,
   NEAR_MISSES,
   record,
@@ -1118,6 +1120,225 @@ describe("run --yes, given a symlink in the repo", () => {
         `[okf-verify] The bundle ${path.join(repo.root, "docs/decisions")} is a symlink, or inside one, to ${path.join(repo.root, "real")}. ${LINK_EXPLANATION}`,
       ],
     });
+    expect(repo.git("status", "--porcelain")).toBe("");
+  });
+});
+
+describe("run --yes, given another spelling of a path", () => {
+  /** The record's name, decomposed, as some tools write it. */
+  const DECOMPOSED = "docs/decisions/cafe\u0301.md";
+
+  /** The same name, composed, as git on macOS prints it. */
+  const COMPOSED = "docs/decisions/caf\u00e9.md";
+
+  let outsideDir: string;
+
+  beforeEach(() => {
+    outsideDir = realpathSync(mkdtempSync(path.join(tmpdir(), "okf-outside-")));
+    mkdirSync(path.join(repo.root, "docs/references"), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(outsideDir, { force: true, recursive: true });
+  });
+
+  test("signs a record when the cwd reaches the repo through a symlink", async () => {
+    // Given - a symlink to the repo, and a draft
+    const link = path.join(outsideDir, "repo-link");
+
+    symlinkSync(repo.root, link);
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+
+    // When - verifying it from the linked path
+    const code = await run({
+      args: ["--yes", "docs/decisions/a.md"],
+      cwd: link,
+      isInteractive: false,
+    });
+
+    // Then - signed and committed at its path in the repo
+    expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+    expect(repo.git("status", "--porcelain")).toBe("");
+    expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+      "docs/decisions/a.md\n"
+    );
+  });
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "signs a record from a cwd spelled in another case",
+    async () => {
+      // Given - a draft, and the repo root spelled in upper case
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+
+      // When - verifying it from that spelling
+      const code = await run({
+        args: ["--yes", "docs/decisions/a.md"],
+        cwd: repo.root.toUpperCase(),
+        isInteractive: false,
+      });
+
+      // Then - signed and committed
+      expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+      expect(repo.git("status", "--porcelain")).toBe("");
+    }
+  );
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "finds a changed record when the bundle is configured in another case",
+    async () => {
+      // Given - a bundle configured in another case, and a new draft in it
+      repo.write(
+        "package.json",
+        JSON.stringify({
+          okf: { bundles: ["docs/Decisions"], verifiedBy: "human:jjloneman" },
+        })
+      );
+      repo.commitAll("configure the bundle");
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+
+      // When - verifying every changed record
+      const code = await runIn(["--yes", "--changed"]);
+
+      // Then - found under git's spelling, signed and committed
+      expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+        "docs/decisions/a.md\n"
+      );
+    }
+  );
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "commits a record named, with its bundle, in another case",
+    async () => {
+      // Given - a committed draft
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+      repo.commitAll("add a");
+
+      // When - naming the bundle and the record in another case
+      const code = await runIn([
+        "--yes",
+        "--bundle",
+        "docs/Decisions",
+        "DOCS/Decisions/A.md",
+      ]);
+
+      // Then - signed and committed at the path git knows
+      expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.read("docs/decisions/a.md")).toContain("status: stable");
+    }
+  );
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "refuses the bundle's index.md named in another case",
+    async () => {
+      // Given - a bundle with an index
+      repo.write("docs/decisions/index.md", draftRecord("Index"));
+
+      // When - naming the index in another case
+      const code = await runIn(["--yes", "docs/decisions/INDEX.md"]);
+
+      // Then - refused as not a record
+      expect({ code, errors }).toStrictEqual({
+        code: 1,
+        errors: [
+          "[okf-verify] docs/decisions/INDEX.md isn't a record in docs/decisions, docs/references.",
+        ],
+      });
+    }
+  );
+
+  test.skipIf(!DISK_SPELLING.isCaseInsensitive)(
+    "keeps git's spelling when the disk's differs only in case",
+    async () => {
+      // Given - a committed draft whose folder was renamed only in case on
+      // disk, so git still spells it as configured
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+      repo.commitAll("add a");
+      renameSync(
+        path.join(repo.root, "docs/decisions"),
+        path.join(repo.root, "docs/Decisions")
+      );
+      repo.write("docs/decisions/a.md", `${draftRecord("A")}\nMore.\n`);
+
+      // When - verifying every changed record
+      const code = await runIn(["--yes", "--changed"]);
+
+      // Then - found, signed and committed under git's spelling
+      expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+      expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+        "docs/decisions/a.md\n"
+      );
+    }
+  );
+
+  test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
+    "finds a changed record in a bundle whose folder is decomposed",
+    async () => {
+      // Given - a bundle configured composed, its folder decomposed on disk
+      repo.write(
+        "package.json",
+        JSON.stringify({
+          okf: { bundles: ["docs/caf\u00e9"], verifiedBy: "human:jjloneman" },
+        })
+      );
+      repo.commitAll("configure the bundle");
+      repo.write("docs/cafe\u0301/a.md", draftRecord("A"));
+
+      // When - verifying every changed record
+      const code = await runIn(["--yes", "--changed"]);
+
+      // Then - found, signed and committed
+      expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+      expect(repo.git("status", "--porcelain")).toBe("");
+    }
+  );
+
+  test("commits a record whose name is decomposed Unicode", async () => {
+    // Given - a committed draft whose file name is decomposed
+    repo.write(DECOMPOSED, draftRecord("Cafe"));
+    repo.commitAll("add cafe");
+
+    // When - naming it as the disk spells it
+    const code = await runIn(["--yes", DECOMPOSED]);
+
+    // Then - signed and committed
+    expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+    expect(repo.git("status", "--porcelain")).toBe("");
+  });
+
+  test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
+    "commits a decomposed record named in composed Unicode",
+    async () => {
+      // Given - a committed draft whose file name is decomposed
+      repo.write(DECOMPOSED, draftRecord("Cafe"));
+      repo.commitAll("add cafe");
+
+      // When - naming it composed, as typed on most keyboards
+      const code = await runIn(["--yes", COMPOSED]);
+
+      // Then - signed and committed
+      expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+      expect(repo.git("status", "--porcelain")).toBe("");
+    }
+  );
+
+  test("commits an uncommitted sign-off on a decomposed record", async () => {
+    // Given - a committed draft whose name is decomposed, signed off on disk
+    repo.write(DECOMPOSED, draftRecord("Cafe"));
+    repo.commitAll("add cafe");
+    await runIn(["--yes", "--no-commit", DECOMPOSED]);
+    infos.length = 0;
+
+    // When - naming it again, as the disk spells it
+    const code = await runIn(["--yes", DECOMPOSED]);
+
+    // Then - the sign-off is committed as it is
+    expect({ code, errors }).toStrictEqual({ code: 0, errors: [] });
+    expect(infos[0]).toBe(
+      `[okf-verify] committing ${DECOMPOSED}: already verified, not yet committed`
+    );
     expect(repo.git("status", "--porcelain")).toBe("");
   });
 });

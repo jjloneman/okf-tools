@@ -180,6 +180,37 @@ describe("runInteractive", () => {
     }
   );
 
+  test("counts a record named in decomposed Unicode as changed", async () => {
+    // Given - a new draft whose file name is decomposed, as some tools write
+    repo.write("docs/decisions/cafe\u0301.md", draftRecord("Cafe"));
+    vi.mocked(select).mockResolvedValue("changed");
+
+    // When - running and picking the changed records
+    await runInteractive(context());
+
+    // Then - it is the one changed record listed, of the four
+    expect(vi.mocked(multiselect).mock.calls[0]?.[0].options).toHaveLength(1);
+  });
+
+  test("warns about other changes to a record named in decomposed Unicode", async () => {
+    // Given - a committed draft whose name is decomposed, edited since
+    repo.write("docs/decisions/cafe\u0301.md", draftRecord("Cafe"));
+    repo.commitAll("add cafe");
+    repo.write(
+      "docs/decisions/cafe\u0301.md",
+      `${draftRecord("Cafe")}\nMore.\n`
+    );
+    vi.mocked(select).mockResolvedValue("changed");
+
+    // When - running and signing it off
+    await runInteractive(context());
+
+    // Then - warned that the commit takes the other change too
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining("These also have other uncommitted changes")
+    );
+  });
+
   test("skips the scope question when every record changed", async () => {
     // Given - one bundle whose only record changed
     repo.write("docs/references/c.md", `${draftRecord("C")}\nMore.\n`);

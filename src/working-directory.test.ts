@@ -15,7 +15,10 @@ import type { TestRepo } from "#test/repo";
 import { createTestRepo, useTestRepo } from "#test/repo";
 
 import { findRepoRoot } from "./git.ts";
-import { resolveWorkingDirectory } from "./working-directory.ts";
+import {
+  resolveWorkingDirectory,
+  spellLikeRepoRoot,
+} from "./working-directory.ts";
 
 /** The folders a test picks `cwd`, `INIT_CWD` and the package root from. */
 type Folders = {
@@ -187,6 +190,38 @@ describe("resolveWorkingDirectory through a symlink", () => {
 
       // Then - INIT_CWD, since both name the same folder
       expect(resolved).toBe(path.join(repo.root, "docs"));
+    } finally {
+      rmSync(linked);
+    }
+  });
+});
+
+describe("spellLikeRepoRoot", () => {
+  test("keeps a folder already inside the repo as given", () => {
+    // Given - a subfolder spelled as git spells the root
+    const cwd = path.join(repo.root, "docs");
+
+    // When - spelling it
+    const spelled = spellLikeRepoRoot({ cwd, repoRoot: repo.root });
+
+    // Then - unchanged
+    expect(spelled).toBe(cwd);
+  });
+
+  test("resolves a folder that reaches the repo through a symlink", () => {
+    // Given - a link to the repo, and its docs folder through the link
+    const linked = `${repo.root}-linked`;
+    symlinkSync(repo.root, linked);
+
+    try {
+      // When - spelling the folder through the link
+      const spelled = spellLikeRepoRoot({
+        cwd: path.join(linked, "docs"),
+        repoRoot: repo.root,
+      });
+
+      // Then - its real path, inside the repo
+      expect(spelled).toBe(path.join(repo.root, "docs"));
     } finally {
       rmSync(linked);
     }

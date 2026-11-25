@@ -14,7 +14,7 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
-import { listChangedPaths, listDirtyPaths } from "./git.ts";
+import { listChangedPaths, listDirtyPaths, toPathKey } from "./git.ts";
 import { printError, printInfo } from "./output.ts";
 import { describeState, needsSignOff } from "./records.ts";
 import { loadCandidate, loadCandidatesAt, resolveRecordPaths } from "./repo.ts";
@@ -37,7 +37,8 @@ type LoadResult =
       isOk: true;
 
       /**
-       * What `git status` reported while loading, when it was asked.
+       * What `git status` reported while loading, when it was asked, each
+       * path as its `toPathKey`.
        *
        * @example `new Set(["docs/decisions/a.md"])`
        */
@@ -212,11 +213,19 @@ function loadChanged(context: RunContext): LoadResult {
     );
   }
 
-  // Bundle order, then file name in code-unit order, as `loadCandidates`
-  // lists them for the interactive checklist.
+  /*
+   * Bundle order, then file name in code-unit order, as `loadCandidates`
+   * lists them for the interactive checklist.
+   *
+   * - Folders are compared by `toPathKey`, since git's spelling of a name can
+   *   differ from the disk's in Unicode form.
+   */
   const filePaths = bundleDirs.flatMap((bundleDir) =>
     [...paths]
-      .filter((changedPath) => path.posix.dirname(changedPath) === bundleDir)
+      .filter(
+        (changedPath) =>
+          toPathKey(path.posix.dirname(changedPath)) === toPathKey(bundleDir)
+      )
       .sort()
   );
 
@@ -297,5 +306,7 @@ function readChosenStatus(params: {
     shouldSkipNew: true,
   });
 
-  return dirty.isOk ? { isOk: true, value: new Set(dirty.value) } : dirty;
+  return dirty.isOk
+    ? { isOk: true, value: new Set(dirty.value.map(toPathKey)) }
+    : dirty;
 }

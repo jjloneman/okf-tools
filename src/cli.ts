@@ -13,6 +13,7 @@ import { runNonInteractive } from "./non-interactive.ts";
 import { parseCliArgs, USAGE } from "./options.ts";
 import { describeError, printError, printInfo } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
+import { spellLikeRepoRoot } from "./working-directory.ts";
 
 /** What a run of the CLI is given by the process that starts it. */
 export type RunParams = {
@@ -24,7 +25,9 @@ export type RunParams = {
   args: readonly string[];
 
   /**
-   * The directory the command was run from.
+   * The directory the command was run from, in any spelling the file system
+   * resolves to it: through a symlink, or in another case or Unicode form
+   * where the disk accepts one.
    *
    * @example "/repo"
    */
@@ -98,14 +101,15 @@ function buildContext(params: {
   cwd: string;
   options: CliOptions;
 }): { isOk: false; reason: string } | { isOk: true; value: RunContext } {
-  const { cwd, options } = params;
-  const root = findRepoRoot(cwd);
+  const { options } = params;
+  const root = findRepoRoot(params.cwd);
 
   if (!root.isOk) {
     return root;
   }
 
   const repoRoot = root.value;
+  const cwd = spellLikeRepoRoot({ cwd: params.cwd, repoRoot });
   const packageJsonPath = path.join(repoRoot, "package.json");
 
   const config = readOkfConfig(

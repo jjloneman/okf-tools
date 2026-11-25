@@ -10,6 +10,7 @@
 import { execFileSync } from "node:child_process";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -20,6 +21,25 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach } from "vitest";
+
+/** Which other spellings of a name a disk resolves to the same file. */
+export type DiskSpelling = {
+  /**
+   * Whether a name in another case names the same file, as on macOS and
+   * Windows by default.
+   *
+   * @example true
+   */
+  isCaseInsensitive: boolean;
+
+  /**
+   * Whether a name in another Unicode form (NFC or NFD) names the same
+   * file, as on macOS.
+   *
+   * @example true
+   */
+  isNormalizationInsensitive: boolean;
+};
 
 /** A pre-commit hook that prints `output` and fails, after running `script`. */
 export type FailingHook = {
@@ -174,6 +194,12 @@ export const VERIFIED_BY = "human:jjloneman";
 const BODY = "\n# Title\n\nBody text.\n";
 
 /**
+ * Which other spellings of a name the scratch disk resolves to the same file,
+ * probed once, so a test of one can skip on a disk that doesn't.
+ */
+export const DISK_SPELLING: DiskSpelling = probeDiskSpelling();
+
+/**
  * Create a repo on `main` with one commit holding a `package.json`.
  *
  * - `packageJson` is written as given, so a test can pass invalid JSON.
@@ -319,4 +345,21 @@ export function verifiedRecord(params: { by: string; title: string }): string {
     "generated: { by: claude-code/2.1.316, at: 2026-10-01T15:00:00Z }",
     `verified: { by: ${by}, at: 2026-10-02T13:30:00Z }`,
   ]);
+}
+
+/** Probe a scratch folder for the spellings its disk resolves to one file. */
+function probeDiskSpelling(): DiskSpelling {
+  const dir = mkdtempSync(path.join(tmpdir(), "okf-disk-"));
+
+  try {
+    writeFileSync(path.join(dir, "probe"), "");
+    writeFileSync(path.join(dir, "caf\u00e9"), "");
+
+    return {
+      isCaseInsensitive: existsSync(path.join(dir, "PROBE")),
+      isNormalizationInsensitive: existsSync(path.join(dir, "cafe\u0301")),
+    };
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
 }
