@@ -9,8 +9,8 @@ tags:
   - status
   - timestamps
   - validation
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:07:31Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -28,6 +28,7 @@ As of 2026-11-25, from `src/frontmatter/` and `src/index.ts`:
   - **Rejected:** a time with no zone, which okf-tools reads as UTC but ISO 8601 and JavaScript read as local time.
   - **Rejected:** basic form (`20261002T133000Z`), week dates, and ordinal dates. They're valid ISO 8601, but no record uses them and the CLI never writes them.
   - **Rejected:** a branded `Timestamp` type. It would break every caller passing a string, and still not check the value.
+- **`verifyRecord` takes an optional `style`** for a new entry, from the exported `ENTRY_STYLES` (`match`, `inline`, `block`), and `match` when it's left out, so existing callers keep working; see [How okf-verify writes and commits records](writes.md) (issue #48).
 - **Every refusal carries a `kind`** beside its `reason`, from the exported `REFUSAL_KINDS`: `invalidParams` (the signer or the timestamp), `noFrontmatter`, `invalidYaml`, or `unsupportedLayout` (valid, but it needs a hand edit).
 - **`findFrontmatterProblem` and `findEditProblem` are exported**, so a tool can tell frontmatter that isn't valid YAML from a readable record, since `readRecordSummary` still reads what it can of either.
 - **`RecordSummary.writtenStatus`** holds the `status` as written, so an absent, empty, or null status (`undefined`) differs from one OKF doesn't define, such as `wip`. `status` keeps its meaning: a status OKF defines, or `undefined`.
