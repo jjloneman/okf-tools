@@ -110,7 +110,15 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 The OKF spec has no releases or tags, so `spec-watch.yml` checks it daily against the pin in `spec/upstream.json`: the watched `repo`, the spec's `path`, the `sha` of the last commit to it that okf-tools follows, its `version`, and the `candidates` that may become its next home.
 
-- **It reports:** new commits to the spec, a changed `**Version …**` line, the spec's file going missing, the repo archived, renamed or gone, new README or spec lines that may announce a deprecation, open upstream PRs that touch the spec, and candidates that are public.
+- **It reports:**
+  - new commits to the spec, a changed `**Version …**` line, and a `(draft)` suffix gained or lost;
+  - the spec's file going missing, and the repo archived, renamed or gone;
+  - new lines that may announce a deprecation or a move, in the root README, the README in the spec's own folder, or the spec;
+  - each repo such a line's paragraph links to that holds a spec with a version line, following each one's own README notices in turn, up to ten repos a run; a repo GitHub won't serve is skipped, and tried again next run;
+  - repos the home's owner created since the pin's commit that hold a spec, from the owner's hundred newest, or any of those when the home is gone or the pin isn't among its last hundred commits;
+  - the home's GitHub releases, and its tags that no release is published from;
+  - open upstream PRs that touch the spec;
+  - candidates that are public, and each one's spec version when it differs from the pin's.
 - **It opens one issue per run**, titled with the short SHA of the newest commit to the spec, listing only what no earlier spec-watch issue reported, open or closed. Each issue records its findings' keys in a `<!-- spec-watch: … -->` marker, so keep that line when editing one.
 - **It sends an ntfy push** to the topic in the `NTFY_TOPIC` Actions secret; without the secret it sends none. The topic is its only access control, so never echo it or write it in the repo.
 - **The PR that closes its issue bumps the pin:** set `sha` and `version` to the commit okf-tools now follows, and re-pin every spec link to the same commit (see [Purpose of this repo](#-purpose-of-this-repo)). To stop watching a candidate, or to watch the spec's new home, edit `candidates` or `repo` and `path`.
