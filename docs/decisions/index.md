@@ -6,15 +6,16 @@ okf_version: "0.2"
 
 - [How a record's tags are laid out](tags-layout.md) - okf-tools recommends a block list for `tags`, one `- tag` per line, since Prettier rewraps a long one-line flow list; it reads every valid layout, and recommends block only for new and fixed records.
 - [How changelog lines are built](changelog-formatter.md) - `scripts/changelog.ts` prefixes each changeset's summary with the gitmoji and scope of the squash commit that added it, under changesets' own bump-type headings; it's tested but never published, and runs under Node's type stripping.
+- [How okf index keeps an index.md in step with its records](index-sync.md) - `okf index` rewrites each top-level list line that links to a record from its title and description, sorted by title within its run, adds missing records, drops gone ones, and keeps a tag index between markers; everything else in the file stays as written, and `--check` fails when an index differs.
 - [How okf status reports a bundle's trust state](status-report.md) - `okf status` lists every record under the first group that fits, changed, draft, never signed off, stale, or settled, judged against the signer's sign-off; it writes nothing, exits `0` whatever it finds, and prints a versioned JSON shape for programs.
 - [How okf-tools is distributed](distribution.md) - A public package on the npm registry, installed as an exact-pinned dev dependency; not a private package, GitHub Packages, a git dependency, or a global CLI.
 - [How okf-tools lays out its commands](command-layout.md) - One `okf` binary takes the command as its first argument, starting with `okf verify`; `okf-verify` stays as an alias that runs `okf verify` and prints under its own name.
 - [How okf-verify writes and commits records](writes.md) - Edits only an allowlist of layouts, writing a new entry in the record's own style, never through a symlink; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 - [How product ideas are found and decided](product-review.md) - A `/product-review` skill, run only on the owner's go-ahead, opens one `💡 idea` issue of at most three ranked ideas; an ntfy push every fourth Monday says one is due, and a rejected idea gets a one-line reason, closing its issue as not planned when no idea was taken.
-- [What a re-verification shows as changed](sign-off-diff.md) - The diff from the newest commit that set the signer's current `verified.at` in a record not generated again after it, to the record on disk; with no such commit, or no sign-off, the whole record; shown before the interactive confirm and by `okf diff`.
 - [What `--yes` verifies, and how it exits](yes-selection.md) - `--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified and committed, and exits `0` worked, `1` failed, `2` nothing to verify.
 - [What `okf guide` prints, and where the agent rules are written](guide.md) - `okf guide` prints the record rules and each command with when an agent may run it, as unprefixed Markdown from the installed version; the rules are one text in `src/guide.ts`, shared with the `okf init` block and the README, and `okf verify --help` points at the guide.
 - [What `okf init` writes, and how it keeps the agent block current](init.md) - `okf init` writes the `okf` block of `package.json` and a block of agent rules between two marker lines in `AGENTS.md`, rewriting only the text between them; malformed markers are refused, and `--check` fails when a block is missing or stale.
+- [What a re-verification shows as changed](sign-off-diff.md) - The diff from the newest commit that set the signer's current `verified.at` in a record not generated again after it, to the record on disk; with no such commit, or no sign-off, the whole record; shown before the interactive confirm and by `okf diff`.
 - [What a record counts as changed against](base-ref.md) - The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 - [What the library accepts, and how it refuses](library.md) - `verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; and a summary's `writtenStatus` tells an absent status from one OKF doesn't define.
 - [Which actors can sign a record](actor.md) - `okf.verifiedBy` or `--by` must be an OKF actor YAML reads back as a plain string: it starts with a letter, has a `:` or `/` after it, and holds no whitespace, quotes, `#`, or flow indicators; there is no default.
@@ -25,7 +26,7 @@ okf_version: "0.2"
 
 # About this bundle
 
-This directory is an [Open Knowledge Format v0.2](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case.
+This directory is an [Open Knowledge Format v0.2](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) bundle of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case. `pnpm okf:index` rewrites those lines from each record's frontmatter.
 
 Each decision opens with YAML frontmatter:
 
@@ -89,6 +90,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - `json` — Output for programs to read, and how its shape is versioned.
 - `github-actions` — Workflows and how their runs are approved.
 - `guidance` — What `okf guide` prints for agents, and where its text comes from.
+- `index` — How a bundle's `index.md` lists its records and tags.
 - `instructions` — The block of agent rules `okf init` keeps in a repo's instruction files.
 - `links` — How docs and records link to the spec and to each other.
 - `node` — Node.js versions and features the tool relies on.
