@@ -15,8 +15,15 @@
  */
 import path from "node:path";
 
+import type { BodyLine } from "./markdown.ts";
+
 import { findMarkedBlock } from "./agent-block.ts";
-import { splitFrontmatter } from "./frontmatter/shared.ts";
+import {
+  findBodyStart,
+  hasScheme,
+  maskFences,
+  splitLines,
+} from "./markdown.ts";
 
 /** A record as an index lists it, read from its frontmatter. */
 export type IndexRecord = {
@@ -121,23 +128,6 @@ export type SyncIndexParams = {
    * @example `"---\nokf_version: \"0.2\"\n---\n\n# Decisions\n"`
    */
   text: string;
-};
-
-/** A line of the index's body, apart from its line break. */
-type BodyLine = {
-  /**
-   * The line without its line break.
-   *
-   * @example "- [A](a.md) - The first."
-   */
-  content: string;
-
-  /**
-   * Its line break: `\n`, `\r\n`, or empty for a last line without one.
-   *
-   * @example `"\n"`
-   */
-  ending: string;
 };
 
 /** A piece of the body: a line kept as is, or a run of record lines. */
@@ -281,9 +271,6 @@ type RecordItem = {
 /** The default list marker and separator, for an index with no record line. */
 const DEFAULT_STYLE = { bullet: "-", indent: "", separator: " - " } as const;
 
-/** A code fence's opening line: three or more backticks or tildes. */
-const FENCE_LINE = /^ {0,3}(?<fence>`{3,}|~{3,})/u;
-
 /** An ATX heading, which a first list of records is added under. */
 const HEADING_LINE = /^ {0,3}#{1,6}(?:[\t ]|$)/u;
 
@@ -297,9 +284,6 @@ const ITEM_LINE =
 /** Any list item, nested or numbered, opening with a link: its target. */
 const LINKED_LINE =
   /^[\t ]*(?:[*+-]|\d{1,9}[.)])[\t ]+\[(?:\\.|[^\\\]])*\]\((?<target><[^<>\n]*>|[^\s()]+)\)/u;
-
-/** A link target with a scheme, such as `https:` or `mailto:`. */
-const SCHEME = /^[a-z][\d+.a-z-]*:/iu;
 
 /** A separator at the start of what follows the link, such as ` - `. */
 const SEPARATOR = /^[\t ]+[:–—-][\t ]+|^:[\t ]+/u;
@@ -485,22 +469,6 @@ function escapeLabel(title: string): string {
 }
 
 /**
- * Find where the body starts: past the frontmatter's closing fence line, or
- * past a byte order mark, which belongs to the file and not its first line.
- */
-function findBodyStart(text: string): number {
-  const block = splitFrontmatter(text);
-
-  if (block === undefined) {
-    return text.startsWith("﻿") ? 1 : 0;
-  }
-
-  const fenceEnd = text.indexOf("\n", block.end);
-
-  return fenceEnd === -1 ? text.length : fenceEnd + 1;
-}
-
-/**
  * List every path a list line links to, folded to lower case, outside fenced
  * code and the tag index: top-level or nested, bulleted or numbered.
  */
@@ -535,25 +503,6 @@ function listLinkedKeys(params: {
   }
 
   return keys;
-}
-
-/**
- * Blank out the lines of fenced code, keeping every offset, so nothing
- * quoted in it is read as the index's own.
- */
-function maskFences(body: string): string {
-  let fence: string | undefined;
-
-  return splitLines(body)
-    .map((line) => {
-      const fenceMark = FENCE_LINE.exec(line.content)?.groups?.fence;
-      const isFenced = fence !== undefined || fenceMark !== undefined;
-
-      fence = trackFence({ fence, fenceMark, line });
-
-      return `${isFenced ? " ".repeat(line.content.length) : line.content}${line.ending}`;
-    })
-    .join("");
 }
 
 /**
@@ -726,7 +675,7 @@ function resolveTarget(params: {
   const target = params.target.replace(/^<(?<inner>.*)>$/u, "$<inner>");
   const filePart = target.replace(/[#?].*$/u, "");
 
-  if (filePart === "" || filePart.startsWith("/") || SCHEME.test(filePart)) {
+  if (filePart === "" || filePart.startsWith("/") || hasScheme(filePart)) {
     return undefined;
   }
 
@@ -761,19 +710,6 @@ function sortRecords<T>(params: {
     }
 
     return leftRecord.path < rightRecord.path ? -1 : 1;
-  });
-}
-
-/** Split text into lines, each with its own line break. */
-function splitLines(text: string): BodyLine[] {
-  if (text === "") {
-    return [];
-  }
-
-  return text.split(/(?<=\n)/u).map((line) => {
-    const ending = /\r?\n$/u.exec(line)?.[0] ?? "";
-
-    return { content: line.slice(0, line.length - ending.length), ending };
   });
 }
 
@@ -820,31 +756,6 @@ function toTarget(params: { indexPath: string; recordPath: string }): string {
     .replaceAll("?", "%3F");
 
   return /[\s()<>]/u.test(target) ? `<${target}>` : target;
-}
-
-/**
- * Follow fenced code, so a link inside it is never taken for a record line.
- *
- * @returns the open fence after this line, or `undefined` once it closes.
- */
-function trackFence(params: {
-  fence: string | undefined;
-  fenceMark: string | undefined;
-  line: BodyLine;
-}): string | undefined {
-  const { fence, fenceMark, line } = params;
-
-  if (fence === undefined) {
-    return fenceMark;
-  }
-
-  // A closing fence is the same character, at least as long, alone.
-  const isClosing =
-    fenceMark?.startsWith(fence.charAt(0)) === true &&
-    fenceMark.length >= fence.length &&
-    line.content.trim() === fenceMark;
-
-  return isClosing ? undefined : fence;
 }
 
 /** Write a record's line from its frontmatter, in the line's own style. */
