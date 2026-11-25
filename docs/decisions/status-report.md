@@ -14,10 +14,10 @@ tags:
   - verification
 sources:
   - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:56:23Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
 ---
 
 # How okf status reports a bundle's trust state
@@ -70,6 +70,6 @@ As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/rep
 - [Who verifies a record](who-verifies.md)
 - [Which actors can sign a record](actor.md)
 
-[^okf-spec]: OKF v0.2 §5.5, `stale_after`: an absolute instant, stale when `now >= stale_after`.
+[^okf-spec]: OKF v0.3 §5.5, `stale_after`: an absolute instant, stale when `now >= stale_after`.
 
-[^okf-v03]: OKF v0.3 §5.3, Trust tiers, and §7, which gives only the `human:` scheme the human-reviewed tier. okf-tools still follows v0.2, so the spec isn't linked here; a link moves with the pin.
+[^okf-v03]: OKF v0.3 §5.3, Trust tiers, and §7, which gives only the `human:` scheme the human-reviewed tier.

@@ -10,10 +10,10 @@ tags:
   - verification
 sources:
   - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:52:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -45,4 +45,4 @@ As of 2026-11-11, from `src/bin.ts`, `src/cli.ts`, `src/options.ts`, and the REA
 - An agent that verifies unasked is breaking documented guidance, not working around a guard; the guidance lives where agents read it.
 - A later GitHub Actions approval flow can call `okf-verify --yes --by <approver> <paths>` with no new mode.
 
-[^okf-spec]: OKF v0.2's trust tiers derive from the `verified` field: unverified, machine-confirmed, or human-reviewed.
+[^okf-spec]: OKF v0.3 §5.3's trust tiers derive from the current `verified` events: unverified, machine-confirmed, or human-reviewed.

@@ -13,10 +13,10 @@ tags:
   - symlinks
 sources:
   - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:38:56Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
 ---
 
 # Which files in a bundle are records
@@ -60,4 +60,4 @@ As of 2026-11-25, from `src/repo.ts` and `src/config.ts`:
 
 - Issue #42.
 
-[^okf-spec]: OKF v0.2 §3, the bundle layout, §3.1, the reserved file names, and §9, `log.md` at any level of the hierarchy.
+[^okf-spec]: OKF v0.3 §3, the bundle layout, §3.1, the reserved file names, and §9, `log.md` at any level of the hierarchy.
