@@ -341,6 +341,7 @@ describe.each(INVOCATIONS)("as $command", (current) => {
       expect(runInteractive).toHaveBeenCalledWith({
         bundleDirs: ["docs/decisions", "docs/references"],
         cwd: path.join(repo.root, "docs"),
+        excludeGlobs: [],
         output: {
           error: expect.any(Function) as unknown,
           info: expect.any(Function) as unknown,
@@ -407,6 +408,33 @@ describe.each(INVOCATIONS)("as $command", (current) => {
         `${invocation.prefix} skipped docs/decisions/b.md: already verified, unchanged`
       );
       expect(infos.at(-1)).toMatch(prefixed(/committed [0-9a-f]+$/u));
+    });
+
+    test("--changed verifies a changed record in a folder, skipping excluded ones", async () => {
+      // Given - nested changes, one in a folder the config excludes
+      writeFileSync(
+        path.join(repo.root, "package.json"),
+        JSON.stringify({
+          okf: {
+            bundles: ["docs/decisions", "docs/references"],
+            exclude: ["docs/decisions/drafts"],
+            verifiedBy: "human:jjloneman",
+          },
+        })
+      );
+      repo.write("docs/decisions/api/e.md", draftRecord("E"));
+      repo.write("docs/decisions/api/log.md", "# Log\n");
+      repo.write("docs/decisions/drafts/f.md", "---\nkey: [\n---\n");
+      repo.commitAll("add nested records");
+
+      // When - verifying the changed ones
+      const code = await runIn(["--yes", "--changed"]);
+
+      // Then - only the nested record is committed
+      expect(code).toBe(0);
+      expect(repo.git("show", "--name-only", "--format=", "HEAD")).toBe(
+        "docs/decisions/api/e.md\n"
+      );
     });
 
     test("--changed fails on a changed record of invalid YAML", async () => {

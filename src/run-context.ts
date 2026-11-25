@@ -18,6 +18,14 @@ export type RunContext = {
   cwd: string;
 
   /**
+   * Globs, relative to the repo root, of files and folders in the bundles
+   * that hold no records.
+   *
+   * @example `["docs/decisions/README.md", "docs/drafts"]`
+   */
+  excludeGlobs: readonly string[];
+
+  /**
    * Where the run prints its non-prompt lines.
    *
    * @example `createOutput("okf")`

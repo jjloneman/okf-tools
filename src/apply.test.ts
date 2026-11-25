@@ -198,6 +198,7 @@ describe("planVerification", () => {
 
     const { candidates } = loadCandidatesAt({
       bundleDirs: ["docs/decisions"],
+      excludeGlobs: [],
       filePaths: [filePath],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -205,7 +206,7 @@ describe("planVerification", () => {
 
     // When - planning its sign-off
     const plan = planVerification({
-      context: { shouldCommit: true },
+      context: { bundleDirs: ["docs/decisions"], shouldCommit: true },
       selected: candidates,
       statusPaths: new Set(["docs/decisions/caf\u00e9.md"]),
     });

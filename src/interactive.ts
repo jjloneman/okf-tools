@@ -46,7 +46,8 @@ const TOGGLE_ALL_INSTRUCTION = `${styleText("dim", "A:")} toggle all`;
  * @returns the exit code; a cancel ends the run with nothing changed and `0`.
  */
 export async function runInteractive(context: RunContext): Promise<ExitCode> {
-  const { bundleDirs, repoRoot, shouldCommit, verifiedBy } = context;
+  const { bundleDirs, excludeGlobs, repoRoot, shouldCommit, verifiedBy } =
+    context;
 
   updateSettings({ aliases: { [END_OF_TRANSMISSION]: "cancel" } });
   intro(`Verify records in ${bundleDirs.join(", ")}`);
@@ -67,7 +68,12 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
     );
   }
 
-  const loaded = loadCandidates({ bundleDirs, repoRoot, verifiedBy });
+  const loaded = loadCandidates({
+    bundleDirs,
+    excludeGlobs,
+    repoRoot,
+    verifiedBy,
+  });
 
   if (!loaded.isOk) {
     cancel(loaded.reason);

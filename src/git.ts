@@ -349,6 +349,53 @@ export function listDirtyPaths(params: {
 }
 
 /**
+ * List the folders under a bundle that git ignores, each as its `toPathKey`,
+ * without a trailing `/`.
+ *
+ * - Only whole folders, such as `node_modules`, or an untracked one holding
+ *   only ignored files, so a walk can skip them; a file git ignores in a
+ *   folder it doesn't isn't listed.
+ */
+export function listIgnoredFolders(params: {
+  bundleDir: string;
+  repoRoot: string;
+}): Outcome<Set<string>> {
+  const { bundleDir, repoRoot } = params;
+  let output: string;
+
+  try {
+    output = runGit({
+      args: [
+        "ls-files",
+        "-z",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory",
+        "--",
+        bundleDir,
+      ],
+      repoRoot,
+    });
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't list the folders git ignores in ${bundleDir}: ${describeGitFailure(error)}`,
+    };
+  }
+
+  return {
+    isOk: true,
+    value: new Set(
+      output
+        .split("\0")
+        .filter((ignoredPath) => ignoredPath.endsWith("/"))
+        .map((ignoredPath) => toPathKey(ignoredPath.slice(0, -1)))
+    ),
+  };
+}
+
+/**
  * Read the ref a record counts as changed against: the remote's default
  * branch (`origin/HEAD`), else `origin/main`, else the local `main`.
  *

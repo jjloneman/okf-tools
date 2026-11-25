@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import picomatch from "picomatch";
 
 import type { RecordState, RecordTimes } from "./frontmatter/read.ts";
 import type { Outcome } from "./outcome.ts";
@@ -30,7 +31,7 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
-import { isKnownToGit, toPathKey } from "./git.ts";
+import { isKnownToGit, listIgnoredFolders, toPathKey } from "./git.ts";
 import { describeError } from "./output.ts";
 
 /** A path read as a record: the record, or why it isn't one. */
@@ -124,6 +125,21 @@ const WRITE_FLAGS =
   constants.O_CREAT |
   constants.O_TRUNC |
   constants.O_NOFOLLOW;
+
+/**
+ * Find the first bundle that holds a path from the repo root, at any depth.
+ *
+ * @returns the bundle, or `undefined` when none holds it.
+ */
+export function findBundleDir(params: {
+  bundleDirs: readonly string[];
+  filePath: string;
+}): string | undefined {
+  const { bundleDirs, filePath } = params;
+  const key = toPathKey(filePath);
+
+  return bundleDirs.find((bundleDir) => isInsideBundle({ bundleDir, key }));
+}
 
 /**
  * Whether a record's bytes on disk are still the text it was listed with.
@@ -231,53 +247,81 @@ export function loadCandidate(params: {
 }
 
 /**
- * Read every record directly inside the bundles, in bundle order, then by
- * file name.
+ * Read every record in the bundles, at any depth, in the order
+ * `orderRecordPaths` gives.
  *
- * - Only files count: `index.md`, `log.md`, a folder named `*.md`, and files
- *   without frontmatter aren't records, so they're left out.
+ * - Only files count: `index.md` and `log.md` at any level, a folder named
+ *   `*.md`, files without frontmatter, and anything `excludeGlobs` matches
+ *   aren't records, so they're left out.
+ *
+ * - An excluded folder isn't read at all, and neither is a symlink to one,
+ *   which can't hold a record git commits.
+ *
+ * - Neither is a folder git ignores, such as `node_modules`, or an untracked
+ *   one holding only ignored files, nor `.git` or a folder holding one, a submodule or another clone, whose files this repo
+ *   can't commit; a file git ignores is still read, as a named one is.
  *
  * - A record that can't be read, is reached through a symlink, has a
  *   near-miss frontmatter block, isn't valid YAML, has a layout the edits
  *   refuse, or was generated ahead of the clock is left out too, but
  *   reported, so the caller can say so rather than skip it unseen.
  *
- * - A bundle that can't be listed fails the whole load, naming the bundle,
- *   since its records can't even be counted as skipped.
+ * - A bundle, or a folder in one, that can't be listed fails the whole load,
+ *   naming the bundle, since its records can't even be counted as skipped.
  */
 export function loadCandidates(params: {
   bundleDirs: readonly string[];
+  excludeGlobs: readonly string[];
   repoRoot: string;
   verifiedBy: string;
 }): Outcome<LoadedRecords> {
-  const { bundleDirs, repoRoot } = params;
+  const { bundleDirs, excludeGlobs, repoRoot } = params;
+  const isExcluded = matchExcluded(excludeGlobs);
   const filePaths: string[] = [];
 
   for (const bundleDir of bundleDirs) {
-    let names: string[];
+    const ignored = listIgnoredFolders({ bundleDir, repoRoot });
+
+    if (!ignored.isOk) {
+      return ignored;
+    }
+
+    const ignoredFolders = ignored.value;
 
     try {
-      names = readdirSync(path.join(repoRoot, bundleDir));
+      filePaths.push(
+        ...listFiles({
+          folder: bundleDir,
+          isExcluded,
+          isSkipped: (folder) =>
+            ignoredFolders.has(toPathKey(folder)) ||
+            existsSync(path.join(repoRoot, folder, ".git")),
+          repoRoot,
+        })
+      );
     } catch (error) {
       return {
         isOk: false,
         reason: `${bundleDir} can't be listed: ${describeError(error)}`,
       };
     }
-
-    filePaths.push(
-      ...names.sort().map((name) => path.posix.join(bundleDir, name))
-    );
   }
 
-  return { isOk: true, value: loadCandidatesAt({ ...params, filePaths }) };
+  return {
+    isOk: true,
+    value: loadCandidatesAt({
+      ...params,
+      filePaths: orderRecordPaths({ bundleDirs, filePaths }),
+    }),
+  };
 }
 
 /**
  * Read the records among the given paths, in the given order.
  *
- * - Keeps only `.md` files directly inside a bundle, other than `index.md`
- *   and `log.md`, that have a frontmatter block; anything else is skipped.
+ * - Keeps only `.md` files at any depth inside a bundle, other than
+ *   `index.md`, `log.md`, and what `excludeGlobs` matches, that have a
+ *   frontmatter block; anything else is skipped.
  *
  * - A record that can't be read, is reached through a symlink, has a
  *   near-miss frontmatter block, isn't valid YAML, has a layout the edits
@@ -286,15 +330,17 @@ export function loadCandidates(params: {
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];
+  excludeGlobs: readonly string[];
   filePaths: readonly string[];
   repoRoot: string;
   verifiedBy: string;
 }): LoadedRecords {
-  const { bundleDirs, filePaths, repoRoot, verifiedBy } = params;
+  const { bundleDirs, excludeGlobs, filePaths, repoRoot, verifiedBy } = params;
+  const isExcluded = matchExcluded(excludeGlobs);
   const loaded: LoadedRecords = { candidates: [], skipped: [] };
 
   for (const filePath of filePaths) {
-    if (!isRecordPath({ bundleDirs, filePath, repoRoot })) {
+    if (!isRecordPath({ bundleDirs, filePath, isExcluded, repoRoot })) {
       continue;
     }
 
@@ -308,6 +354,41 @@ export function loadCandidatesAt(params: {
   }
 
   return loaded;
+}
+
+/**
+ * Order paths from the repo root as records are listed: by the first bundle
+ * that holds each, in bundle order, then by path in code-unit order.
+ *
+ * - A path held by two bundles, one inside the other, is listed once.
+ *
+ * - Paths in no bundle are left out.
+ *
+ * - Paths are compared by `toPathKey`, since git's spelling of a name can
+ *   differ from the disk's in Unicode form.
+ */
+export function orderRecordPaths(params: {
+  bundleDirs: readonly string[];
+  filePaths: Iterable<string>;
+}): string[] {
+  const { bundleDirs, filePaths } = params;
+  const remaining = new Map<string, string>();
+
+  for (const filePath of filePaths) {
+    remaining.set(toPathKey(filePath), filePath);
+  }
+
+  return bundleDirs.flatMap((bundleDir) => {
+    const held = [...remaining]
+      .filter(([key]) => isInsideBundle({ bundleDir, key }))
+      .map(([key, filePath]) => {
+        remaining.delete(key);
+
+        return filePath;
+      });
+
+    return held.sort();
+  });
 }
 
 /**
@@ -389,8 +470,9 @@ export function resolveBundleDirs(params: {
 /**
  * Turn record paths from the command line into paths from the repo root.
  *
- * - Each must be an existing `.md` file directly inside one of the bundles,
- *   and not its `index.md` or `log.md`.
+ * - Each must be an existing `.md` file at any depth inside one of the
+ *   bundles, and not an `index.md` or `log.md`, or a path `excludeGlobs`
+ *   matches.
  *
  * - Each is spelled as git will match it (see `spellForGit`), so a record
  *   named in another case or Unicode form, on a disk that accepts it, is the
@@ -402,10 +484,12 @@ export function resolveBundleDirs(params: {
 export function resolveRecordPaths(params: {
   bundleDirs: readonly string[];
   cwd: string;
+  excludeGlobs: readonly string[];
   recordPaths: readonly string[];
   repoRoot: string;
 }): Outcome<string[]> {
-  const { bundleDirs, cwd, recordPaths, repoRoot } = params;
+  const { bundleDirs, cwd, excludeGlobs, recordPaths, repoRoot } = params;
+  const isExcluded = matchExcluded(excludeGlobs);
   const resolved: string[] = [];
 
   for (const recordPath of recordPaths) {
@@ -422,6 +506,13 @@ export function resolveRecordPaths(params: {
       return {
         isOk: false,
         reason: `${recordPath} isn't a record in ${bundleDirs.join(", ")}.`,
+      };
+    }
+
+    if (isExcluded(filePath)) {
+      return {
+        isOk: false,
+        reason: `${recordPath} is excluded by \`okf.exclude\`.`,
       };
     }
 
@@ -550,8 +641,19 @@ function isFile(filePath: string): boolean {
 }
 
 /**
- * Whether a path from the repo root names a record: an `.md` directly inside
- * a bundle, other than `index.md` and `log.md`.
+ * Whether a path key is inside a bundle, at any depth; the repo root, `.`,
+ * holds every path.
+ */
+function isInsideBundle(params: { bundleDir: string; key: string }): boolean {
+  const { bundleDir, key } = params;
+
+  return bundleDir === "." || key.startsWith(`${toPathKey(bundleDir)}/`);
+}
+
+/**
+ * Whether a path from the repo root is named like a record: an `.md` at any
+ * depth inside a bundle, other than `index.md` and `log.md`, which OKF
+ * reserves at every level.
  */
 function isRecordName(params: {
   bundleDirs: readonly string[];
@@ -559,25 +661,91 @@ function isRecordName(params: {
 }): boolean {
   const { bundleDirs, filePath } = params;
 
-  const folderKey = toPathKey(path.posix.dirname(filePath));
-
   // A name git printed can differ from the disk's in Unicode form.
+  const key = toPathKey(filePath);
+
   return (
-    bundleDirs.some((bundleDir) => toPathKey(bundleDir) === folderKey) &&
+    bundleDirs.some((bundleDir) => isInsideBundle({ bundleDir, key })) &&
     filePath.endsWith(".md") &&
     !RESERVED_FILES.has(path.posix.basename(filePath))
   );
 }
 
-/** Whether a path from the repo root names a record, and it's a file on disk. */
+/**
+ * Whether a path from the repo root names a record, isn't excluded, and is a
+ * file on disk.
+ */
 function isRecordPath(params: {
   bundleDirs: readonly string[];
   filePath: string;
+  isExcluded: (filePath: string) => boolean;
   repoRoot: string;
 }): boolean {
-  const { filePath, repoRoot } = params;
+  const { filePath, isExcluded, repoRoot } = params;
 
-  return isRecordName(params) && isFile(path.join(repoRoot, filePath));
+  return (
+    isRecordName(params) &&
+    !isExcluded(filePath) &&
+    isFile(path.join(repoRoot, filePath))
+  );
+}
+
+/**
+ * List the files in a folder from the repo root, at any depth, with `/`
+ * separators, leaving out what `isExcluded` matches, `.git`, and the
+ * subfolders `isSkipped` names.
+ *
+ * - A symlink is listed as a file, never followed, so a link to a folder
+ *   can't loop or leave the bundle; `loadCandidate` refuses one that reaches
+ *   a record.
+ *
+ * - Throws when a folder can't be listed.
+ */
+function listFiles(params: {
+  folder: string;
+  isExcluded: (filePath: string) => boolean;
+  isSkipped: (folder: string) => boolean;
+  repoRoot: string;
+}): string[] {
+  const { folder, isExcluded, isSkipped, repoRoot } = params;
+
+  return readdirSync(path.join(repoRoot, folder), { withFileTypes: true })
+    .filter((entry) => entry.name !== ".git")
+    .map((entry) => ({ entry, filePath: path.posix.join(folder, entry.name) }))
+    .filter(({ filePath }) => !isExcluded(filePath))
+    .flatMap(({ entry, filePath }) => {
+      if (!entry.isDirectory()) {
+        return [filePath];
+      }
+
+      return isSkipped(filePath)
+        ? []
+        : listFiles({ ...params, folder: filePath });
+    });
+}
+
+/**
+ * Build a test of whether a path from the repo root is excluded: it, or a
+ * folder above it, matches one of the globs.
+ *
+ * - Matching a folder excludes everything in it, so `docs/drafts` needs no
+ *   `/**`.
+ *
+ * - Globs match dot files too, and compare by `toPathKey`, since git's
+ *   spelling of a name can differ from the disk's in Unicode form.
+ */
+function matchExcluded(
+  excludeGlobs: readonly string[]
+): (filePath: string) => boolean {
+  const isMatch = picomatch(excludeGlobs.map(toPathKey), { dot: true });
+
+  return (filePath) => {
+    const segments = toPathKey(filePath).split("/");
+
+    return segments.some((_, index) =>
+      isMatch(segments.slice(0, index + 1).join("/"))
+    );
+  };
 }
 
 /**
