@@ -38,6 +38,30 @@ export type FailingHook = {
   script?: string;
 };
 
+/** A record whose frontmatter block is almost right, and why it isn't. */
+export type NearMiss = {
+  /**
+   * What is wrong with it, for the test's name.
+   *
+   * @example "no closing fence"
+   */
+  description: string;
+
+  /**
+   * Why `findFrontmatterProblem` says it can't be read.
+   *
+   * @example "the frontmatter has no closing `---` line"
+   */
+  problem: string;
+
+  /**
+   * The record's text.
+   *
+   * @example `"---\ntype: Decision\n\n# Title\n"`
+   */
+  text: string;
+};
+
 /** A scratch repo and the helpers a test drives it with. */
 export type TestRepo = {
   /** Commit every change with the given message. */
@@ -65,6 +89,79 @@ export type TestRepo = {
   /** Write a file, relative to the repo root, creating its directories. */
   write: (filePath: string, text: string) => void;
 };
+
+/** Why a block whose lines end in lone carriage returns can't be read. */
+const LONE_CR_PROBLEM =
+  "a line in the frontmatter or its fences ends in a lone carriage return; only LF and CRLF line breaks are read";
+
+/**
+ * Records whose frontmatter block is almost right, each with the problem
+ * reported for it.
+ */
+export const NEAR_MISSES: readonly NearMiss[] = [
+  {
+    description: "no closing fence",
+    problem: "the frontmatter has no closing `---` line",
+    text: "---\ntype: Decision\nstatus: draft\n\n# Title\n",
+  },
+  {
+    description: "a byte order mark and no closing fence",
+    problem: "the frontmatter has no closing `---` line",
+    text: "\uFEFF---\ntype: Decision\nstatus: draft\n",
+  },
+  {
+    description: "a space after the opening fence",
+    problem: 'the opening fence must be `---` alone on its line, not "--- "',
+    text: "--- \ntype: Decision\nstatus: draft\n---\n\n# Title\n",
+  },
+  {
+    description: "a Markdown rule for a first line",
+    problem: 'the opening fence must be `---` alone on its line, not "----"',
+    text: "----\n\n# Title\n",
+  },
+  {
+    description: "a space after the closing fence",
+    problem: 'the closing fence must be `---` alone on its line, not "--- "',
+    text: "---\ntype: Decision\nstatus: draft\n--- \n\n# Title\n",
+  },
+  {
+    description: "a tab after a CRLF closing fence",
+    problem: 'the closing fence must be `---` alone on its line, not "---\\t"',
+    text: "---\r\ntype: Decision\r\nstatus: draft\r\n---\t\r\n\r\n# Title\r\n",
+  },
+  {
+    description: "a blank line before the opening fence",
+    problem:
+      "the opening `---` must be the first line, with no blank line before it",
+    text: "\n---\ntype: Decision\nstatus: draft\n---\n\n# Title\n",
+  },
+  {
+    description: "a `...` closing fence",
+    problem:
+      "the frontmatter has no closing `---` line; a `...` line can't close it",
+    text: "---\ntype: Decision\nstatus: draft\n...\n\n# Title\n",
+  },
+  {
+    description: "lone carriage returns for line breaks",
+    problem: LONE_CR_PROBLEM,
+    text: "---\rtype: Decision\rstatus: draft\r---\r\r# Title\r",
+  },
+  {
+    description: "a lone carriage return before the closing fence",
+    problem: LONE_CR_PROBLEM,
+    text: "---\ntype: Decision\r---\n\n# Title\n",
+  },
+  {
+    description: "an indented opening fence",
+    problem: 'the opening fence must be `---` alone on its line, not "  ---"',
+    text: "  ---\ntype: Decision\nstatus: draft\n---\n\n# Title\n",
+  },
+  {
+    description: "an indented closing fence",
+    problem: 'the closing fence must be `---` alone on its line, not "  ---"',
+    text: "---\ntype: Decision\nstatus: draft\n  ---\n\n# Title\n",
+  },
+];
 
 /** Why the edits refuse `refusedRecord()`, after its path. */
 export const REFUSAL_REASON =

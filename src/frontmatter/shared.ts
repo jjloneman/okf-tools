@@ -38,6 +38,9 @@ const BYTE_ORDER_MARK = "\uFEFF";
 /** A Windows line break, which records may use for some lines or all. */
 const CRLF = "\r\n";
 
+/** The YAML document end marker, which some tools close frontmatter with. */
+const DOCUMENT_END = "...";
+
 /** The line that opens and closes a frontmatter block. */
 const FENCE = "---";
 
@@ -58,6 +61,9 @@ export const FRONTMATTER_KEYS = {
 /** A Unix line break, which also ends each line of a CRLF record. */
 export const LF = "\n";
 
+/** Any line break, lone carriage returns included, for finding fence lines. */
+const LINE_BREAK = /\r\n|\n|\r/u;
+
 /** How YAML spells null, other than leaving a value empty. */
 const NULL_SPELLINGS: ReadonlySet<string> = new Set([
   "~",
@@ -75,6 +81,9 @@ const NULL_SPELLINGS: ReadonlySet<string> = new Set([
 const RECORD_STATUS_VALUES: ReadonlySet<string> = new Set(
   Object.values(RECORD_STATUSES)
 );
+
+/** The spaces and tabs that start or end a line, if any. */
+const SURROUNDING_BLANKS = /^[\t ]+|[\t ]+$/gu;
 
 /**
  * The shape of a timestamp `verifyRecord` writes: RFC 3339's profile of ISO
@@ -266,6 +275,57 @@ export function describeYamlErrors(doc: Frontmatter): string | undefined {
   return messages.length === 0
     ? undefined
     : `frontmatter isn't valid YAML: ${messages.join("\n")}`;
+}
+
+/**
+ * Explain a frontmatter block that is almost right, in text that
+ * `splitFrontmatter` found no block in, so its record isn't taken for one
+ * with no frontmatter and left out unseen.
+ *
+ * - It's one whose first non-blank line starts with `---`, indented or not:
+ *   a blank line before the opening fence, blanks around a fence, a `...` or lone-CR
+ *   close, or no close.
+ *
+ * - A file that opens with a Markdown rule counts too, since it can't be
+ *   told from a fence with a typo.
+ *
+ * @returns why the block can't be read, or `undefined` when there's none at
+ * all.
+ */
+export function findFenceProblem(text: string): string | undefined {
+  const lines = (
+    text.startsWith(BYTE_ORDER_MARK) ? text.slice(BYTE_ORDER_MARK.length) : text
+  ).split(LINE_BREAK);
+  const trimmed = lines.map((line) => line.replace(SURROUNDING_BLANKS, ""));
+  const openingIndex = trimmed.findIndex((line) => line !== "");
+  const opening = lines[openingIndex] ?? "";
+
+  if (!(trimmed[openingIndex] ?? "").startsWith(FENCE)) {
+    return undefined;
+  }
+
+  if (openingIndex > 0) {
+    return "the opening `---` must be the first line, with no blank line before it";
+  }
+
+  if (opening !== FENCE) {
+    return `the opening fence must be \`---\` alone on its line, not ${JSON.stringify(opening)}`;
+  }
+
+  const closingIndex = trimmed.indexOf(FENCE, 1);
+  const closing = lines[closingIndex];
+
+  if (closing === undefined) {
+    return trimmed.includes(DOCUMENT_END)
+      ? "the frontmatter has no closing `---` line; a `...` line can't close it"
+      : "the frontmatter has no closing `---` line";
+  }
+
+  // Both fences read clean once lone carriage returns count as line breaks,
+  // so one ends a line between the opening fence and the closing one's end.
+  return closing === FENCE
+    ? "a line in the frontmatter or its fences ends in a lone carriage return; only LF and CRLF line breaks are read"
+    : `the closing fence must be \`---\` alone on its line, not ${JSON.stringify(closing)}`;
 }
 
 /**

@@ -1,7 +1,8 @@
+import fc from "fast-check";
 import { DateTime } from "luxon";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { VERIFIED_BY } from "#test/repo";
+import { NEAR_MISSES, VERIFIED_BY } from "#test/repo";
 
 import {
   findFrontmatterProblem,
@@ -30,9 +31,67 @@ describe("findFrontmatterProblem", () => {
   test.each([
     { description: "valid frontmatter", text: record(["type: Decision"]) },
     { description: "no frontmatter block", text: "# Title\n" },
+    { description: "an empty file", text: "" },
+    { description: "only blank lines", text: "\n \n\t\n" },
+    {
+      description: "a byte order mark before a clean block",
+      text: `\uFEFF${record(["type: Decision"])}`,
+    },
   ])("finds nothing wrong with $description", ({ text }) => {
     // When/Then - no problem
     expect(findFrontmatterProblem(text)).toBeUndefined();
+  });
+
+  test.each(NEAR_MISSES)(
+    "explains a near-miss block: $description",
+    ({ problem, text }) => {
+      // When/Then - what's wrong with the fences
+      expect(findFrontmatterProblem(text)).toBe(problem);
+    }
+  );
+
+  test("never takes a file that opens with `---` for one with no frontmatter", () => {
+    // Given - files built from fence-like lines, blanks, and every line break
+    const line = fc.constantFrom(
+      "",
+      " ",
+      "\t",
+      "---",
+      " ---",
+      "--- ",
+      "---\t",
+      "----",
+      "...",
+      "type: Decision"
+    );
+    const text = fc
+      .tuple(
+        fc.constantFrom("", "\uFEFF"),
+        fc.array(fc.tuple(line, fc.constantFrom("\n", "\r\n", "\r")), {
+          maxLength: 6,
+        })
+      )
+      .map(([start, lines]) => `${start}${lines.flat().join("")}`);
+
+    // When/Then - one whose first non-blank line opens with `---` is read as
+    // a block or reported, never neither
+    fc.assert(
+      fc.property(text, (candidate) => {
+        const firstLine = candidate
+          .replace(/^\uFEFF/u, "")
+          .split(/\r\n|\n|\r/u)
+          .map((each) => each.replace(/^[\t ]+|[\t ]+$/gu, ""))
+          .find((each) => each !== "");
+
+        return (
+          firstLine?.startsWith("---") !== true ||
+          findFrontmatterProblem(candidate) !== undefined ||
+          readRecordSummary({ text: candidate, verifiedBy: VERIFIED_BY }) !==
+            undefined
+        );
+      }),
+      { numRuns: 1000, seed: 31 }
+    );
   });
 
   test("explains frontmatter that isn't valid YAML", () => {

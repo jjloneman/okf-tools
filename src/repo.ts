@@ -49,9 +49,10 @@ export type LoadedRecord =
     }
   | {
       /**
-       * What the path turned out to be: a file whose frontmatter isn't valid
-       * YAML or can't be signed off as it stands, one reached through a
-       * symlink, one with no frontmatter block, or one that can't be read.
+       * What the path turned out to be: a file whose frontmatter block is a
+       * near miss, isn't valid YAML, or can't be signed off as it stands, one
+       * reached through a symlink, one with no frontmatter block, or one that
+       * can't be read.
        *
        * @example "unreadable"
        */
@@ -79,8 +80,9 @@ export type LoadedRecords = {
   candidates: Candidate[];
 
   /**
-   * The records left out because they can't be read, aren't valid YAML,
-   * have a layout the edits refuse, or were generated ahead of the clock.
+   * The records left out because they can't be read, have a near-miss
+   * frontmatter block, aren't valid YAML, have a layout the edits refuse, or
+   * were generated ahead of the clock.
    *
    * @example `[{ filePath: "docs/decisions/b.md", reason: "…" }]`
    */
@@ -104,8 +106,11 @@ export type SkippedRecord = {
   reason: string;
 };
 
-/** The file every bundle may hold that isn't a record. */
-const INDEX_FILE = "index.md";
+/**
+ * The file names OKF reserves in a bundle, which are never records: the
+ * listing and the update history.
+ */
+const RESERVED_FILES: ReadonlySet<string> = new Set(["index.md", "log.md"]);
 
 /**
  * How a record is opened for writing: never through a symlink at its own
@@ -147,7 +152,8 @@ export function isRecordUnchanged(params: {
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
  *
  * @returns the candidate, or why it isn't one: it can't be read, it's
- * reached through a symlink, its frontmatter isn't valid YAML or is in a
+ * reached through a symlink, its frontmatter block is a near miss, such as
+ * one with no closing fence, its frontmatter isn't valid YAML or is in a
  * layout the edits refuse, its `generated.at` is ahead of the clock, or it
  * has no frontmatter.
  */
@@ -222,13 +228,13 @@ export function loadCandidate(params: {
  * Read every record directly inside the bundles, in bundle order, then by
  * file name.
  *
- * - Only files count: `index.md`, a folder named `*.md`, and files without
- *   frontmatter aren't records, so they're left out.
+ * - Only files count: `index.md`, `log.md`, a folder named `*.md`, and files
+ *   without frontmatter aren't records, so they're left out.
  *
- * - A record that can't be read, is reached through a symlink, isn't valid
- *   YAML, has a layout the edits refuse, or was generated ahead of the clock
- *   is left out too, but reported, so the caller can say so rather than skip
- *   it unseen.
+ * - A record that can't be read, is reached through a symlink, has a
+ *   near-miss frontmatter block, isn't valid YAML, has a layout the edits
+ *   refuse, or was generated ahead of the clock is left out too, but
+ *   reported, so the caller can say so rather than skip it unseen.
  *
  * - A bundle that can't be listed fails the whole load, naming the bundle,
  *   since its records can't even be counted as skipped.
@@ -264,12 +270,13 @@ export function loadCandidates(params: {
 /**
  * Read the records among the given paths, in the given order.
  *
- * - Keeps only `.md` files directly inside a bundle, other than `index.md`,
- *   that have a frontmatter block; anything else is skipped.
+ * - Keeps only `.md` files directly inside a bundle, other than `index.md`
+ *   and `log.md`, that have a frontmatter block; anything else is skipped.
  *
- * - A record that can't be read, is reached through a symlink, isn't valid
- *   YAML, has a layout the edits refuse, or was generated ahead of the clock
- *   is reported in `skipped` instead.
+ * - A record that can't be read, is reached through a symlink, has a
+ *   near-miss frontmatter block, isn't valid YAML, has a layout the edits
+ *   refuse, or was generated ahead of the clock is reported in `skipped`
+ *   instead.
  */
 export function loadCandidatesAt(params: {
   bundleDirs: readonly string[];
@@ -371,7 +378,7 @@ export function resolveBundleDirs(params: {
  * Turn record paths from the command line into paths from the repo root.
  *
  * - Each must be an existing `.md` file directly inside one of the bundles,
- *   and not its `index.md`.
+ *   and not its `index.md` or `log.md`.
  *
  * - The same file named twice is kept once.
  */
@@ -507,7 +514,7 @@ function isFile(filePath: string): boolean {
 
 /**
  * Whether a path from the repo root names a record: an `.md` directly inside
- * a bundle, other than `index.md`.
+ * a bundle, other than `index.md` and `log.md`.
  */
 function isRecordName(params: {
   bundleDirs: readonly string[];
@@ -518,7 +525,7 @@ function isRecordName(params: {
   return (
     bundleDirs.includes(path.posix.dirname(filePath)) &&
     filePath.endsWith(".md") &&
-    path.posix.basename(filePath) !== INDEX_FILE
+    !RESERVED_FILES.has(path.posix.basename(filePath))
   );
 }
 

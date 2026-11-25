@@ -19,6 +19,7 @@ import type { TestRepo } from "#test/repo";
 import {
   createTestRepo,
   draftRecord,
+  NEAR_MISSES,
   record,
   REFUSAL_REASON,
   refusedRecord,
@@ -273,6 +274,34 @@ describe("run --yes", () => {
     );
     expect(repo.read("docs/decisions/a.md")).toContain("status: draft");
   });
+
+  test.each(NEAR_MISSES)(
+    "fails on a changed record with $description, named or not",
+    async ({ problem, text }) => {
+      // Given - a changed draft whose frontmatter block is almost right
+      repo.write("docs/decisions/a.md", text);
+
+      // When - verifying the changed records, then naming it
+      const changedCode = await runIn(["--yes", "--changed", "--no-commit"]);
+      const namedCode = await runIn([
+        "--yes",
+        "--no-commit",
+        "docs/decisions/a.md",
+      ]);
+
+      // Then - both fail naming it and why, and nothing is written
+      expect({ changedCode, namedCode }).toStrictEqual({
+        changedCode: 1,
+        namedCode: 1,
+      });
+      expect(
+        errors.filter((line) =>
+          line.includes(`docs/decisions/a.md: ${problem}`)
+        )
+      ).toHaveLength(2);
+      expect(repo.read("docs/decisions/a.md")).toBe(text);
+    }
+  );
 
   test("--changed fails on a record regenerated ahead of the clock", async () => {
     // Given - a record signed off long ago, then regenerated an hour ahead

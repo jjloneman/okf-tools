@@ -10,6 +10,7 @@ import type { RecordStatus, Timestamp, VerifyRecordParams } from "./types.ts";
 import {
   describeYamlErrors,
   ENTRY_KEYS,
+  findFenceProblem,
   findOwnEntry,
   FRONTMATTER_KEYS,
   isNullScalar,
@@ -93,8 +94,11 @@ export type RecordSummary = {
 export type RecordTimes = Pick<RecordSummary, "generatedAt" | "verifiedAt">;
 
 /**
- * Check that a record's frontmatter is valid YAML, so it can be read and
- * edited safely.
+ * Check that a record's frontmatter is valid YAML, in a block whose fences
+ * can be found, so it can be read and edited safely.
+ *
+ * - A block that is almost right, such as one with no closing `---` line,
+ *   is a problem too, so it's never taken for no frontmatter at all.
  *
  * @returns why it isn't, or `undefined` when it is or there's no frontmatter.
  */
@@ -102,7 +106,7 @@ export function findFrontmatterProblem(text: string): string | undefined {
   const block = splitFrontmatter(text);
 
   return block === undefined
-    ? undefined
+    ? findFenceProblem(text)
     : describeYamlErrors(parseFrontmatter(block.text));
 }
 
