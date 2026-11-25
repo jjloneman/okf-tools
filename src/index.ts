@@ -6,17 +6,26 @@ export type { RunParams } from "./cli.ts";
 export { run } from "./cli.ts";
 export type { ExitCode } from "./exit-codes.ts";
 export { EXIT_CODES } from "./exit-codes.ts";
-export type { RecordVerification } from "./frontmatter/edit.ts";
-export { verifyRecord } from "./frontmatter/edit.ts";
+export type {
+  FindEditProblemParams,
+  RecordVerification,
+} from "./frontmatter/edit.ts";
+export { findEditProblem, verifyRecord } from "./frontmatter/edit.ts";
 export type {
   ReadRecordSummaryParams,
   RecordState,
   RecordSummary,
+  RecordTimes,
 } from "./frontmatter/read.ts";
-export { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
+export {
+  findFrontmatterProblem,
+  getRecordState,
+  readRecordSummary,
+} from "./frontmatter/read.ts";
 export type {
   RecordStatus,
+  RefusalKind,
   Timestamp,
   VerifyRecordParams,
 } from "./frontmatter/types.ts";
-export { RECORD_STATUSES } from "./frontmatter/types.ts";
+export { RECORD_STATUSES, REFUSAL_KINDS } from "./frontmatter/types.ts";

@@ -18,6 +18,7 @@ import { parseDocument } from "yaml";
 import { currentTimestamp } from "../records.ts";
 import { verifyRecord } from "./edit.ts";
 import { getRecordState, readRecordSummary } from "./read.ts";
+import { readTime } from "./shared.ts";
 
 /** One `verified` entry, any of whose keys may be missing. */
 type EntryModel = {
@@ -1027,6 +1028,7 @@ describe("verifyRecord over generated layouts", () => {
           // Then - refused before any edit is planned
           expect(result).toStrictEqual({
             isOk: false,
+            kind: "invalidParams",
             reason: "the signer's name holds a line break",
           });
         }
@@ -1092,6 +1094,109 @@ describe("the state right after a sign-off", () => {
           expect(summary && getRecordState(summary)).toBe("verified");
         }
       ),
+      RUN_OPTIONS
+    );
+  });
+
+  /** Two digits, out of range as often as not. */
+  const pairArb = fc
+    .integer({ max: 99, min: 0 })
+    .map((value) => String(value).padStart(2, "0"));
+
+  /** A real time, written in each form the timestamp check accepts. */
+  const writableAtArb = fc
+    .tuple(
+      timeArb,
+      fc.constantFrom(
+        "yyyy-MM-dd'T'HH:mm'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+        "yyyy-MM-dd'T'HH:mm:ssZZ",
+        "yyyy-MM-dd'T'HH:mmZZ"
+      ),
+      fc.constantFrom("UTC", "UTC+5:30", "UTC-11")
+    )
+    .map(([time, format, zone]) =>
+      DateTime.fromJSDate(time, { zone }).toFormat(format)
+    );
+
+  /**
+   * Strings shaped like timestamps, valid or not, beside any string at all, so
+   * both sides of the timestamp check are reached.
+   */
+  const atArb: fc.Arbitrary<string> = fc.oneof(
+    fc.string(),
+    writableAtArb,
+    fc
+      .tuple(
+        fc.integer({ max: 9999, min: 0 }),
+        pairArb,
+        pairArb,
+        fc.constantFrom("", "T", " ", "t"),
+        fc.array(pairArb, { maxLength: 3, minLength: 1 }),
+        fc.constantFrom("", ".5", ",5", ".123456789"),
+        fc.constantFrom("", "Z", "z", "+02:00", "-0530", "-11", " # utc")
+      )
+      .map(([year, month, day, separator, times, fraction, zone]) => {
+        const date = `${String(year).padStart(4, "0")}-${month}-${day}`;
+
+        return separator === ""
+          ? date
+          : `${date}${separator}${times.join(":")}${fraction}${zone}`;
+      })
+  );
+
+  test("accepts every timestamp in a writable form", () => {
+    fc.assert(
+      fc.property(writableAtArb, (at) => {
+        // When - signing off a plain draft at that timestamp
+        const result = verifyRecord({
+          at,
+          text: `---\nstatus: draft\n---\n${BODY}`,
+          verifiedBy: "human:jjloneman",
+        });
+
+        // Then - accepted
+        expect(result.isOk).toBe(true);
+      }),
+      RUN_OPTIONS
+    );
+  });
+
+  test("is verified, for any timestamp it accepts", () => {
+    fc.assert(
+      fc.property(RECORD_ARB, atArb, (model, at) => {
+        // Given - any record, any timestamp, and a clock past every one, so
+        // none is judged by being ahead of it
+        const text = `${render(model).lines.join("")}${BODY}`;
+
+        vi.useFakeTimers({
+          now: DateTime.fromISO("9999-12-31T23:59:59Z").toJSDate(),
+          toFake: ["Date"],
+        });
+
+        // When - signing it off at that timestamp
+        const result = verifyRecord({
+          at,
+          text,
+          verifiedBy: model.verifiedBy,
+        });
+
+        // Then - when accepted, it reads as signed off no earlier than `at`
+        if (!result.isOk) {
+          return;
+        }
+
+        const summary = readRecordSummary({
+          text: result.text,
+          verifiedBy: model.verifiedBy,
+        });
+
+        expect({
+          isReadable: readTime(at).isValid,
+          state: summary && getRecordState({ ...summary, generatedAt: at }),
+        }).toStrictEqual({ isReadable: true, state: "verified" });
+      }),
       RUN_OPTIONS
     );
   });

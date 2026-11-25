@@ -76,6 +76,23 @@ const RECORD_STATUS_VALUES: ReadonlySet<string> = new Set(
   Object.values(RECORD_STATUSES)
 );
 
+/**
+ * The shape of a timestamp `verifyRecord` writes: RFC 3339's profile of ISO
+ * 8601, a date and a time to the minute or finer, in a stated zone.
+ *
+ * - A date alone, or a time on its own, which luxon reads as today's, can't
+ *   say when on the day the sign-off was made.
+ *
+ * - A time with no zone is UTC here but local time to ISO 8601 and to
+ *   JavaScript, so other tools would date it differently.
+ *
+ * - A decimal comma would end the value inside `{ by, at }`, so a fraction
+ *   takes a period; hours, minutes, and offsets are range-checked here, since
+ *   luxon reads `+99:99` and `24:00`.
+ */
+const WRITABLE_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
+
 /** A key of a `verified` or `generated` entry. */
 export type EntryKey = (typeof ENTRY_KEYS)[keyof typeof ENTRY_KEYS];
 
@@ -373,6 +390,18 @@ export function isSignersBy(params: IsSignersByParams): boolean {
   const { by, verifiedBy } = params;
 
   return isScalar(by) && !isNullScalar(by) && readString(by) === verifiedBy;
+}
+
+/**
+ * Whether `verifyRecord` can write a timestamp: one in `WRITABLE_TIMESTAMP`'s
+ * shape that luxon reads, so a day the month lacks is refused too, and the
+ * sign-off can always be dated.
+ */
+export function isWritableTimestamp(value: string): boolean {
+  return (
+    WRITABLE_TIMESTAMP.test(value) &&
+    DateTime.fromISO(value, { zone: "utc" }).isValid
+  );
 }
 
 /** Parse frontmatter with every value as text, positions included. */

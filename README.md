@@ -146,11 +146,19 @@ The frontmatter functions are exported too, for tools of your own:
 
 ```ts
 import {
+  findEditProblem,
+  findFrontmatterProblem,
   getRecordState,
   readRecordSummary,
   verifyRecord,
 } from "@jjloneman/okf-tools";
 ```
+
+- `verifyRecord` takes the sign-off's `at` as RFC 3339 profiles ISO 8601: a date, `T`, a time to the minute or finer, and a zone, such as `2026-10-02T13:30:00Z` or `2026-10-02T15:30+02:00`. It refuses any other, so every sign-off it writes can be dated.
+- A refusal has a `kind` to switch on, one of `REFUSAL_KINDS` (`invalidParams`, `invalidYaml`, `noFrontmatter`, `unsupportedLayout`), beside its `reason` in words.
+- `readRecordSummary` reads what it can even of frontmatter that isn't valid YAML; `findFrontmatterProblem` says when it isn't, and `findEditProblem` says why `verifyRecord` would refuse a record.
+- A summary's `status` is a status OKF defines, or `undefined`; `writtenStatus` is the status as written, `undefined` when there's none (or it's empty or null).
+- `getRecordState` needs only a summary's `generatedAt` and `verifiedAt` (`RecordTimes`).
 
 `run` is the CLI itself, for calling it in-process; it never throws and resolves to the exit code.
 

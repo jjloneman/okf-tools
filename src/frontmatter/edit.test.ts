@@ -548,6 +548,7 @@ describe("verifyRecord", () => {
     // Then - it is rejected for the missing block
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "noFrontmatter",
       reason: "no frontmatter block",
     });
   });
@@ -741,6 +742,7 @@ describe("verifyRecord", () => {
     // Then - a refusal saying why
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "invalidYaml",
       reason: expect.stringMatching(reason) as string,
     });
   });
@@ -850,6 +852,7 @@ describe("verifyRecord", () => {
     // Then - a refusal rather than a thrown error
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `the frontmatter has too many aliases to check the edit; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1223,6 +1226,7 @@ describe("verifyRecord", () => {
     // Then - a refusal naming the field, and asking for a hand edit
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `${reason}; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1292,24 +1296,70 @@ describe("verifyRecord", () => {
     });
   });
 
-  test("keeps a $ in the timestamp literal", () => {
-    // Given - the owner's block entry, and a timestamp holding $&
-    const text = record([
-      "status: stable",
-      "verified:",
-      `  - by: ${VERIFIED_BY}`,
-      "    at: 2026-09-28T09:00:00Z",
-    ]);
+  test.each([
+    { at: "", description: "an empty timestamp" },
+    { at: "yesterday", description: "prose" },
+    { at: "x$&y", description: "a replacement pattern" },
+    { at: "13:30:00", description: "a time with no date" },
+    { at: "2026-10-02", description: "a date with no time" },
+    { at: "2026-10-02T13:30:00", description: "a time with no zone" },
+    { at: "2026-10-02T13:30:00+99:99", description: "an offset out of range" },
+    { at: "2026-10-02T15:30:00-02", description: "an offset in hours alone" },
+    { at: "2026-10-02T24:00:00Z", description: "hour 24" },
+    { at: "2026-10-02 13:30:00", description: "a space before the time" },
+    { at: "2026-10-02T13:30:00 # utc", description: "a trailing comment" },
+    { at: "2026-10-02T13:30:00,5Z", description: "a decimal comma" },
+    { at: "20261002T133000Z", description: "ISO 8601's basic form" },
+    { at: "2026-02-30T00:00:00Z", description: "a day the month lacks" },
+  ])("refuses $description as the timestamp", ({ at }) => {
+    // Given - a draft, and the owner's block entry to renew
+    const texts = [
+      record(["status: draft"]),
+      record([
+        "status: stable",
+        "verified:",
+        `  - by: ${VERIFIED_BY}`,
+        "    at: 2026-09-28T09:00:00Z",
+      ]),
+    ];
+
+    // When - verifying each with that timestamp
+    const results = texts.map((text) =>
+      verifyRecord({ ...VERIFY_OPTIONS, at, text })
+    );
+
+    // Then - both refused alike, before any edit
+    const refusal = {
+      isOk: false,
+      kind: "invalidParams",
+      reason: `the timestamp ${JSON.stringify(at)} isn't an RFC 3339 date and time with a zone, such as 2026-10-02T13:30:00Z`,
+    };
+
+    expect(results).toStrictEqual([refusal, refusal]);
+  });
+
+  test.each([
+    { at: "2026-10-02T13:30Z", description: "a time without seconds" },
+    { at: "2026-10-02T13:30:00.250Z", description: "a fraction of a second" },
+    { at: "2026-10-02T15:30:00+02:00", description: "an offset" },
+    { at: "2026-10-02T08:00:00-05:30", description: "a negative offset" },
+  ])("writes $description as the timestamp", ({ at }) => {
+    // Given - a draft
+    const text = record(["status: draft"]);
 
     // When - verifying it with that timestamp
-    const result = verifyRecord({ ...VERIFY_OPTIONS, at: "x$&y", text });
+    const result = verifyRecord({ ...VERIFY_OPTIONS, at, text });
 
     // Then - the timestamp written as given
     expect(result).toStrictEqual({
       isOk: true,
-      text: text.replace("2026-09-28T09:00:00Z", () => "x$&y"),
+      text: record([
+        "status: stable",
+        `verified: { by: ${VERIFIED_BY}, at: ${at} }`,
+      ]),
     });
   });
+
   test.each([
     { description: "LF", lineBreak: "\n" },
     { description: "CRLF", lineBreak: "\r\n" },
@@ -1480,6 +1530,7 @@ describe("verifyRecord", () => {
     // Then - refused, since the entry would span lines too
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "invalidParams",
       reason: "the signer's name holds a line break",
     });
   });
@@ -1573,6 +1624,7 @@ describe("verifyRecord", () => {
     // Then - refused, since tools read the CR differently
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `the frontmatter holds a carriage return that doesn't end a line; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1587,6 +1639,7 @@ describe("verifyRecord", () => {
     // Then - refused, naming the alias
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `the alias \`*nope\` names no anchor set before it; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1601,6 +1654,7 @@ describe("verifyRecord", () => {
     // Then - refused, rather than checked ambiguously
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `the frontmatter has two keys that mean the same; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1643,6 +1697,7 @@ describe("verifyRecord", () => {
     // Then - refused before any edit
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `the frontmatter has two keys that mean the same; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1666,6 +1721,7 @@ describe("verifyRecord", () => {
     // Then - refused rather than thrown
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "unsupportedLayout",
       reason: `the frontmatter has too many aliases to check the edit; ${HAND_EDIT_HINT}`,
     });
   });
@@ -1785,6 +1841,7 @@ describe("verifyRecord", () => {
     // Then - no frontmatter found, rather than a guess
     expect(result).toStrictEqual({
       isOk: false,
+      kind: "noFrontmatter",
       reason: "no frontmatter block",
     });
   });

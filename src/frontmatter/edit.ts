@@ -18,7 +18,7 @@ import { stringify } from "yaml";
 import type { EditableLayout, Entry } from "./layout.ts";
 import type { FormatEntryParams } from "./meaning.ts";
 import type { Placed, TextParams } from "./shared.ts";
-import type { Timestamp, VerifyRecordParams } from "./types.ts";
+import type { RefusalKind, Timestamp, VerifyRecordParams } from "./types.ts";
 
 import { readEditableLayout, readEntries } from "./layout.ts";
 import { checkMeaning, createEntry, findAmbiguity } from "./meaning.ts";
@@ -30,6 +30,7 @@ import {
   findPair,
   FRONTMATTER_KEYS,
   isSignersBy,
+  isWritableTimestamp,
   parseFrontmatter,
   readContentEnd,
   readIndent,
@@ -38,7 +39,7 @@ import {
   readTimestamp,
   splitFrontmatter,
 } from "./shared.ts";
-import { RECORD_STATUSES } from "./types.ts";
+import { RECORD_STATUSES, REFUSAL_KINDS } from "./types.ts";
 
 /** What a refusal of an unsupported layout tells the person to do instead. */
 const HAND_EDIT_HINT = "edit the record by hand";
@@ -75,7 +76,14 @@ export type RecordVerification =
       isOk: false;
 
       /**
-       * Why the record can't be verified.
+       * Why the record can't be verified, as a code to switch on.
+       *
+       * @example "noFrontmatter"
+       */
+      kind: RefusalKind;
+
+      /**
+       * Why the record can't be verified, in words.
        *
        * @example "no frontmatter block"
        */
@@ -267,6 +275,9 @@ type WriteScalarParams = {
  * Say why a record can't be signed off by `verifiedBy` as it stands, so a
  * listing can report it before anyone chooses it.
  *
+ * - It plans with a fixed, valid timestamp, so it never reports the refusal
+ *   `verifyRecord` gives for a caller's own `at`.
+ *
  * @returns the refusal `verifyRecord` would give, or `undefined` when none.
  */
 export function findEditProblem(
@@ -288,6 +299,12 @@ export function findEditProblem(
  * - Only the layouts `readEditableLayout` allows are edited; any other, or
  *   frontmatter that isn't valid YAML, is refused for a person to edit by hand.
  *
+ * - An `at` that isn't a timestamp as `VerifyRecordParams` describes is
+ *   refused, so every sign-off it writes can be dated; it reads as `verified`
+ *   unless `at` is earlier than the record's `generated.at`.
+ *
+ * - A refusal carries a `kind` to switch on, beside its `reason`.
+ *
  * - A new entry lands after the `generated` field, or after `status` when there
  *   is no `generated`, or at the end; `generated` may be inline or a nested
  *   block.
@@ -301,13 +318,31 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   // A name over several lines would be written as a multi-line entry, which
   // the next sign-off would then refuse.
   if (/[\n\r]/u.test(verifiedBy)) {
-    return { isOk: false, reason: "the signer's name holds a line break" };
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.invalidParams,
+      reason: "the signer's name holds a line break",
+    };
+  }
+
+  // Any other `at` would be written as a sign-off the reads can't date, or
+  // one other tools date differently.
+  if (!isWritableTimestamp(at)) {
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.invalidParams,
+      reason: `the timestamp ${JSON.stringify(at)} isn't an RFC 3339 date and time with a zone, such as 2026-10-02T13:30:00Z`,
+    };
   }
 
   const block = splitFrontmatter(recordText);
 
   if (block === undefined) {
-    return { isOk: false, reason: "no frontmatter block" };
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.noFrontmatter,
+      reason: "no frontmatter block",
+    };
   }
 
   const { lineBreak, text } = block;
@@ -315,28 +350,31 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   const inputProblem = describeYamlErrors(doc);
 
   if (inputProblem !== undefined) {
-    return { isOk: false, reason: inputProblem };
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.invalidYaml,
+      reason: inputProblem,
+    };
   }
 
   // YAML 1.2 ends a line at a lone carriage return, though the parser reads
   // it as text, so other tools could read the edited record differently.
   if (/\r(?!\n)/u.test(text)) {
-    return {
-      isOk: false,
-      reason: `the frontmatter holds a carriage return that doesn't end a line; ${HAND_EDIT_HINT}`,
-    };
+    return refuseLayout(
+      "the frontmatter holds a carriage return that doesn't end a line"
+    );
   }
 
   const ambiguity = findAmbiguity(doc);
 
   if (ambiguity !== undefined) {
-    return { isOk: false, reason: `${ambiguity}; ${HAND_EDIT_HINT}` };
+    return refuseLayout(ambiguity);
   }
 
   const layout = readEditableLayout({ doc, text, verifiedBy });
 
   if (!layout.isOk) {
-    return { isOk: false, reason: `${layout.reason}; ${HAND_EDIT_HINT}` };
+    return refuseLayout(layout.reason);
   }
 
   const verifiedEdit = planVerifiedEdit({
@@ -348,7 +386,7 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   });
 
   if (!verifiedEdit.isOk) {
-    return { isOk: false, reason: `${verifiedEdit.reason}; ${HAND_EDIT_HINT}` };
+    return refuseLayout(verifiedEdit.reason);
   }
 
   const edits = [verifiedEdit.edit];
@@ -366,7 +404,7 @@ export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   const meaningProblem = checkMeaning({ at, doc, editedDoc, verifiedBy });
 
   if (meaningProblem !== undefined) {
-    return { isOk: false, reason: `${meaningProblem}; ${HAND_EDIT_HINT}` };
+    return refuseLayout(meaningProblem);
   }
 
   return {
@@ -606,6 +644,15 @@ function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
       };
     }
   }
+}
+
+/** Refuse a layout that needs a hand edit, saying so. */
+function refuseLayout(problem: string): RecordVerification {
+  return {
+    isOk: false,
+    kind: REFUSAL_KINDS.unsupportedLayout,
+    reason: `${problem}; ${HAND_EDIT_HINT}`,
+  };
 }
 
 /** Plan the edit that renews the signer's `at`, or adds one it lacks. */
