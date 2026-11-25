@@ -274,6 +274,34 @@ describe("run --yes", () => {
     expect(repo.read("docs/decisions/a.md")).toContain("status: draft");
   });
 
+  test("--changed fails on a record regenerated ahead of the clock", async () => {
+    // Given - a record signed off long ago, then regenerated an hour ahead
+    const ahead = DateTime.utc().plus({ hours: 1 }).startOf("second").toISO({
+      suppressMilliseconds: true,
+    });
+
+    repo.write(
+      "docs/decisions/a.md",
+      record([
+        "type: Decision",
+        "status: stable",
+        `generated: { by: claude-code/model, at: ${ahead} }`,
+        "verified: { by: human:jjloneman, at: 2026-11-01T10:00:00Z }",
+      ])
+    );
+    repo.commitAll("regenerate");
+
+    // When - verifying the changed ones
+    const code = await runIn(["--yes", "--changed", "--no-commit"]);
+
+    // Then - a failure naming it, never a skip as already verified
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "docs/decisions/a.md: generated.at is ahead of the clock; fix its time zone"
+    );
+    expect(infos.join("\n")).not.toContain("already verified");
+  });
+
   test("--changed fails on a changed record that can't be read", async () => {
     // Given - two changed records, one with no read permission
     repo.write("docs/decisions/a.md", `${draftRecord("A")}\nMore.\n`);
@@ -356,29 +384,37 @@ describe("run --yes", () => {
     }
   );
 
-  test("clears a record generated ahead of the clock, and says so", async () => {
-    // Given - a draft stamped an hour ahead of now, as a wrong zone writes it
-    const ahead = DateTime.utc().plus({ hours: 1 }).toISO();
-
-    repo.write(
-      "docs/decisions/a.md",
-      record([
+  test.each([
+    { description: "a draft", status: "draft", verified: [] },
+    {
+      description: "a record signed off before",
+      status: "stable",
+      verified: ["verified: { by: human:jjloneman, at: 2026-11-01T10:00:00Z }"],
+    },
+  ])(
+    "refuses $description generated ahead of the clock",
+    async ({ status, verified }) => {
+      // Given - a record whose generated.at is a typo for a date to come
+      const text = record([
         "type: Decision",
-        "status: draft",
-        `generated: { by: claude-code/model, at: ${ahead} }`,
-      ])
-    );
+        `status: ${status}`,
+        "generated: { by: claude-code/model, at: 2099-11-25T20:00:00Z }",
+        ...verified,
+      ]);
 
-    // When - signing it, then naming it again
-    const first = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
-    const second = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+      repo.write("docs/decisions/a.md", text);
 
-    // Then - the second run has nothing to do, and says why
-    expect({ first, second }).toStrictEqual({ first: 0, second: 2 });
-    expect(infos).toContain(
-      "[okf-verify] skipped docs/decisions/a.md: already verified; generated.at is ahead of the clock"
-    );
-  });
+      // When - naming it
+      const code = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+
+      // Then - a failure asking for the time zone, and nothing written
+      expect(code).toBe(1);
+      expect(errors.join("\n")).toContain(
+        "docs/decisions/a.md: generated.at is ahead of the clock; fix its time zone"
+      );
+      expect(repo.read("docs/decisions/a.md")).toBe(text);
+    }
+  );
 
   test("exits 2 when nothing needs verifying", async () => {
     // When - naming an already verified record
