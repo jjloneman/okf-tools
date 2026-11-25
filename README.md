@@ -29,7 +29,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 
 - it sets `status: draft` to `stable` (any other status is left alone);
 - it adds or renews the signer's `verified` entry with the current UTC time;
-- it commits just those files, never pushing and never skipping hooks;
+- it commits just those files, never pushing and never skipping hooks, and writes nothing when git would refuse that commit, such as mid-merge or for an ignored file;
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
 - it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end;
 - it refuses a record that isn't valid UTF-8, as the OKF spec requires, rather than rewrite the bytes it can't read;
@@ -93,7 +93,7 @@ pnpm okf:verify --yes --changed
 ```
 
 - `--yes` alone is a usage error: it needs `--changed` or record paths, so nothing is ever verified by accident.
-- A named record that's already verified, and unchanged since, is skipped.
+- A named record that's already verified, and unchanged since, is skipped, unless that sign-off isn't committed yet, as after a hook rejected the commit: then the same command commits it as it is.
 - "Where you run it" is the folder you call `pnpm` from, when that's in the package's repo. With `pnpm --dir <package>` or `npm --prefix <package>` from another repo or no repo, paths resolve from the package root instead.
 - Exit codes: `0` worked, `1` failed, `2` nothing needed verifying.
 

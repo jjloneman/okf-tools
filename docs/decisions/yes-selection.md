@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: What `--yes` verifies, and how it exits
-description: "`--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified, and exits `0` worked, `1` failed, `2` nothing to verify."
+description: "`--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified and committed, and exits `0` worked, `1` failed, `2` nothing to verify."
 tags: [agents, cli]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T07:40:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:37:22Z }
 verified: { by: human:jjloneman, at: 2026-11-12T07:03:21Z }
 ---
 
@@ -29,6 +29,9 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
   - `--changed` or record paths without `--yes`, since without it records are picked in the prompts.
 - **A named record that's already verified, and unchanged since, is skipped**, with a `skipped <path>: already verified, unchanged` line, not an error.
   - As of 2026-11-25, when its `generated.at` is ahead of the clock the line ends `already verified; generated.at is ahead of the clock` instead, since "unchanged" there only means it can't be judged.
+  - As of 2026-11-25, a record whose sign-off isn't committed yet is committed as it is instead, with a `committing <path>: already verified, not yet committed` line, by a run that commits, whether named or found by `--changed` (issue #29).
+  - It counts as not committed when `HEAD` doesn't hold the sign-off that's on disk (it lacks the record, its copy still needs a sign-off, or it holds an older one) and `git status` reports the file; when `HEAD` can't be read, or git won't see the file, such as an ignored one, it's skipped as before.
+  - `--no-commit` still skips it.
 - **One record that refuses the edit means nothing is written.**
 - **A selected record that can't be read, or whose frontmatter isn't valid YAML, fails the run**, with a line naming it and why, whether it was named or found by `--changed`; it's never left out unseen.
 - **Exit codes:**
@@ -41,6 +44,7 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
 - With no prompt, "verify everything" is one mistyped command away. Requiring `--changed` or names means a run never covers more than it was told to.
 - `--changed` and paths are two different selections; accepting both would leave it unclear which one won.
 - A record already signed off needs nothing, so skipping it lets an agent pass the same list twice safely.
+- A sign-off left on disk by a commit a hook rejected would otherwise be skipped by every re-run, so a fix to the hook could never finish it (issue #29).
 - A changed record that's skipped because it can't be read or parsed would look signed off once the run succeeds, so the run fails instead (issue #8).
 - `pnpm --dir` and `npm --prefix` set `INIT_CWD` to the caller's folder, so trusting it anywhere let `--yes --changed` read another repo's config and sign its drafts (issue #26).
 - Every sign-off must clear the record it signs; otherwise a run asks for a sign-off no sign-off can satisfy (issue #32).

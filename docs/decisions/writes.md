@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: How okf-verify writes and commits records
-description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
+description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:21:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:37:22Z }
 verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
 ---
 
@@ -37,6 +37,9 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - **Re-read before writing:** each record is read again just before the write; if one changed on disk since it was listed, such as an edit saved while the prompt was open, nothing is written.
   - As of 2026-11-25, a record that can't be read any more, such as one deleted while the prompt was open, also writes nothing, with a message naming it (issue #34).
 - **Re-stamped at confirmation:** the edits are rebuilt with the current UTC time at write time, so `verified.at` is when the person confirmed, not when the checklist opened.
+- **Checked with git before writing:** as of 2026-11-25, a committing run asks git first whether it would commit just these files, and writes nothing, naming why, when it wouldn't (issue #29):
+  - a merge or cherry-pick in progress, since git refuses a commit of only some files during one;
+  - a path `git add --dry-run` refuses, such as an ignored file or one beyond a symlinked folder.
 - **A failed write rolls back:** if a write fails partway, the records already written get their original text back.
   - As of 2026-11-25, the rollback is best effort: it tries every record written so far and the one whose write failed, which may be left truncated, and the message names each one it couldn't restore, in place of "No files changed." (issue #34).
 - **Failures are outcomes, not exceptions:** as of 2026-11-25, a file or git call that fails on the way (re-reading a record, listing a bundle, `git status`) ends the run with exit `1` and a message naming the path, and closes the interactive prompts cleanly (issue #34).
@@ -44,6 +47,7 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - **The commit names only the verified files:** `git add -- <files>`, then `git commit -m <message> -- <files>`, so anything else staged stays out of it.
   - A chosen record with other uncommitted changes is committed whole, with a warning listing it first.
 - **A rejected commit is unstaged:** if a hook rejects it, the files are unstaged again so the next unrelated commit doesn't pick them up; the edits stay on disk, and the hook's output is printed.
+  - As of 2026-11-25, a `--yes` run's message says to run the same command again once the commit can go through, and that re-run commits the sign-off left on disk as it is (see [What `--yes` verifies](yes-selection.md); issue #29).
   - Staging done before the run for those same files is lost; their content isn't.
 - **It never pushes and never passes `--no-verify`.** `--no-commit` stops after the write.
 
@@ -53,6 +57,8 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - A lossy decode turned each byte it couldn't read into U+FFFD, so verifying a Latin-1 record rewrote bytes in its body, and a rollback wrote that damage back while saying no files changed. The OKF spec requires UTF-8, so refusing such a record costs nothing a valid one needs (issue #27).
 - Hooks are the repo's own checks, so a sign-off goes through them like any other commit; pushing stays the person's step.
 - These guards came from two `/code-review` passes and PR review on PR #2.
+- A sign-off left on disk after a failed commit used to be stranded: a re-run skipped the record as already verified and exited `2` (issue #29). Git's known refusals are now caught before anything is written, and the re-run finishes the rest.
+  - Restoring the files when the commit fails was considered and not adopted on 2026-11-25: it would undo a hook that reformats the record, and reverse "the edits stay on disk" above.
 - A raw `ENOENT` from a deleted record, or a prompt frame left open, tells the person nothing about which record or what state the files are in; the code audit (issue #25) found the unguarded calls, and issue #34 made each return a reason that the run mode prints.
 - The OKF spec lets a record use any YAML, so reading must accept every layout, but a writer may refuse one. Each layout the edits accepted beyond the common ones (anchors, aliases, multi-line flow collections, `?` keys) needed its own code path and drew its own review findings; an allowlist turns the unknown layouts into refusals instead of bugs, and every `verified` field in the owner's bundles as of 2026-11-12 was already a one-line `{ by, at }`.
 - The `yaml` package's CST layer (`CST.setScalarValue`) was tried for the value overwrites on 2026-11-12 and not adopted: an empty value (`at:`) has no CST token, so the range-based edit was needed anyway, and the values written (`stable`, an ISO timestamp) never need the escaping it adds. A full round-trip with `doc.toString()` was also rejected: it changed 13 of the owner's records, such as `[a, b]` to `[ a, b ]`.

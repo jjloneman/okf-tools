@@ -49,6 +49,7 @@ describe("applyVerification", () => {
         dirtyPaths: [],
         filePaths: candidates.map(({ filePath }) => filePath),
         message: "docs(okf): ✅ verify 2 records",
+        uncommitted: [],
       },
     });
 
@@ -87,6 +88,7 @@ describe("applyVerification", () => {
         dirtyPaths: [],
         filePaths: ["docs/decisions/a.md"],
         message: "docs(okf): ✅ verify 1 record",
+        uncommitted: [],
       },
     });
 
@@ -123,6 +125,7 @@ describe("applyVerification", () => {
         dirtyPaths: [],
         filePaths: ["docs/decisions/a.md"],
         message: "docs(okf): ✅ verify 1 record",
+        uncommitted: [],
       },
     });
 

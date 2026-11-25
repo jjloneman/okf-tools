@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import type { UncommittedSignOffs } from "./apply.ts";
 import type { ExitCode } from "./exit-codes.ts";
 import type { CliOptions } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
@@ -9,6 +10,7 @@ import type { RunContext } from "./run-context.ts";
 import {
   applyVerification,
   describeDirtyPaths,
+  findUncommittedSignOffs,
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
@@ -61,7 +63,9 @@ type LoadResult =
  * Verify records with no prompts: every changed record still needing a
  * sign-off (`--changed`), or the records named on the command line.
  *
- * - A named record that's already verified is skipped, not an error.
+ * - A named record that's already verified is skipped, not an error, unless
+ *   its sign-off isn't committed yet, as after a rejected commit: a
+ *   committing run then commits it as it is.
  */
 export function runNonInteractive(params: {
   context: RunContext;
@@ -78,13 +82,36 @@ export function runNonInteractive(params: {
     return EXIT_CODES.failure;
   }
 
-  loaded.candidates
-    .filter((candidate) => !needsSignOff(candidate))
-    .forEach((candidate) => {
-      printInfo(`skipped ${candidate.filePath}: ${describeState(candidate)}`);
-    });
+  const found = context.shouldCommit
+    ? findUncommittedSignOffs({ candidates: loaded.candidates, context })
+    : undefined;
 
-  const selected = loaded.candidates.filter(needsSignOff);
+  if (found?.isOk === false) {
+    printError(found.reason);
+
+    return EXIT_CODES.failure;
+  }
+
+  const uncommitted = found?.value ?? {
+    paths: new Set<string>(),
+    signOffOnlyPaths: new Set<string>(),
+  };
+  const uncommittedPaths = uncommitted.paths;
+
+  const isChosen = (candidate: Candidate): boolean =>
+    needsSignOff(candidate) || uncommittedPaths.has(candidate.filePath);
+
+  loaded.candidates.forEach((candidate) => {
+    const { filePath } = candidate;
+
+    if (uncommittedPaths.has(filePath)) {
+      printInfo(`committing ${filePath}: already verified, not yet committed`);
+    } else if (!isChosen(candidate)) {
+      printInfo(`skipped ${filePath}: ${describeState(candidate)}`);
+    }
+  });
+
+  const selected = loaded.candidates.filter(isChosen);
 
   if (selected.length === 0) {
     printInfo("Nothing to verify.");
@@ -96,6 +123,7 @@ export function runNonInteractive(params: {
     context,
     selected,
     statusPaths: loaded.statusPaths,
+    uncommitted,
   });
 }
 
@@ -104,9 +132,10 @@ function applySelection(params: {
   context: RunContext;
   selected: readonly Candidate[];
   statusPaths: ReadonlySet<string> | undefined;
+  uncommitted: UncommittedSignOffs;
 }): ExitCode {
-  const { context, selected } = params;
-  const statusPaths = readChosenStatus({ ...params, context });
+  const { context, selected, uncommitted } = params;
+  const statusPaths = readChosenStatus(params);
 
   if (!statusPaths.isOk) {
     printError(statusPaths.reason);
@@ -118,6 +147,7 @@ function applySelection(params: {
     context,
     selected,
     statusPaths: statusPaths.value,
+    uncommitted,
   });
 
   if (plan.dirtyPaths.length > 0) {
@@ -127,7 +157,7 @@ function applySelection(params: {
   const outcome = applyVerification({ context, plan });
 
   const printVerified = (): void => {
-    plan.filePaths.forEach((filePath) => {
+    plan.candidates.forEach(({ filePath }) => {
       printInfo(`verified ${filePath}`);
     });
   };
@@ -136,6 +166,9 @@ function applySelection(params: {
     case "commitFailed": {
       printVerified();
       printError(outcome.message);
+      printInfo(
+        "Once the commit can go through, run the same command again to commit it."
+      );
 
       return EXIT_CODES.failure;
     }
