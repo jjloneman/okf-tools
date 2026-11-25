@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { readOkfConfig, resolveSettings } from "./config.ts";
 
-const EMPTY = { bundles: undefined, verifiedBy: undefined };
+const EMPTY = { bundles: undefined, exclude: undefined, verifiedBy: undefined };
 const REPO_ROOT = "/repo";
 
 describe("readOkfConfig", () => {
@@ -18,15 +18,38 @@ describe("readOkfConfig", () => {
     expect(readOkfConfig(text)).toStrictEqual({ config: EMPTY, isOk: true });
   });
 
-  test("reads the bundles and the actor", () => {
+  test("reads the bundles, the exclusions, and the actor", () => {
     // Given - a full okf block
     const text = JSON.stringify({
-      okf: { bundles: ["docs/decisions"], verifiedBy: "human:jjloneman" },
+      okf: {
+        bundles: ["docs/decisions"],
+        exclude: ["docs/decisions/README.md"],
+        verifiedBy: "human:jjloneman",
+      },
     });
 
-    // When/Then - both keys
+    // When/Then - every key
     expect(readOkfConfig(text)).toStrictEqual({
-      config: { bundles: ["docs/decisions"], verifiedBy: "human:jjloneman" },
+      config: {
+        bundles: ["docs/decisions"],
+        exclude: ["docs/decisions/README.md"],
+        verifiedBy: "human:jjloneman",
+      },
+      isOk: true,
+    });
+  });
+
+  test("accepts an extglob that starts with `!(`", () => {
+    // Given - a negated extglob, which picomatch reads as a pattern
+    const text = JSON.stringify({ okf: { exclude: ["!(docs)/**"] } });
+
+    // When/Then - read as written
+    expect(readOkfConfig(text)).toStrictEqual({
+      config: {
+        bundles: undefined,
+        exclude: ["!(docs)/**"],
+        verifiedBy: undefined,
+      },
       isOk: true,
     });
   });
@@ -55,6 +78,23 @@ describe("readOkfConfig", () => {
       text: '{"okf":{"bundles":[""]}}',
     },
     {
+      description: "exclusions that aren't a list",
+      reason: "`okf.exclude` in package.json must be a list of globs.",
+      text: '{"okf":{"exclude":"docs/drafts"}}',
+    },
+    {
+      description: "an exclusion that's an empty string",
+      reason: "`okf.exclude` in package.json must be a list of globs.",
+      text: '{"okf":{"exclude":[""]}}',
+    },
+    ...["!docs/decisions/README.md", "/docs/drafts", "docs/drafts/"].map(
+      (glob) => ({
+        description: `the gitignore-style exclusion ${glob}`,
+        reason: `\`okf.exclude\` glob "${glob}" can't start with \`!\` or \`/\`, or end with \`/\`; globs are relative to the repo root, and a folder's name excludes all of it.`,
+        text: JSON.stringify({ okf: { exclude: [glob] } }),
+      })
+    ),
+    {
       description: "an actor that isn't a string",
       reason: "`okf.verifiedBy` in package.json must be a string.",
       text: '{"okf":{"verifiedBy":1}}',
@@ -68,6 +108,7 @@ describe("readOkfConfig", () => {
 describe("resolveSettings", () => {
   const configured = {
     bundles: ["docs/decisions"],
+    exclude: undefined,
     verifiedBy: "human:jjloneman",
   };
 
@@ -85,6 +126,27 @@ describe("resolveSettings", () => {
       isOk: true,
       settings: {
         bundleDirs: ["/repo/docs/decisions"],
+        excludeGlobs: [],
+        verifiedBy: "human:jjloneman",
+      },
+    });
+  });
+
+  test("keeps the config's exclusions", () => {
+    // When - resolving a config that excludes a folder
+    const result = resolveSettings({
+      config: { ...configured, exclude: ["docs/decisions/drafts"] },
+      cwd: "/repo/docs",
+      options: { bundles: ["references"], by: undefined },
+      repoRoot: REPO_ROOT,
+    });
+
+    // Then - the exclusions as written, even beside --bundle
+    expect(result).toStrictEqual({
+      isOk: true,
+      settings: {
+        bundleDirs: ["/repo/docs/references"],
+        excludeGlobs: ["docs/decisions/drafts"],
         verifiedBy: "human:jjloneman",
       },
     });
@@ -104,6 +166,7 @@ describe("resolveSettings", () => {
       isOk: true,
       settings: {
         bundleDirs: ["/repo/docs/references"],
+        excludeGlobs: [],
         verifiedBy: "claude-code/2.1.316",
       },
     });
@@ -119,14 +182,14 @@ describe("resolveSettings", () => {
     },
     {
       by: undefined,
-      config: { bundles: ["docs"], verifiedBy: undefined },
+      config: { bundles: ["docs"], exclude: undefined, verifiedBy: undefined },
       description: "no actor anywhere",
       reason:
         "No one to sign as: pass --by <actor>, or set `okf.verifiedBy` in /repo/package.json.",
     },
     {
       by: "human:jj loneman",
-      config: { bundles: ["docs"], verifiedBy: undefined },
+      config: { bundles: ["docs"], exclude: undefined, verifiedBy: undefined },
       description: "an actor YAML can't hold unquoted",
       reason:
         '"human:jj loneman" isn\'t an actor a record can hold, such as human:jjloneman.',
@@ -145,7 +208,7 @@ describe("resolveSettings", () => {
       "12:30",
     ].map((by) => ({
       by,
-      config: { bundles: ["docs"], verifiedBy: undefined },
+      config: { bundles: ["docs"], exclude: undefined, verifiedBy: undefined },
       description: `the YAML-special actor ${by}`,
       reason: `"${by}" isn't an actor a record can hold, such as human:jjloneman.`,
     })),

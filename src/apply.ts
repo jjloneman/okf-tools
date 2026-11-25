@@ -347,7 +347,7 @@ export function findUncommittedSignOffs(params: {
  *   warned about only when it changed by more than the sign-off.
  */
 export function planVerification(params: {
-  context: Pick<RunContext, "shouldCommit">;
+  context: Pick<RunContext, "bundleDirs" | "shouldCommit">;
   selected: readonly Candidate[];
   statusPaths: ReadonlySet<string>;
   uncommitted?: UncommittedSignOffs;
@@ -358,7 +358,7 @@ export function planVerification(params: {
     statusPaths,
     uncommitted = { paths: new Set(), signOffOnlyPaths: new Set() },
   } = params;
-  const { shouldCommit } = context;
+  const { bundleDirs, shouldCommit } = context;
 
   const isUncommitted = ({ filePath }: Candidate): boolean =>
     uncommitted.paths.has(filePath);
@@ -376,7 +376,7 @@ export function planVerification(params: {
     candidates,
     dirtyPaths: shouldCommit ? dirtyPaths : [],
     filePaths: selected.map(({ filePath }) => filePath),
-    message: buildCommitMessage(selected),
+    message: buildCommitMessage({ bundleDirs, selected }),
     uncommitted: selected.filter(isUncommitted),
   };
 }

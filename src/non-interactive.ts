@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import type { UncommittedSignOffs } from "./apply.ts";
 import type { ExitCode } from "./exit-codes.ts";
 import type { CliOptions } from "./options.ts";
@@ -16,7 +14,12 @@ import {
 import { EXIT_CODES } from "./exit-codes.ts";
 import { listChangedPaths, listDirtyPaths, toPathKey } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
-import { loadCandidate, loadCandidatesAt, resolveRecordPaths } from "./repo.ts";
+import {
+  loadCandidate,
+  loadCandidatesAt,
+  orderRecordPaths,
+  resolveRecordPaths,
+} from "./repo.ts";
 
 /** The records a run would consider, or why they can't be loaded. */
 type LoadResult =
@@ -201,7 +204,7 @@ function applySelection(params: {
 
 /** Load every changed record in the bundles. */
 function loadChanged(context: RunContext): LoadResult {
-  const { bundleDirs, output, repoRoot, verifiedBy } = context;
+  const { bundleDirs, excludeGlobs, output, repoRoot, verifiedBy } = context;
   const changes = listChangedPaths({ bundleDirs, repoRoot });
 
   if (!changes.isOk) {
@@ -216,24 +219,12 @@ function loadChanged(context: RunContext): LoadResult {
     );
   }
 
-  /*
-   * Bundle order, then file name in code-unit order, as `loadCandidates`
-   * lists them for the interactive checklist.
-   *
-   * - Folders are compared by `toPathKey`, since git's spelling of a name can
-   *   differ from the disk's in Unicode form.
-   */
-  const filePaths = bundleDirs.flatMap((bundleDir) =>
-    [...paths]
-      .filter(
-        (changedPath) =>
-          toPathKey(path.posix.dirname(changedPath)) === toPathKey(bundleDir)
-      )
-      .sort()
-  );
+  // The order `loadCandidates` lists them in for the interactive checklist.
+  const filePaths = orderRecordPaths({ bundleDirs, filePaths: paths });
 
   const { candidates, skipped } = loadCandidatesAt({
     bundleDirs,
+    excludeGlobs,
     filePaths,
     repoRoot,
     verifiedBy,
@@ -256,11 +247,12 @@ function loadNamed(params: {
   recordPaths: readonly string[];
 }): LoadResult {
   const { context, recordPaths } = params;
-  const { bundleDirs, cwd, repoRoot, verifiedBy } = context;
+  const { bundleDirs, cwd, excludeGlobs, repoRoot, verifiedBy } = context;
 
   const resolved = resolveRecordPaths({
     bundleDirs,
     cwd,
+    excludeGlobs,
     recordPaths,
     repoRoot,
   });

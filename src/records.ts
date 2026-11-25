@@ -5,6 +5,7 @@ import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
 
 import { verifyRecord } from "./frontmatter/edit.ts";
 import { readStatusText } from "./frontmatter/read.ts";
+import { findBundleDir } from "./repo.ts";
 
 /** A record in a bundle that could be verified. */
 export type Candidate = {
@@ -87,10 +88,19 @@ export type RecordEdit = {
  *
  * - The scope is the bundle's folder name, or `okf` when the records span more
  *   than one bundle or the bundle is the repo root.
+ *
+ * - A record's bundle is the first of `bundleDirs` that holds it, at any
+ *   depth, so records in a bundle's subfolders share its scope.
  */
-export function buildCommitMessage(selected: readonly Candidate[]): string {
+export function buildCommitMessage(params: {
+  bundleDirs: readonly string[];
+  selected: readonly Candidate[];
+}): string {
+  const { selected } = params;
   const bundleDirs = new Set(
-    selected.map(({ filePath }) => path.posix.dirname(filePath))
+    selected.map(({ filePath }) =>
+      findBundleDir({ bundleDirs: params.bundleDirs, filePath })
+    )
   );
 
   const types = new Set(selected.map(({ summary }) => summary.type));

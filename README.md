@@ -64,10 +64,11 @@ Then configure it in `package.json`:
 }
 ```
 
-- **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files directly inside each, other than `index.md` and `log.md`, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#31-reserved-filenames).
+- **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files at any depth inside each, other than `index.md` and `log.md` at every level, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#31-reserved-filenames). A bundle inside another counts each record once; a folder git ignores or that holds only ignored files, `.git`, a folder holding another clone, and a symlink to a folder are never read.
 - **`okf.verifiedBy`** is the OKF actor each `verified` entry names.
+- **`okf.exclude`** (optional) lists globs, relative to the repo root, of Markdown in a bundle that isn't a record, such as `["**/README.md", "docs/decisions/drafts"]`. A glob that matches a folder excludes everything in it, `*` matches dot files too, and a glob can't start with `!` (other than an extglob such as `!(drafts)`) or `/`, or end with `/`.
 
-Both can be given on the command line instead (`--bundle`, `--by`); there is no default for either.
+`okf.bundles` and `okf.verifiedBy` can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.exclude` has no flag, and applies to `--bundle` too.
 
 Node 22 or later, and git, are required.
 

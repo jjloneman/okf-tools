@@ -14,6 +14,14 @@ export type OkfConfig = {
   bundles: readonly string[] | undefined;
 
   /**
+   * Globs, relative to the repo root, of files and folders in the bundles
+   * that hold no records.
+   *
+   * @example `["docs/decisions/README.md", "docs/drafts"]`
+   */
+  exclude: readonly string[] | undefined;
+
+  /**
    * The OKF actor a `verified` entry is recorded as.
    *
    * @example "human:jjloneman"
@@ -62,6 +70,14 @@ export type Settings = {
    * @example `["/repo/docs/decisions"]`
    */
   bundleDirs: readonly string[];
+
+  /**
+   * Globs, relative to the repo root, of files and folders in the bundles
+   * that hold no records.
+   *
+   * @example `["docs/decisions/README.md", "docs/drafts"]`
+   */
+  excludeGlobs: readonly string[];
 
   /**
    * The OKF actor a `verified` entry is recorded as.
@@ -128,7 +144,11 @@ const ACTOR = /^\p{Letter}(?=[^:/]*[:/])[^\s"#'(),[\]{}]*(?<!:)$/u;
 export function readOkfConfig(
   packageJsonText: string | undefined
 ): OkfConfigResult {
-  const empty = { bundles: undefined, verifiedBy: undefined };
+  const empty = {
+    bundles: undefined,
+    exclude: undefined,
+    verifiedBy: undefined,
+  };
 
   if (packageJsonText === undefined) {
     return { config: empty, isOk: true };
@@ -155,12 +175,29 @@ export function readOkfConfig(
     return { isOk: false, reason: "`okf` in package.json must be an object." };
   }
 
-  const { bundles, verifiedBy } = block;
+  const { bundles, exclude, verifiedBy } = block;
 
   if (bundles !== undefined && !isStringList(bundles)) {
     return {
       isOk: false,
       reason: "`okf.bundles` in package.json must be a list of directories.",
+    };
+  }
+
+  if (exclude !== undefined && !isStringList(exclude)) {
+    return {
+      isOk: false,
+      reason: "`okf.exclude` in package.json must be a list of globs.",
+    };
+  }
+
+  // A gitignore habit would otherwise match nothing, or, for `!`, everything.
+  const unmatchable = exclude?.find((glob) => /^(?:![^(]|\/)|\/$/u.test(glob));
+
+  if (unmatchable !== undefined) {
+    return {
+      isOk: false,
+      reason: `\`okf.exclude\` glob "${unmatchable}" can't start with \`!\` or \`/\`, or end with \`/\`; globs are relative to the repo root, and a folder's name excludes all of it.`,
     };
   }
 
@@ -171,7 +208,7 @@ export function readOkfConfig(
     };
   }
 
-  return { config: { bundles, verifiedBy }, isOk: true };
+  return { config: { bundles, exclude, verifiedBy }, isOk: true };
 }
 
 /**
@@ -180,6 +217,8 @@ export function readOkfConfig(
  * - `--bundle` replaces `okf.bundles` rather than adding to it, and is
  *   relative to where the command was run; config bundles are relative to the
  *   repo root.
+ *
+ * - `okf.exclude` has no flag, so it always applies.
  *
  * - There's no default bundle and no default actor: a run names both.
  */
@@ -220,7 +259,10 @@ export function resolveSettings(params: {
     };
   }
 
-  return { isOk: true, settings: { bundleDirs, verifiedBy } };
+  return {
+    isOk: true,
+    settings: { bundleDirs, excludeGlobs: config.exclude ?? [], verifiedBy },
+  };
 }
 
 /** Whether a parsed JSON value is an object, not an array or `null`. */

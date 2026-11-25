@@ -19,6 +19,7 @@ import {
   loadCandidate,
   loadCandidates,
   loadCandidatesAt,
+  orderRecordPaths,
   readRecordText,
   resolveBundleDirs,
   resolveRecordPaths,
@@ -172,6 +173,7 @@ describe("loadCandidates, given invalid YAML", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -203,6 +205,7 @@ describe("loadCandidates, given a layout the edits refuse", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -239,6 +242,7 @@ describe("loadCandidates, given a generated.at ahead of the clock", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -283,6 +287,7 @@ describe("loadCandidates, given a verified.at ahead of the clock", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -307,6 +312,7 @@ describe("loadCandidates", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -335,6 +341,7 @@ describe("loadCandidates", () => {
       // When - loading it
       const loaded = loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       });
@@ -368,6 +375,7 @@ describe("loadCandidates", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions", "docs/references"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -396,6 +404,7 @@ describe("loadCandidates, given near-miss frontmatter", () => {
       const loaded = unwrap(
         loadCandidates({
           bundleDirs: ["docs/decisions"],
+          excludeGlobs: [],
           repoRoot: repo.root,
           verifiedBy: VERIFIED_BY,
         })
@@ -426,6 +435,7 @@ describe("loadCandidates, given near-miss frontmatter", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -453,6 +463,7 @@ describe("loadCandidates, given near-miss frontmatter", () => {
     const { candidates, skipped } = unwrap(
       loadCandidates({
         bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
         repoRoot: repo.root,
         verifiedBy: VERIFIED_BY,
       })
@@ -466,7 +477,258 @@ describe("loadCandidates, given near-miss frontmatter", () => {
   });
 });
 
+describe("loadCandidates, given folders in a bundle", () => {
+  test("reads records at any depth, leaving out reserved names at every level", () => {
+    // Given - records nested two deep, each level with an index and a log
+    repo.write("docs/decisions/z.md", draftRecord("Z"));
+    repo.write("docs/decisions/api/b.md", draftRecord("B"));
+    repo.write("docs/decisions/api/index.md", draftRecord("API index"));
+    repo.write("docs/decisions/api/log.md", draftRecord("API log"));
+    repo.write("docs/decisions/api/v2/a.md", draftRecord("A"));
+    repo.write("docs/decisions/api/v2/index.md", draftRecord("V2 index"));
+    repo.write("docs/decisions/api/v2/log.md", draftRecord("V2 log"));
+
+    // When - loading the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - the three records, by path
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/api/b.md",
+      "docs/decisions/api/v2/a.md",
+      "docs/decisions/z.md",
+    ]);
+    expect(skipped).toStrictEqual([]);
+  });
+
+  test("leaves out the files and folders the globs exclude, dot files included", () => {
+    // Given - a README, a drafts folder, and a dot folder, each with a record
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write("docs/decisions/README.md", draftRecord("Excluded"));
+    repo.write("docs/decisions/api/README.md", draftRecord("Excluded"));
+    repo.write("docs/decisions/drafts/b.md", draftRecord("Excluded"));
+    repo.write("docs/decisions/.hidden/c.md", draftRecord("Excluded"));
+
+    // When - loading with those excluded
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        excludeGlobs: [
+          "**/README.md",
+          "docs/decisions/drafts",
+          "docs/decisions/.*",
+        ],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - only the record, nothing reported as skipped
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/a.md",
+    ]);
+    expect(skipped).toStrictEqual([]);
+  });
+
+  test("lists a record once when one bundle holds another", () => {
+    // Given - a bundle inside another, each with a record
+    repo.write("docs/a.md", draftRecord("A"));
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+
+    // When - loading the inner bundle first, then the outer one
+    const { candidates } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions", "docs"],
+        excludeGlobs: [],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - each once, under the first bundle that holds it
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/b.md",
+      "docs/a.md",
+    ]);
+  });
+
+  test("never reads a folder git ignores, .git, or another clone", () => {
+    // Given - a root bundle with an ignored folder and a nested clone
+    repo.write(".gitignore", "node_modules/\n*.local.md\n");
+    repo.write("a.md", draftRecord("A"));
+    repo.write("b.local.md", draftRecord("B"));
+    repo.write("node_modules/pkg/README.md", "---\nkey: [\n---\n");
+    repo.write("vendor/spec/c.md", draftRecord("C"));
+    repo.git("init", "--quiet", "vendor/spec");
+
+    // When - loading the repo root as the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["."],
+        excludeGlobs: [],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - the records outside them, an ignored file included
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "a.md",
+      "b.local.md",
+    ]);
+    expect(skipped).toStrictEqual([]);
+  });
+
+  test("never follows a symlink to a folder", () => {
+    // Given - a link inside the bundle to a folder of records outside it
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write("elsewhere/b.md", draftRecord("B"));
+    symlinkSync(
+      path.join(repo.root, "elsewhere"),
+      path.join(repo.root, "docs/decisions/linked")
+    );
+
+    // When - loading the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - only the record in the bundle itself
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/a.md",
+    ]);
+    expect(skipped).toStrictEqual([]);
+  });
+
+  test("fails naming the bundle when git can't list what it ignores", () => {
+    // Given - a record, and an index git can't read
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+    repo.write(".git/index", "garbage\n");
+
+    // When - loading the bundle
+    const result = loadCandidates({
+      bundleDirs: ["docs/decisions"],
+      excludeGlobs: [],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - git's reason, naming the bundle
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason:
+        "Couldn't list the folders git ignores in docs/decisions: fatal: .git/index: index file smaller than expected",
+    });
+  });
+
+  test("fails naming the bundle when a folder in it can't be listed", () => {
+    // Given - a folder in the bundle with no read permission
+    repo.write("docs/decisions/locked/a.md", draftRecord("A"));
+    chmodSync(path.join(repo.root, "docs/decisions/locked"), 0o000);
+
+    // When - loading the bundle
+    const result = loadCandidates({
+      bundleDirs: ["docs/decisions"],
+      excludeGlobs: [],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - why, naming the bundle
+    chmodSync(path.join(repo.root, "docs/decisions/locked"), 0o755);
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^docs\/decisions can't be listed: .*EACCES/u
+      ) as string,
+    });
+  });
+});
+
+describe("orderRecordPaths", () => {
+  test("orders by first holding bundle, then path, each once", () => {
+    // When - ordering paths from two overlapping bundles and none
+    const ordered = orderRecordPaths({
+      bundleDirs: ["docs/decisions", "docs"],
+      filePaths: [
+        "docs/z.md",
+        "docs/decisions/b.md",
+        "other/c.md",
+        "docs/decisions/a/x.md",
+        "docs/decisions/b.md",
+        "docs/a.md",
+      ],
+    });
+
+    // Then - the inner bundle's paths, then the outer's, the stray left out
+    expect(ordered).toStrictEqual([
+      "docs/decisions/a/x.md",
+      "docs/decisions/b.md",
+      "docs/a.md",
+      "docs/z.md",
+    ]);
+  });
+
+  test("lets the repo root hold every path", () => {
+    // When - ordering under the root
+    const ordered = orderRecordPaths({
+      bundleDirs: ["."],
+      filePaths: ["b.md", "a/c.md"],
+    });
+
+    // Then - both, by path
+    expect(ordered).toStrictEqual(["a/c.md", "b.md"]);
+  });
+
+  test("never takes a sibling folder that shares the bundle's prefix", () => {
+    // When - ordering a path in docs/decisions-old under docs/decisions
+    const ordered = orderRecordPaths({
+      bundleDirs: ["docs/decisions"],
+      filePaths: ["docs/decisions-old/a.md"],
+    });
+
+    // Then - nothing
+    expect(ordered).toStrictEqual([]);
+  });
+});
+
 describe("loadCandidatesAt", () => {
+  test("leaves out excluded paths and reserved names at depth", () => {
+    // Given - a nested record, a nested log, and an excluded record
+    repo.write("docs/decisions/api/a.md", draftRecord("A"));
+    repo.write("docs/decisions/api/log.md", draftRecord("Log"));
+    repo.write("docs/decisions/drafts/b.md", draftRecord("B"));
+
+    // When - loading all three, the drafts excluded
+    const { candidates } = loadCandidatesAt({
+      bundleDirs: ["docs/decisions"],
+      excludeGlobs: ["docs/decisions/drafts"],
+      filePaths: [
+        "docs/decisions/api/a.md",
+        "docs/decisions/api/log.md",
+        "docs/decisions/drafts/b.md",
+      ],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - only the nested record
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/decisions/api/a.md",
+    ]);
+  });
+
   test("keeps the record files among the paths, in the given order", () => {
     // Given - two records, a file outside the bundle, and the bundle's index
     repo.write("docs/decisions/a.md", draftRecord("A"));
@@ -477,6 +739,7 @@ describe("loadCandidatesAt", () => {
     // When - loading them, deleted path included
     const { candidates } = loadCandidatesAt({
       bundleDirs: ["docs/decisions"],
+      excludeGlobs: [],
       filePaths: [
         "docs/decisions/b.md",
         "docs/decisions/deleted.md",
@@ -504,6 +767,7 @@ describe("loadCandidatesAt, given names in another Unicode form", () => {
     // When - loading the path as git prints it, composed
     const { candidates } = loadCandidatesAt({
       bundleDirs: ["docs/cafe\u0301"],
+      excludeGlobs: [],
       filePaths: ["docs/caf\u00e9/a.md"],
       repoRoot: repo.root,
       verifiedBy: VERIFIED_BY,
@@ -525,6 +789,7 @@ describe("resolveRecordPaths, given names in another Unicode form", () => {
     const resolved = resolveRecordPaths({
       bundleDirs: ["docs/decisions"],
       cwd: repo.root,
+      excludeGlobs: [],
       recordPaths: [
         "docs/decisions/caf\u00e9.md",
         "docs/decisions/cafe\u0301.md",
@@ -611,6 +876,43 @@ describe("resolveRecordPaths", () => {
     repo.write("docs/decisions/log.md", "l\n");
     repo.write("docs/decisions/notes.txt", "n\n");
     repo.write("docs/decisions/folder.md/inner.txt", "x\n");
+    repo.write("docs/decisions/api/b.md", "b\n");
+    repo.write("docs/decisions/api/index.md", "i\n");
+    repo.write("docs/decisions/drafts/c.md", "c\n");
+  });
+
+  test("accepts a record in a folder of the bundle", () => {
+    // When - naming a nested record
+    const result = resolveRecordPaths({
+      bundleDirs: ["docs/decisions"],
+      cwd: repo.root,
+      excludeGlobs: [],
+      recordPaths: ["docs/decisions/api/b.md"],
+      repoRoot: repo.root,
+    });
+
+    // Then - it
+    expect(result).toStrictEqual({
+      isOk: true,
+      value: ["docs/decisions/api/b.md"],
+    });
+  });
+
+  test("refuses a record the globs exclude", () => {
+    // When - naming a record in an excluded folder
+    const result = resolveRecordPaths({
+      bundleDirs: ["docs/decisions"],
+      cwd: repo.root,
+      excludeGlobs: ["docs/decisions/drafts"],
+      recordPaths: ["docs/decisions/drafts/c.md"],
+      repoRoot: repo.root,
+    });
+
+    // Then - why
+    expect(result).toStrictEqual({
+      isOk: false,
+      reason: "docs/decisions/drafts/c.md is excluded by `okf.exclude`.",
+    });
   });
 
   test("returns paths from the root, each once", () => {
@@ -618,6 +920,7 @@ describe("resolveRecordPaths", () => {
     const result = resolveRecordPaths({
       bundleDirs: ["docs/decisions"],
       cwd: `${repo.root}/docs`,
+      excludeGlobs: [],
       recordPaths: ["decisions/a.md", `${repo.root}/docs/decisions/a.md`],
       repoRoot: repo.root,
     });
@@ -651,6 +954,11 @@ describe("resolveRecordPaths", () => {
       recordPath: "docs/decisions/index.md",
     },
     {
+      description: "a nested folder's index",
+      reason: "docs/decisions/api/index.md isn't a record in docs/decisions.",
+      recordPath: "docs/decisions/api/index.md",
+    },
+    {
       description: "the bundle's log",
       reason: "docs/decisions/log.md isn't a record in docs/decisions.",
       recordPath: "docs/decisions/log.md",
@@ -666,6 +974,7 @@ describe("resolveRecordPaths", () => {
       resolveRecordPaths({
         bundleDirs: ["docs/decisions"],
         cwd: repo.root,
+        excludeGlobs: [],
         recordPaths: [recordPath],
         repoRoot: repo.root,
       })

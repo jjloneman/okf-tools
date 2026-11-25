@@ -83,6 +83,7 @@ function context(overrides: Partial<RunContext> = {}): RunContext {
   return {
     bundleDirs: ["docs/decisions", "docs/references"],
     cwd: repo.root,
+    excludeGlobs: [],
     output: createOutput("okf"),
     repoRoot: repo.root,
     shouldCommit: true,

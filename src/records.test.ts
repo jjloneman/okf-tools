@@ -14,6 +14,15 @@ import {
 
 const AT = "2026-10-02T13:30:00Z";
 
+/** The bundles every commit-message test's records sit in. */
+const BUNDLE_DIRS = [
+  "docs/decisions",
+  "docs/references",
+  "one/decisions",
+  "two/decisions",
+  ".",
+];
+
 /** A fabricated candidate, with its summary fields overridable. */
 function candidate(params: {
   filePath: string;
@@ -50,7 +59,7 @@ describe("buildCommitMessage", () => {
     const selected = [candidate({ filePath: "docs/decisions/a.md" })];
 
     // When/Then - a singular subject scoped to the bundle
-    expect(buildCommitMessage(selected)).toBe(
+    expect(buildCommitMessage({ bundleDirs: BUNDLE_DIRS, selected })).toBe(
       "docs(decisions): 📝 verify 1 decision record\n\n- A title (a.md)"
     );
   });
@@ -66,7 +75,7 @@ describe("buildCommitMessage", () => {
     ];
 
     // When/Then - a plural, generic subject
-    expect(buildCommitMessage(selected)).toBe(
+    expect(buildCommitMessage({ bundleDirs: BUNDLE_DIRS, selected })).toBe(
       "docs(okf): 📝 verify 2 okf records\n\n- A title (a.md)\n- b.md (b.md)"
     );
   });
@@ -87,7 +96,34 @@ describe("buildCommitMessage scope", () => {
     const selected = filePaths.map((filePath) => candidate({ filePath }));
 
     // When/Then - the generic scope
-    expect(buildCommitMessage(selected)).toMatch(/^docs\(okf\): /u);
+    expect(buildCommitMessage({ bundleDirs: BUNDLE_DIRS, selected })).toMatch(
+      /^docs\(okf\): /u
+    );
+  });
+});
+
+describe("buildCommitMessage, given records in a bundle's folders", () => {
+  test("scopes them to the bundle, not their folder", () => {
+    // Given - one record in the bundle and one in a subfolder of it
+    const selected = [
+      candidate({ filePath: "docs/decisions/a.md" }),
+      candidate({ filePath: "docs/decisions/api/b.md" }),
+    ];
+
+    // When/Then - the bundle's scope
+    expect(buildCommitMessage({ bundleDirs: BUNDLE_DIRS, selected })).toMatch(
+      /^docs\(decisions\): 📝 verify 2 decision records\n/u
+    );
+  });
+
+  test("falls back to okf for a record in no bundle", () => {
+    // Given - a record outside every bundle given
+    const selected = [candidate({ filePath: "docs/decisions/a.md" })];
+
+    // When/Then - the generic scope
+    expect(
+      buildCommitMessage({ bundleDirs: ["docs/references"], selected })
+    ).toMatch(/^docs\(okf\): /u);
   });
 });
 

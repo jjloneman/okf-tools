@@ -10,7 +10,7 @@ tags:
   - selection
   - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:19:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:38:56Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -31,6 +31,7 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
       - **Rejected:** refusing the record until its `verified.at` is fixed by hand, like a `generated.at` ahead of the clock, since a fresh sign-off already fixes it;
   - or one or more record paths, relative to where the command runs, each an existing `.md` file directly inside a bundle, other than `index.md`.
     - As of 2026-11-25, other than `log.md` too, the other file name OKF reserves (issue #31).
+    - As of 2026-11-25, at any depth inside a bundle, other than `index.md` and `log.md` at every level, and other than a path `okf.exclude` matches, which is refused as excluded (issue #42; see [Which files in a bundle are records](bundle-contents.md)).
     - Under pnpm or npm, that's the folder the script was called from (`INIT_CWD`) only when it's in the package's repo; otherwise, as with `pnpm --dir <package>` from another repo, it's the package root.
     - As of 2026-11-25, a record path and a configured bundle may take any spelling the disk resolves to the same file, such as another case on macOS: each is kept as given when git's index holds that spelling, and otherwise spelled as the disk spells it, since git compares paths byte for byte and, after a rename only in case, follows the index (issue #30).
       - The folder the command runs from is resolved through symlinks and into the disk's spelling when it isn't already inside the repo as git spells its root, so running from a link to the repo works; one already inside is kept as given, so a record path through a link inside the repo is still refused.
