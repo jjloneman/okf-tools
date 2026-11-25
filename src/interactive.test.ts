@@ -7,6 +7,7 @@ import {
   note,
   outro,
   select,
+  updateSettings,
 } from "@clack/prompts";
 import { chmodSync, unlinkSync } from "node:fs";
 import path from "node:path";
@@ -46,6 +47,7 @@ vi.mock(import("@clack/prompts"), async (importOriginal) => ({
   note: vi.fn(),
   outro: vi.fn(),
   select: vi.fn(),
+  updateSettings: vi.fn(),
 }));
 
 const { repo } = useTestRepo();
@@ -125,6 +127,17 @@ describe("runInteractive", () => {
       expect.stringMatching(/^Verified 2, committed [0-9a-f]+\.$/u)
     );
     expect(repo.git("status", "--porcelain")).toBe("");
+  });
+
+  test("makes Ctrl-D cancel a prompt, as Ctrl-C and Esc do", async () => {
+    // Given - the default records
+    // When - running
+    await runInteractive(context());
+
+    // Then - Ctrl-D's byte mapped to clack's cancel action
+    expect(updateSettings).toHaveBeenCalledWith({
+      aliases: { "\u0004": "cancel" },
+    });
   });
 
   test("lists the toggle-all key only while the checklist is open", async () => {

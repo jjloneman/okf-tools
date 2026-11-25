@@ -9,6 +9,7 @@ import {
   note,
   outro,
   select,
+  updateSettings,
 } from "@clack/prompts";
 import path from "node:path";
 import { styleText } from "node:util";
@@ -28,6 +29,14 @@ import { listChangedPaths } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
 import { loadCandidates } from "./repo.ts";
 
+/*
+ * Ctrl-D's byte, which clack doesn't treat as a cancel.
+ *
+ * - readline closes its interface on it, so a prompt left listening would
+ *   never settle, and Node would exit `13` on the unsettled top-level await.
+ */
+const END_OF_TRANSMISSION = "\u0004";
+
 /** The checklist's legend entry for clack's toggle-all key. */
 const TOGGLE_ALL_INSTRUCTION = `${styleText("dim", "A:")} toggle all`;
 
@@ -39,6 +48,7 @@ const TOGGLE_ALL_INSTRUCTION = `${styleText("dim", "A:")} toggle all`;
 export async function runInteractive(context: RunContext): Promise<ExitCode> {
   const { bundleDirs, repoRoot, shouldCommit, verifiedBy } = context;
 
+  updateSettings({ aliases: { [END_OF_TRANSMISSION]: "cancel" } });
   intro(`Verify records in ${bundleDirs.join(", ")}`);
 
   const changes = listChangedPaths({ bundleDirs, repoRoot });

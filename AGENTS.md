@@ -83,6 +83,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `src/frontmatter/edit.property.test.ts` property-tests the edits with `fast-check` over generated layouts, with a fixed seed and run count. A failure prints its `seed` and `path`; put both in `RUN_OPTIONS` to replay it. To hunt for new failures, run it locally with a higher `numRuns` and no `seed`, and add each counterexample as an example test with its fix.
 - Tests that need git run it for real, in a scratch repo from `#test/repo`: `const { repo } = useTestRepo()` at the top of the file gives each test a fresh one; only a machine state no test machine has (no git binary) is mocked.
 - The prompts are tested with `@clack/prompts` mocked; everything after the prompts runs for real.
+  - `src/bin.terminal.test.ts` is the exception: it runs `okf-verify` in a pseudo-terminal through `python3`, for the keys a mock can't reach, such as Ctrl-D closing readline.
 - **Test data is fabricated.** Never copy a real repo's records into a test.
 - Shape: `describe("<unit>")` → `test("<scenario>")`, with `// Given` / `// When` / `// Then` comments, each followed by a hyphen and what that phase holds; table tests name rows with `$description`.
 
