@@ -21,8 +21,9 @@ export const RECORDS_INTRO =
   "The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.";
 
 /** How an agent writes, edits, and verifies records, as Markdown bullets. */
-export const RECORD_RULES = `- **Write a new record as \`status: draft\`**, and name yourself in \`generated\` as \`<producer>/<version>\`, such as \`claude-code/2.1.316\`, with the UTC time you wrote it.
-- **When you edit a record, re-stamp \`generated\`** (\`by\` and \`at\`), and set a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
+export const RECORD_RULES = `- **Start a new record with \`okf new <record> --type <type> --by <producer>/<version>\`**, such as \`--by claude-code/2.1.316\`, which writes it as \`status: draft\` with \`generated\` stamped from the clock, and lists it in its index; then write its body.
+- **When you edit a record, re-stamp it with \`okf touch <record>... --by <producer>/<version> --draft\`**, which sets \`generated\` from the clock and a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
+  - Never type \`generated.at\` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a \`verified\` entry yourself.** Signing a record off is the person's call.
 - **Verify only when the person asks you to**, with \`okf verify --yes <record>...\`, naming the files they approved.
   - Pass \`--changed\` instead only when they asked for every changed record.
@@ -40,6 +41,8 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
 - **\`okf tags\`** lists every tag in the bundles with its record count, and writes nothing. Run it whenever you choose a record's tags; \`--format json\` prints it for a program.
 - **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, or retitle a record, in the same change.
   - \`okf index --check\` writes nothing, so run it whenever you like.
+- **\`okf new <record>\`** writes a draft record's frontmatter, stamped from the clock, and its index line. Run it whenever you start a record, before writing its body.
+- **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, in the same change.
 - **\`okf init\`** writes the \`okf\` config and the agent block. Run it only when the person asks you to set up okf-tools or refresh the block.
   - \`okf init --check\` writes nothing, so run it whenever you like.
 - **\`okf guide\`** prints this guide.`;

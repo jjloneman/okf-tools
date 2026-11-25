@@ -11,7 +11,8 @@ import path from "node:path";
 
 import type { ExitCode } from "./exit-codes.ts";
 import type { IndexRecord } from "./index-sync.ts";
-import type { Candidate } from "./records.ts";
+import type { Outcome } from "./outcome.ts";
+import type { Candidate, RecordEdit } from "./records.ts";
 import type { SkippedRecord } from "./repo.ts";
 import type { BundleContext } from "./run-context.ts";
 
@@ -46,6 +47,32 @@ type IndexScope = {
    */
   skipped: SkippedRecord[];
 };
+
+/** One index's synced text, worked out but not written, or why it can't be. */
+type PlannedSync =
+  | {
+      /**
+       * It could be synced.
+       *
+       * @example "planned"
+       */
+      kind: "planned";
+
+      /**
+       * Its text now, to compare with or restore.
+       *
+       * @example `"# Decisions\n"`
+       */
+      originalText: string;
+
+      /**
+       * Its synced text, the same as `originalText` when it's current.
+       *
+       * @example `"# Decisions\n\n- [A](a.md) - The first.\n"`
+       */
+      text: string;
+    }
+  | Extract<SyncResult, { kind: "refused" }>;
 
 /** What syncing one index came to. */
 type SyncResult =
@@ -111,6 +138,70 @@ export function findNearestIndex(params: {
   }
 
   return undefined;
+}
+
+/**
+ * Work out the index a new record would be listed in, synced with it as
+ * `okf index` syncs it, before the record is written.
+ *
+ * @returns the index's path, its text now, and its synced text; `undefined`
+ * when no folder up to the bundle has an index; or why it can't be synced.
+ */
+export function planIndexWithRecord(params: {
+  context: BundleContext;
+  record: IndexRecord;
+}): Outcome<RecordEdit | undefined> {
+  const { context, record } = params;
+  const { bundleDirs, excludeGlobs, repoRoot } = context;
+  const indexPath = findNearestIndex({
+    bundleDirs,
+    filePath: record.path,
+    repoRoot,
+  });
+
+  if (indexPath === undefined) {
+    return { isOk: true, value: undefined };
+  }
+
+  const loaded = loadCandidates({
+    bundleDirs,
+    excludeGlobs,
+    isReadOnly: true,
+    repoRoot,
+    verifiedBy: NO_SIGNER,
+  });
+
+  if (!loaded.isOk) {
+    return loaded;
+  }
+
+  const records = [
+    ...loaded.value.candidates.map((candidate) => toIndexRecord(candidate)),
+    record,
+  ];
+  const isListedHere = (filePath: string): boolean =>
+    findNearestIndex({ bundleDirs, filePath, repoRoot }) === indexPath;
+  const scope: IndexScope = {
+    records: records.filter((listed) => isListedHere(listed.path)),
+    skipped: loaded.value.skipped.filter((skipped) =>
+      isListedHere(skipped.filePath)
+    ),
+  };
+  const planned = planSync({ indexPath, records, repoRoot, scope });
+
+  return planned.kind === "refused"
+    ? {
+        isOk: false,
+        reason: `${indexPath} can't be synced: ${planned.reason}`,
+      }
+    : {
+        isOk: true,
+        value: {
+          filePath: indexPath,
+          originalText: planned.originalText,
+          text: planned.text,
+        },
+      };
 }
 
 /**
@@ -297,20 +388,19 @@ function isInsideBundle(params: {
 }
 
 /**
- * Sync one index: read it, rewrite it from the records, and write it back
- * when it changed, unless `isCheck`.
+ * Work out one index's synced text, from every record and the ones it lists,
+ * writing nothing.
  *
  * - A symlink is refused, as records are, since git commits the link, not the
  *   file it points to.
  */
-function syncOne(params: {
+function planSync(params: {
   indexPath: string;
-  isCheck: boolean;
   records: readonly IndexRecord[];
   repoRoot: string;
   scope: IndexScope;
-}): SyncResult {
-  const { indexPath, isCheck, records, repoRoot, scope } = params;
+}): PlannedSync {
+  const { indexPath, records, repoRoot, scope } = params;
   const absolutePath = path.join(repoRoot, indexPath);
   const [unreadable] = scope.skipped;
 
@@ -344,17 +434,33 @@ function syncOne(params: {
     text,
   });
 
-  if (!synced.isOk) {
-    return { kind: "refused", reason: `it ${synced.problem}` };
+  return synced.isOk
+    ? { kind: "planned", originalText: text, text: synced.text }
+    : { kind: "refused", reason: `it ${synced.problem}` };
+}
+
+/** Sync one index, and write it back when it changed, unless `isCheck`. */
+function syncOne(params: {
+  indexPath: string;
+  isCheck: boolean;
+  records: readonly IndexRecord[];
+  repoRoot: string;
+  scope: IndexScope;
+}): SyncResult {
+  const { indexPath, isCheck, repoRoot } = params;
+  const planned = planSync(params);
+
+  if (planned.kind === "refused") {
+    return planned;
   }
 
-  if (synced.text === text) {
+  if (planned.text === planned.originalText) {
     return { kind: "current" };
   }
 
   if (!isCheck) {
     try {
-      writeFileSync(absolutePath, synced.text);
+      writeFileSync(path.join(repoRoot, indexPath), planned.text);
     } catch (error) {
       return { kind: "refused", reason: describeError(error) };
     }

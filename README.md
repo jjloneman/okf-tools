@@ -18,6 +18,7 @@ It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-f
   - [🧾 JSON](#-json)
 - [🗂️ Index](#️-index)
   - [🔖 Tag index](#-tag-index)
+- [✏️ New and touch](#️-new-and-touch)
 - [🧭 Agents](#-agents)
 - [🏷️ Writing tags](#️-writing-tags)
   - [🔢 Listing tags](#-listing-tags)
@@ -97,7 +98,7 @@ Node 22 or later, and git, are required.
 
 ## 🚀 Usage
 
-- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), and `okf tags --help` the ones in [Listing tags](#-listing-tags).
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), `okf tags --help` the ones in [Listing tags](#-listing-tags), and `okf new --help` and `okf touch --help` the ones in [New and touch](#️-new-and-touch).
 - `okf guide` prints the guidance for agents (see [Agents](#-agents)).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
@@ -307,6 +308,44 @@ Between two marker lines, `okf index` also keeps a list of every tag the index's
 | `--check`        | Write nothing; exit `1` when an index is out of date.            |
 | `--help`, `-h`   | Print the usage.                                                 |
 
+## ✏️ New and touch
+
+```sh
+# Start a draft record, listed in its index
+pnpm okf new docs/decisions/caching.md --type Decision \
+  --by claude-code/2.1.316 --title "How results are cached" \
+  --description "One sentence on what was decided." --tag cache --tag cli
+
+# Re-stamp records after editing them, setting stable ones back to draft
+pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft
+```
+
+`generated.at` says when a record last changed, so a time typed by hand, or forgotten, makes a signed-off record look changed, or an edited one look signed off. Both commands take it from the clock instead, and neither has a flag for it.
+
+- **`okf new` writes only the frontmatter**: `type`, then `title`, `description`, and `tags` when given, `status: draft`, and `generated: { by, at }`; you write the body.
+  - Tags are written as a block list, sorted, each once.
+  - The path must be a record's in a bundle, in a folder that exists, with nothing there yet, not even a symlink.
+  - It then syncs the `index.md` that lists the record, as `okf index` does (see [Index](#️-index)); with no index in its folder or above, it writes the record alone.
+  - It writes nothing when that index can't be synced, and removes the record again if writing the index fails.
+- **`okf touch` re-stamps `generated`**: `by` from `--by` and `at` from the clock, adding either, or `generated` itself after `status`, when it's missing.
+  - With `--draft`, a `stable` record goes back to `status: draft`; any other status is kept.
+  - It edits in place, as `okf verify` does, keeping every other byte, and refuses a record whose frontmatter it can't edit safely, such as a `generated` that isn't a mapping.
+  - It writes nothing when any record refuses.
+- **Neither adds or changes `verified`, and neither commits.**
+- `--by` must be an actor, such as `claude-code/2.1.316`; it names who wrote the record, not who signs it off.
+- Exit codes: `0` worked, `1` failed.
+
+| Flag                   | Does                                                                   |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `--by <producer>`      | Who wrote or edited the record. Required.                              |
+| `--type <type>`        | `okf new`: the record's `type`. Required.                              |
+| `--title <title>`      | `okf new`: its `title`.                                                |
+| `--description <text>` | `okf new`: its `description`.                                          |
+| `--tag <tag>`          | `okf new`: a tag; repeat for more.                                     |
+| `--draft`              | `okf touch`: set a `stable` record back to `status: draft`.            |
+| `--bundle <dir>`       | A bundle the records are in, relative to where you run it; repeatable. |
+| `--help`, `-h`         | Print the usage.                                                       |
+
 ## 🧭 Agents
 
 Much OKF authoring now happens in a chat with a coding agent, and the non-interactive mode exists for that:
@@ -323,8 +362,9 @@ Much OKF authoring now happens in a chat with a coding agent, and the non-intera
 
 The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.
 
-- **Write a new record as `status: draft`**, and name yourself in `generated` as `<producer>/<version>`, such as `claude-code/2.1.316`, with the UTC time you wrote it.
-- **When you edit a record, re-stamp `generated`** (`by` and `at`), and set a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
+- **Start a new record with `okf new <record> --type <type> --by <producer>/<version>`**, such as `--by claude-code/2.1.316`, which writes it as `status: draft` with `generated` stamped from the clock, and lists it in its index; then write its body.
+- **When you edit a record, re-stamp it with `okf touch <record>... --by <producer>/<version> --draft`**, which sets `generated` from the clock and a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
+  - Never type `generated.at` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a `verified` entry yourself.** Signing a record off is the person's call.
 - **Verify only when the person asks you to**, with `okf verify --yes <record>...`, naming the files they approved.
   - Pass `--changed` instead only when they asked for every changed record.

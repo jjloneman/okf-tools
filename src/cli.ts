@@ -21,25 +21,31 @@ import { runGuide } from "./guide.ts";
 import { runIndex } from "./index-command.ts";
 import { runInit } from "./init.ts";
 import { runInteractive } from "./interactive.ts";
+import { runNew } from "./new-record.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
   DIFF_USAGE,
   formatVerifyUsage,
   INDEX_USAGE,
+  NEW_USAGE,
   OKF_USAGE,
   parseCliArgs,
   parseCommand,
   parseDiffArgs,
   parseIndexArgs,
+  parseNewArgs,
   parseStatusArgs,
   parseTagsArgs,
+  parseTouchArgs,
   STATUS_USAGE,
   TAGS_USAGE,
+  TOUCH_USAGE,
 } from "./options.ts";
 import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
 import { runStatus } from "./status.ts";
 import { runTags } from "./tags.ts";
+import { runTouch } from "./touch.ts";
 import { spellLikeRepoRoot } from "./working-directory.ts";
 
 /** What a run of the CLI is given by the process that starts it. */
@@ -79,8 +85,8 @@ export type RunParams = {
 
 /**
  * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
- * `okf diff`, `okf guide`, `okf index`, `okf init`, `okf status`, `okf tags`,
- * or `okf verify`.
+ * `okf diff`, `okf guide`, `okf index`, `okf init`, `okf new`, `okf status`,
+ * `okf tags`, `okf touch`, or `okf verify`.
  *
  * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
  *   own name.
@@ -135,12 +141,20 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runTagsCommand({ args: parsed.args, cwd, output });
   }
 
+  if (parsed.kind === "new") {
+    return runNewCommand({ args: parsed.args, cwd, output });
+  }
+
+  if (parsed.kind === "touch") {
+    return runTouchCommand({ args: parsed.args, cwd, output });
+  }
+
   return runVerify({ args: parsed.args, cwd, isInteractive, output, program });
 }
 
 /**
- * Resolve the repo and bundles a command that reads them works with, with no
- * one's sign-off: `okf index` and `okf tags`.
+ * Resolve the repo and bundles a command works with when it needs no one's
+ * sign-off: `okf index`, `okf new`, `okf tags`, and `okf touch`.
  */
 function buildBundleContext(params: {
   bundles: readonly string[];
@@ -363,6 +377,53 @@ function runIndexCommand(params: {
 }
 
 /**
+ * Run `okf new`: read its arguments and config, then write the record and its
+ * index line.
+ */
+function runNewCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseNewArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(NEW_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${NEW_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runNew({ context: context.value, options });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
  * Run `okf status`: read its arguments and config, then print the report.
  *
  * - Exits `0` whatever the records hold; only a usage error, a config it
@@ -452,6 +513,53 @@ function runTagsCommand(params: {
     }
 
     return runTags({ context: context.value, format: options.format });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
+}
+
+/**
+ * Run `okf touch`: read its arguments and config, then re-stamp each record's
+ * `generated`.
+ */
+function runTouchCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseTouchArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(TOUCH_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${TOUCH_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runTouch({ context: context.value, options });
   } catch (error) {
     output.error(describeError(error));
 

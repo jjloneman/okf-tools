@@ -367,6 +367,103 @@ describe.each([
   });
 });
 
+describe.each([
+  {
+    args: [
+      "docs/decisions/a.md",
+      "--type",
+      "Decision",
+      "--by",
+      "claude-code/2.2.0",
+    ],
+    command: "new",
+    expected: /^\[okf\] Wrote docs\/decisions\/a\.md as a draft\. /u,
+    setUp: (): void => {
+      mkdirSync(path.join(repo.root, "docs/decisions"), { recursive: true });
+    },
+    usage: "[okf] usage: okf new <record> --type <type> --by <producer>",
+  },
+  {
+    args: ["docs/decisions/a.md", "--by", "claude-code/2.2.0"],
+    command: "touch",
+    expected: /^\[okf\] Re-stamped docs\/decisions\/a\.md at /u,
+    setUp: (): void => {
+      repo.write("docs/decisions/a.md", draftRecord("A"));
+    },
+    usage: "[okf] usage: okf touch <record>... --by <producer>",
+  },
+])("run as okf $command", ({ args, command, expected, setUp, usage }) => {
+  /** Run the command from the repo root. */
+  function runCommand(commandArgs: string[]): Promise<number> {
+    return run({
+      args: [command, ...commandArgs],
+      cwd: repo.root,
+      isInteractive: false,
+      program: "okf",
+    });
+  }
+
+  test("prints its usage for --help", async () => {
+    // When - asking for help
+    const code = await runCommand(["--help"]);
+
+    // Then - its own usage on stdout
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos.join("\n")).toContain(usage);
+    expect(errors).toStrictEqual([]);
+  });
+
+  test("prints why and its usage for a usage error", async () => {
+    // When - passing a verify flag
+    const code = await runCommand([...args, "--yes"]);
+
+    // Then - a usage error, with the usage
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toMatch(/--yes[\s\S]*usage: okf /u);
+  });
+
+  test("runs over the configured bundles", async () => {
+    // Given - a bundle for it to write in
+    setUp();
+    mkdirSync(path.join(repo.root, "docs/references"));
+
+    // When - running it
+    const code = await runCommand(args);
+
+    // Then - it ran, writing as `okf`
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([]);
+    expect(infos).toStrictEqual([expect.stringMatching(expected)]);
+  });
+
+  test("fails when no bundles are configured", async () => {
+    // Given - a config naming no bundles
+    setUp();
+    repo.write("package.json", "{}\n");
+
+    // When - running it
+    const code = await runCommand(args);
+
+    // Then - why, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("package.json");
+    expect(infos).toStrictEqual([]);
+  });
+
+  test("reports an unexpected error instead of throwing", async () => {
+    // Given - a package.json that's a folder, so reading it throws
+    rmSync(path.join(repo.root, "package.json"));
+    mkdirSync(path.join(repo.root, "package.json"));
+
+    // When - running it
+    const code = await runCommand(args);
+
+    // Then - the error, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("EISDIR");
+  });
+});
+
 describe.each(INVOCATIONS)("as $command", (current) => {
   beforeEach(() => {
     invocation = current;

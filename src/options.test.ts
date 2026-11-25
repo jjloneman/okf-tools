@@ -7,8 +7,10 @@ import {
   parseGuideArgs,
   parseIndexArgs,
   parseInitArgs,
+  parseNewArgs,
   parseStatusArgs,
   parseTagsArgs,
+  parseTouchArgs,
 } from "./options.ts";
 
 const STATUS_DEFAULTS = {
@@ -133,6 +135,16 @@ describe("parseCommand", () => {
       args: ["init", "--check"],
       description: "init, with the arguments after it",
       expected: { args: ["--check"], kind: "init" },
+    },
+    {
+      args: ["new", "docs/decisions/a.md"],
+      description: "new, with the arguments after it",
+      expected: { args: ["docs/decisions/a.md"], kind: "new" },
+    },
+    {
+      args: ["touch", "docs/decisions/a.md"],
+      description: "touch, with the arguments after it",
+      expected: { args: ["docs/decisions/a.md"], kind: "touch" },
     },
     {
       args: ["--help"],
@@ -547,5 +559,234 @@ describe("parseTagsArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseTagsArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseNewArgs", () => {
+  /** The flags every `okf new` run needs. */
+  const REQUIRED = ["--type", "Decision", "--by", "claude-code/2.2.0"];
+
+  test.each([
+    {
+      args: ["docs/decisions/a.md", ...REQUIRED],
+      description: "only the record and the required flags",
+      options: {
+        bundles: [],
+        by: "claude-code/2.2.0",
+        description: undefined,
+        recordPath: "docs/decisions/a.md",
+        tags: [],
+        title: undefined,
+        type: "Decision",
+      },
+    },
+    {
+      args: [
+        ...REQUIRED,
+        "docs/decisions/a.md",
+        "--title",
+        "A title",
+        "--description",
+        "One sentence.",
+        "--tag",
+        "cli",
+        "--tag",
+        "api",
+        "--tag",
+        "cli",
+        "--bundle",
+        "docs/decisions",
+      ],
+      description: "every flag, with tags sorted and each once",
+      options: {
+        bundles: ["docs/decisions"],
+        by: "claude-code/2.2.0",
+        description: "One sentence.",
+        recordPath: "docs/decisions/a.md",
+        tags: ["api", "cli"],
+        title: "A title",
+        type: "Decision",
+      },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When/Then - the options
+    expect(parseNewArgs(args)).toStrictEqual({ kind: "options", options });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "a.md"], description: "-h beside a record" },
+    {
+      args: ["--help", "--yes"],
+      description: "--help beside a flag new doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseNewArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["a.md", ...REQUIRED, "--yes"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+    {
+      args: ["a.md", "--type"],
+      description: "--type with no value",
+      message: expect.stringContaining("--type") as unknown,
+    },
+    {
+      args: REQUIRED,
+      description: "no record",
+      message: "Name exactly one record to write.",
+    },
+    {
+      args: ["a.md", "b.md", ...REQUIRED],
+      description: "two records",
+      message: "Name exactly one record to write.",
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0"],
+      description: "no --type",
+      message: "okf new needs --type and --by.",
+    },
+    {
+      args: ["a.md", "--type", "Decision"],
+      description: "no --by",
+      message: "okf new needs --type and --by.",
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+    {
+      args: ["a.md", "--type", " ", "--by", "claude-code/2.2.0"],
+      description: "a blank --type",
+      message: "--type needs a value, not an empty string.",
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--title", ""],
+      description: "an empty --title",
+      message: "--title needs a value, not an empty string.",
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--description", "One.\nTwo."],
+      description: "a --description of two lines",
+      message: "--description must be one line.",
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--tag", "a\rb"],
+      description: "a --tag holding a carriage return",
+      message: '--tag "a\\rb" can\'t hold whitespace or a backtick.',
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--tag", "cli", "--tag", "two words"],
+      description: "a --tag holding a space",
+      message: '--tag "two words" can\'t hold whitespace or a backtick.',
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--tag", "a\tb"],
+      description: "a --tag holding a tab",
+      message: '--tag "a\\tb" can\'t hold whitespace or a backtick.',
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--tag", "a`b"],
+      description: "a --tag holding a backtick",
+      message: '--tag "a`b" can\'t hold whitespace or a backtick.',
+    },
+    {
+      args: ["a.md", ...REQUIRED, "--tag", ""],
+      description: "an empty --tag",
+      message: "--tag needs a value, not an empty string.",
+    },
+    {
+      args: ["a.md", "--type", "Decision", "--by", "a\nb"],
+      description: "a --by of two lines",
+      message: "--by must be one line.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseNewArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseTouchArgs", () => {
+  test.each([
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0"],
+      description: "one record",
+      options: {
+        bundles: [],
+        by: "claude-code/2.2.0",
+        recordPaths: ["a.md"],
+        shouldDraft: false,
+      },
+    },
+    {
+      args: [
+        "a.md",
+        "b.md",
+        "--by",
+        "claude-code/2.2.0",
+        "--draft",
+        "--bundle",
+        "docs",
+      ],
+      description: "two records, --draft, and a bundle",
+      options: {
+        bundles: ["docs"],
+        by: "claude-code/2.2.0",
+        recordPaths: ["a.md", "b.md"],
+        shouldDraft: true,
+      },
+    },
+  ])("reads $description", ({ args, options }) => {
+    // When/Then - the options
+    expect(parseTouchArgs(args)).toStrictEqual({ kind: "options", options });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "a.md"], description: "-h beside a record" },
+    {
+      args: ["--help", "--yes"],
+      description: "--help beside a flag touch doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseTouchArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--yes"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+    {
+      args: ["a.md", "--by"],
+      description: "--by with no value",
+      message: expect.stringContaining("--by") as unknown,
+    },
+    {
+      args: ["--by", "claude-code/2.2.0"],
+      description: "no record",
+      message: "Name at least one record.",
+    },
+    {
+      args: ["a.md"],
+      description: "no --by",
+      message: "okf touch needs --by.",
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--bundle", ""],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseTouchArgs(args)).toStrictEqual({ kind: "invalid", message });
   });
 });
