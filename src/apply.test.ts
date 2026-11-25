@@ -1,11 +1,27 @@
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { draftRecord, record, useTestRepo, VERIFIED_BY } from "#test/repo";
+
+import type { Candidate } from "./records.ts";
 
 import { applyVerification } from "./apply.ts";
 import { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
 
 const { repo } = useTestRepo();
+
+/** Build the candidate a record's text would be listed as. */
+function toCandidate(params: { filePath: string; text: string }): Candidate {
+  const { filePath, text } = params;
+  const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+  if (summary === undefined) {
+    throw new Error(`${filePath} has no frontmatter`);
+  }
+
+  return { filePath, state: getRecordState(summary), summary, text };
+}
 
 describe("applyVerification", () => {
   test("writes nothing when a record refuses the edit at write time", () => {
@@ -19,15 +35,7 @@ describe("applyVerification", () => {
     const candidates = [
       { filePath: "docs/decisions/a.md", text: draftRecord("A") },
       { filePath: "docs/decisions/b.md", text: refused },
-    ].map(({ filePath, text }) => {
-      const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
-
-      if (summary === undefined) {
-        throw new Error(`${filePath} has no frontmatter`);
-      }
-
-      return { filePath, state: getRecordState(summary), summary, text };
-    });
+    ].map(toCandidate);
 
     // When - applying the plan
     const outcome = applyVerification({
@@ -51,5 +59,81 @@ describe("applyVerification", () => {
         "No files changed.\ndocs/decisions/b.md: `verified` holds a single value, not an entry or a list; edit the record by hand",
     });
     expect(repo.read("docs/decisions/a.md")).toBe(draftRecord("A"));
+  });
+
+  test("writes nothing when a record no longer reads as UTF-8", () => {
+    // Given - a record listed as UTF-8, then saved as Latin-1
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+
+    const candidates = [
+      toCandidate({ filePath: "docs/decisions/a.md", text: draftRecord("A") }),
+    ];
+    const latin1 = Buffer.concat([
+      Buffer.from(draftRecord("A")),
+      Buffer.from([0xe9, 0x0a]),
+    ]);
+
+    writeFileSync(path.join(repo.root, "docs/decisions/a.md"), latin1);
+
+    // When - applying the plan
+    const outcome = applyVerification({
+      context: {
+        repoRoot: repo.root,
+        shouldCommit: false,
+        verifiedBy: VERIFIED_BY,
+      },
+      plan: {
+        candidates,
+        dirtyPaths: [],
+        filePaths: ["docs/decisions/a.md"],
+        message: "docs(okf): ✅ verify 1 record",
+      },
+    });
+
+    // Then - not written, and the record's bytes left alone
+    expect(outcome).toStrictEqual({
+      kind: "notWritten",
+      message:
+        "docs/decisions/a.md changed on disk since it was read; nothing written.",
+    });
+    expect(
+      readFileSync(path.join(repo.root, "docs/decisions/a.md"))
+    ).toStrictEqual(latin1);
+  });
+
+  test("writes nothing when a record was deleted since it was listed", () => {
+    // Given - a record listed, then deleted
+    repo.write("docs/decisions/a.md", draftRecord("A"));
+
+    const candidates = [
+      toCandidate({ filePath: "docs/decisions/a.md", text: draftRecord("A") }),
+    ];
+
+    rmSync(path.join(repo.root, "docs/decisions/a.md"));
+
+    // When - applying the plan
+    const outcome = applyVerification({
+      context: {
+        repoRoot: repo.root,
+        shouldCommit: false,
+        verifiedBy: VERIFIED_BY,
+      },
+      plan: {
+        candidates,
+        dirtyPaths: [],
+        filePaths: ["docs/decisions/a.md"],
+        message: "docs(okf): ✅ verify 1 record",
+      },
+    });
+
+    // Then - not written, and no file put back in its place
+    expect(outcome).toHaveProperty("kind", "notWritten");
+    expect(outcome).toHaveProperty(
+      "message",
+      expect.stringMatching(
+        /^docs\/decisions\/a\.md can't be read any more: ENOENT[^\n]*\nNo files changed\.$/u
+      )
+    );
+    expect(existsSync(path.join(repo.root, "docs/decisions/a.md"))).toBe(false);
   });
 });

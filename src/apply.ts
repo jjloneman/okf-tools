@@ -15,7 +15,7 @@ import {
   currentTimestamp,
   prepareEdits,
 } from "./records.ts";
-import { readRecordText, writeRecords } from "./repo.ts";
+import { isRecordUnchanged, writeRecords } from "./repo.ts";
 
 /** What applying a plan did. */
 export type ApplyOutcome =
@@ -129,10 +129,10 @@ export function applyVerification(params: {
   const changedPaths: string[] = [];
 
   for (const { filePath, text } of candidates) {
-    let currentText: string;
+    let isUnchanged: boolean;
 
     try {
-      currentText = readRecordText({ filePath, repoRoot });
+      isUnchanged = isRecordUnchanged({ filePath, repoRoot, text });
     } catch (error) {
       return {
         kind: "notWritten",
@@ -140,7 +140,7 @@ export function applyVerification(params: {
       };
     }
 
-    if (currentText !== text) {
+    if (!isUnchanged) {
       changedPaths.push(filePath);
     }
   }

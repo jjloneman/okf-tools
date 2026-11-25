@@ -1,4 +1,5 @@
-import { chmodSync } from "node:fs";
+import fc from "fast-check";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -16,6 +17,7 @@ import {
   loadCandidate,
   loadCandidates,
   loadCandidatesAt,
+  readRecordText,
   resolveBundleDirs,
   resolveRecordPaths,
   writeRecords,
@@ -52,6 +54,106 @@ describe("loadCandidate", () => {
         /^docs\/decisions\/a\.md can't be read: .*EACCES/u
       ) as string,
     });
+  });
+});
+
+describe("loadCandidate, given bytes that aren't UTF-8", () => {
+  test.each([
+    {
+      bytes: Buffer.concat([
+        Buffer.from(draftRecord("A")),
+        Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]),
+      ]),
+      description: "a Latin-1 byte in the body",
+    },
+    {
+      bytes: Buffer.concat([
+        Buffer.from("---\ntype: Decision\ntitle: caf"),
+        Buffer.from([0xe9]),
+        Buffer.from("\nstatus: draft\n---\n"),
+      ]),
+      description: "a Latin-1 byte in the frontmatter",
+    },
+    {
+      bytes: Buffer.concat([
+        Buffer.from(draftRecord("A")),
+        Buffer.from([0xed, 0xa0, 0x80, 0x0a]),
+      ]),
+      description: "an encoded surrogate",
+    },
+  ])("refuses $description, rather than replace it", ({ bytes }) => {
+    // Given - a record holding bytes that aren't valid UTF-8
+    repo.write("docs/decisions/a.md", "");
+    writeFileSync(path.join(repo.root, "docs/decisions/a.md"), bytes);
+
+    // When - loading it
+    const loaded = loadCandidate({
+      filePath: "docs/decisions/a.md",
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - unreadable, naming the file and the encoding
+    expect(loaded).toStrictEqual({
+      kind: "unreadable",
+      reason: "docs/decisions/a.md can't be read: it isn't valid UTF-8.",
+    });
+  });
+
+  test("keeps a byte order mark in the text", () => {
+    // Given - a record that opens with a byte order mark
+    repo.write("docs/decisions/a.md", `\uFEFF${draftRecord("A")}`);
+
+    // When - loading it
+    const loaded = loadCandidate({
+      filePath: "docs/decisions/a.md",
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - a record whose text still holds the mark
+    expect(loaded).toMatchObject({
+      candidate: { text: `\uFEFF${draftRecord("A")}` },
+      kind: "record",
+    });
+  });
+});
+
+describe("readRecordText", () => {
+  test("reads any bytes losslessly, or refuses them", () => {
+    // Given - a scratch file to write each byte string to
+    const filePath = "docs/decisions/a.md";
+    const absolutePath = path.join(repo.root, filePath);
+
+    repo.write(filePath, "");
+
+    // When/Then - the text re-encodes to the bytes, or the read throws
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.uint8Array({ maxLength: 64 }),
+          fc.string({ maxLength: 32, unit: "binary" }).map((text) => {
+            return new Uint8Array(Buffer.from(text));
+          })
+        ),
+        (bytes) => {
+          writeFileSync(absolutePath, bytes);
+
+          let text: string | undefined;
+
+          try {
+            text = readRecordText({ filePath, repoRoot: repo.root });
+          } catch (error) {
+            expect(error).toStrictEqual(new Error("it isn't valid UTF-8."));
+          }
+
+          const wasRead = readFileSync(absolutePath);
+
+          return text === undefined || Buffer.from(text).equals(wasRead);
+        }
+      ),
+      { numRuns: 300, seed: 27 }
+    );
   });
 });
 

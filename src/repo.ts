@@ -3,6 +3,7 @@
  * resolving bundles and paths, loading candidates, and reading and writing
  * records.
  */
+import { isUtf8 } from "node:buffer";
 import {
   existsSync,
   readdirSync,
@@ -94,6 +95,26 @@ export type SkippedRecord = {
 
 /** The file every bundle may hold that isn't a record. */
 const INDEX_FILE = "index.md";
+
+/**
+ * Whether a record's bytes on disk are still the text it was listed with.
+ *
+ * - Bytes are compared, since `readRecordText` decodes only valid UTF-8,
+ *   which re-encodes exactly: a record saved since in another encoding
+ *   differs.
+ *
+ * - A record that can't be read any more, such as one deleted since,
+ *   throws, for `applyVerification` to report.
+ */
+export function isRecordUnchanged(params: {
+  filePath: string;
+  repoRoot: string;
+  text: string;
+}): boolean {
+  const { filePath, repoRoot, text } = params;
+
+  return readFileSync(path.join(repoRoot, filePath)).equals(Buffer.from(text));
+}
 
 /**
  * Read a record from disk, judged against `verifiedBy`'s sign-off.
@@ -228,14 +249,28 @@ export function loadCandidatesAt(params: {
   return loaded;
 }
 
-/** Read a record's text as it is on disk now. */
+/**
+ * Read a record's text as it is on disk now.
+ *
+ * - Throws when the file can't be read, or when it isn't valid UTF-8, which
+ *   the OKF spec requires: a lossy decode would write replacement characters
+ *   over the bytes it couldn't read.
+ *
+ * - Node keeps a byte order mark when decoding, so the text re-encodes to
+ *   exactly the bytes read.
+ */
 export function readRecordText(params: {
   filePath: string;
   repoRoot: string;
 }): string {
   const { filePath, repoRoot } = params;
+  const bytes = readFileSync(path.join(repoRoot, filePath));
 
-  return readFileSync(path.join(repoRoot, filePath), "utf8");
+  if (!isUtf8(bytes)) {
+    throw new Error("it isn't valid UTF-8.");
+  }
+
+  return bytes.toString("utf8");
 }
 
 /**
@@ -318,7 +353,8 @@ export function resolveRecordPaths(params: {
  * Write each record's new text to disk, all or nothing.
  *
  * - When a write fails partway, the records already written get their
- *   original text back, so no record is left half-verified.
+ *   original text back, so no record is left half-verified. That text was
+ *   read as strict UTF-8, so it re-encodes to the original bytes.
  *
  * - That rollback is best effort, and covers the record whose write failed
  *   too, since a failed write can leave it truncated: a record it can't

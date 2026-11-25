@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { chmodSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -495,5 +495,89 @@ describe("run --yes", () => {
     expect(errors.join("\n")).toMatch(
       /docs\/decisions\/a\.md can't be read: .*EACCES/u
     );
+  });
+});
+
+describe("run --yes, given records that are bytes, not only text", () => {
+  /** A draft whose body holds a Latin-1 é, a byte that isn't valid UTF-8. */
+  const LATIN1_DRAFT = Buffer.concat([
+    Buffer.from(draftRecord("Latin-1")),
+    Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]),
+  ]);
+
+  /** A draft with a byte order mark and a UTF-8 é in its body. */
+  const UTF8_DRAFT = Buffer.from(`\uFEFF${draftRecord("UTF-8")}café\n`);
+
+  /** Read a file's bytes, relative to the repo root. */
+  function readBytes(filePath: string): Buffer {
+    return readFileSync(path.join(repo.root, filePath));
+  }
+
+  /** Write a file's bytes, relative to the repo root. */
+  function writeBytes(params: { bytes: Buffer; filePath: string }): void {
+    const { bytes, filePath } = params;
+
+    writeFileSync(path.join(repo.root, filePath), bytes);
+  }
+
+  beforeEach(() => {
+    repo.write("docs/decisions/b.md", draftRecord("B"));
+    repo.write("docs/references/c.md", draftRecord("C"));
+  });
+
+  test("refuses a record that isn't valid UTF-8, leaving its bytes alone", async () => {
+    // Given - a draft whose body isn't valid UTF-8
+    writeBytes({ bytes: LATIN1_DRAFT, filePath: "docs/decisions/a.md" });
+
+    // When - verifying it with a good one
+    const code = await runIn([
+      "--yes",
+      "--no-commit",
+      "docs/decisions/a.md",
+      "docs/decisions/b.md",
+    ]);
+
+    // Then - the reason, as a failure, and neither file changed
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain(
+      "docs/decisions/a.md can't be read: it isn't valid UTF-8."
+    );
+    expect(readBytes("docs/decisions/a.md")).toStrictEqual(LATIN1_DRAFT);
+    expect(repo.read("docs/decisions/b.md")).toBe(draftRecord("B"));
+  });
+
+  test("restores a record's exact bytes when a later write fails", async () => {
+    // Given - a draft with a byte order mark and an é, then a read-only one
+    writeBytes({ bytes: UTF8_DRAFT, filePath: "docs/decisions/a.md" });
+    chmodSync(path.join(repo.root, "docs/decisions/b.md"), 0o444);
+
+    // When - verifying both, so the second write fails after the first
+    const code = await runIn([
+      "--yes",
+      "--no-commit",
+      "docs/decisions/a.md",
+      "docs/decisions/b.md",
+    ]);
+
+    // Then - "No files changed" holds byte for byte
+    expect(code).toBe(1);
+    expect(errors.join("\n")).toContain("No files changed");
+    expect(readBytes("docs/decisions/a.md")).toStrictEqual(UTF8_DRAFT);
+  });
+
+  test("keeps a byte order mark when it verifies a record", async () => {
+    // Given - a draft with a byte order mark and an é
+    writeBytes({ bytes: UTF8_DRAFT, filePath: "docs/decisions/a.md" });
+
+    // When - verifying it
+    const code = await runIn(["--yes", "--no-commit", "docs/decisions/a.md"]);
+
+    // Then - the same bytes before and after the frontmatter edit
+    const after = readBytes("docs/decisions/a.md").toString("utf8");
+
+    expect(code).toBe(0);
+    expect(after.startsWith("\uFEFF---\n")).toBe(true);
+    expect(after).toContain("status: stable");
+    expect(after.endsWith("café\n")).toBe(true);
   });
 });
