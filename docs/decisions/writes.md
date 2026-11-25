@@ -3,9 +3,9 @@ type: Decision
 title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags: [git, safety]
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T15:37:22Z }
-verified: { by: human:jjloneman, at: 2026-11-13T02:54:56Z }
+verified: { by: human:jjloneman, at: 2026-11-25T15:54:46Z }
 ---
 
 # How okf-verify writes and commits records
