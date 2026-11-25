@@ -22,6 +22,7 @@ import {
   commitFiles,
   listDirtyPaths,
   readCommittedText,
+  toPathKey,
 } from "./git.ts";
 import { describeError } from "./output.ts";
 import {
@@ -339,8 +340,8 @@ export function findUncommittedSignOffs(params: {
  *   `applyVerification` checks again before writing.
  *
  * - `statusPaths` is what `git status` reported for the records, files new
- *   to `HEAD` left out, read by the caller, so planning never calls git and
- *   can't fail.
+ *   to `HEAD` left out, each as its `toPathKey`, read by the caller, so
+ *   planning never calls git and can't fail.
  *
  * - A record in `uncommitted.paths` is committed as it is, not edited, and is
  *   warned about only when it changed by more than the sign-off.
@@ -367,7 +368,8 @@ export function planVerification(params: {
     .map(({ filePath }) => filePath)
     .filter(
       (filePath) =>
-        statusPaths.has(filePath) && !uncommitted.signOffOnlyPaths.has(filePath)
+        statusPaths.has(toPathKey(filePath)) &&
+        !uncommitted.signOffOnlyPaths.has(filePath)
     );
 
   return {

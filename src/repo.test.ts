@@ -4,6 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
 import {
+  DISK_SPELLING,
   draftRecord,
   NEAR_MISSES,
   record,
@@ -492,6 +493,52 @@ describe("loadCandidatesAt", () => {
       "docs/decisions/b.md",
       "docs/decisions/a.md",
     ]);
+  });
+});
+
+describe("loadCandidatesAt, given names in another Unicode form", () => {
+  test("keeps a record whose folder the bundle names decomposed", () => {
+    // Given - a composed folder, and the bundle spelled decomposed
+    repo.write("docs/caf\u00e9/a.md", draftRecord("A"));
+
+    // When - loading the path as git prints it, composed
+    const { candidates } = loadCandidatesAt({
+      bundleDirs: ["docs/cafe\u0301"],
+      filePaths: ["docs/caf\u00e9/a.md"],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // Then - the record, since both name one folder
+    expect(candidates.map(({ filePath }) => filePath)).toStrictEqual([
+      "docs/caf\u00e9/a.md",
+    ]);
+  });
+});
+
+describe("resolveRecordPaths, given names in another Unicode form", () => {
+  test("keeps a record named in two Unicode forms once", () => {
+    // Given - a record, named composed and decomposed
+    repo.write("docs/decisions/caf\u00e9.md", draftRecord("Cafe"));
+
+    // When - resolving both spellings
+    const resolved = resolveRecordPaths({
+      bundleDirs: ["docs/decisions"],
+      cwd: repo.root,
+      recordPaths: [
+        "docs/decisions/caf\u00e9.md",
+        "docs/decisions/cafe\u0301.md",
+      ],
+      repoRoot: repo.root,
+    });
+
+    // Then - one path, or the second refused as missing on a disk that
+    // tells the forms apart
+    expect(resolved).toMatchObject(
+      DISK_SPELLING.isNormalizationInsensitive
+        ? { isOk: true, value: ["docs/decisions/caf\u00e9.md"] }
+        : { isOk: false }
+    );
   });
 });
 

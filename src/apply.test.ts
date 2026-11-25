@@ -13,8 +13,9 @@ import { draftRecord, record, useTestRepo, VERIFIED_BY } from "#test/repo";
 
 import type { Candidate } from "./records.ts";
 
-import { applyVerification } from "./apply.ts";
+import { applyVerification, planVerification } from "./apply.ts";
 import { getRecordState, readRecordSummary } from "./frontmatter/read.ts";
+import { loadCandidatesAt } from "./repo.ts";
 
 const { repo } = useTestRepo();
 
@@ -185,5 +186,31 @@ describe("applyVerification, given a record replaced by a symlink", () => {
         "docs/decisions/a.md changed on disk since it was read; nothing written.",
     });
     expect(repo.read("drafts/real.md")).toBe(draftRecord("A"));
+  });
+});
+
+describe("planVerification", () => {
+  test("warns about a record git reported in another Unicode form", () => {
+    // Given - a draft whose name is decomposed, reported by git composed
+    const filePath = "docs/decisions/cafe\u0301.md";
+
+    repo.write(filePath, draftRecord("Cafe"));
+
+    const { candidates } = loadCandidatesAt({
+      bundleDirs: ["docs/decisions"],
+      filePaths: [filePath],
+      repoRoot: repo.root,
+      verifiedBy: VERIFIED_BY,
+    });
+
+    // When - planning its sign-off
+    const plan = planVerification({
+      context: { shouldCommit: true },
+      selected: candidates,
+      statusPaths: new Set(["docs/decisions/caf\u00e9.md"]),
+    });
+
+    // Then - warned about, under the disk's spelling
+    expect(plan.dirtyPaths).toStrictEqual([filePath]);
   });
 });

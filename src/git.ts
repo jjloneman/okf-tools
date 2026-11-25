@@ -32,7 +32,8 @@ export type ChangedPaths = {
 
   /**
    * The working tree's share of `paths` that `HEAD` already has: what
-   * `git status` reported, files new to the repo left out.
+   * `git status` reported, files new to the repo left out, each as its
+   * `toPathKey`.
    *
    * @example `new Set(["docs/decisions/package-promise.md"])`
    */
@@ -247,6 +248,21 @@ export function findRepoRoot(cwd: string): Outcome<string> {
 }
 
 /**
+ * Whether git's index holds the path, or a file under it, spelled exactly
+ * this way; false when git can't be asked.
+ */
+export function isKnownToGit(params: {
+  filePath: string;
+  repoRoot: string;
+}): boolean {
+  const { filePath, repoRoot } = params;
+
+  return Boolean(
+    tryGit({ args: ["ls-files", "-z", "--", filePath], repoRoot })
+  );
+}
+
+/**
  * List the changed files under the bundles, from the branch diff and the
  * working tree.
  *
@@ -290,7 +306,9 @@ export function listChangedPaths(params: {
   status.value.forEach(({ filePath }) => paths.add(filePath));
 
   const statusPaths = new Set(
-    status.value.filter(({ isNew }) => !isNew).map(({ filePath }) => filePath)
+    status.value
+      .filter(({ isNew }) => !isNew)
+      .map(({ filePath }) => toPathKey(filePath))
   );
 
   return { isOk: true, value: { hasBranchDiff, paths, statusPaths } };
@@ -299,6 +317,9 @@ export function listChangedPaths(params: {
 /**
  * List which of the files git sees uncommitted changes to, in one `git status`
  * call.
+ *
+ * - Each is returned as the caller spelled it, matched to git's spelling by
+ *   `toPathKey`.
  *
  * - `shouldSkipNew` leaves out files `HEAD` doesn't have, whose every line is
  *   new, for a warning about changes besides the sign-off.
@@ -318,12 +339,12 @@ export function listDirtyPaths(params: {
   const dirtyPaths = new Set(
     status.value
       .filter(({ isNew }) => !shouldSkipNew || !isNew)
-      .map(({ filePath }) => filePath)
+      .map(({ filePath }) => toPathKey(filePath))
   );
 
   return {
     isOk: true,
-    value: filePaths.filter((filePath) => dirtyPaths.has(filePath)),
+    value: filePaths.filter((filePath) => dirtyPaths.has(toPathKey(filePath))),
   };
 }
 
@@ -426,6 +447,18 @@ export function runGit(params: {
     ...GIT_EXEC_OPTIONS,
     cwd: repoRoot,
   });
+}
+
+/**
+ * The key two spellings of one path from the repo root share, for comparing
+ * a name from the disk with one git printed.
+ *
+ * - NFC, since git on macOS composes the names it prints
+ *   (`core.precomposeUnicode`), while the disk keeps the form the file was
+ *   created with, which some tools write decomposed.
+ */
+export function toPathKey(filePath: string): string {
+  return filePath.normalize("NFC");
 }
 
 /** Say why a git call failed: what it printed to stderr, else its error. */

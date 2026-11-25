@@ -25,7 +25,7 @@ import {
   planVerification,
 } from "./apply.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
-import { listChangedPaths } from "./git.ts";
+import { listChangedPaths, toPathKey } from "./git.ts";
 import { describeState, needsSignOff } from "./records.ts";
 import { loadCandidates } from "./repo.ts";
 
@@ -88,11 +88,16 @@ export async function runInteractive(context: RunContext): Promise<ExitCode> {
     return EXIT_CODES.failure;
   }
 
-  const changed = all.filter(({ filePath }) => paths.has(filePath));
+  // git's spelling of a name can differ from the disk's in Unicode form.
+  const changedKeys = new Set([...paths].map(toPathKey));
+  const isChanged = ({ filePath }: { filePath: string }): boolean =>
+    changedKeys.has(toPathKey(filePath));
+
+  const changed = all.filter(isChanged);
   const shown = await chooseScope({
     all,
     changed,
-    hasSkippedChanges: skipped.some(({ filePath }) => paths.has(filePath)),
+    hasSkippedChanges: skipped.some(isChanged),
   });
 
   if (shown === undefined) {

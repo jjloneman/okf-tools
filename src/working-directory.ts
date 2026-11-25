@@ -41,6 +41,31 @@ export function resolveWorkingDirectory(params: {
   return isInSameRepo({ cwd, initCwd }) ? initCwd : cwd;
 }
 
+/**
+ * Spell the working directory so paths resolved from it fall inside the repo
+ * as git spells its root.
+ *
+ * - Kept as given when it's already inside, so a drive mapped onto another
+ *   folder, which git keeps unresolved, still matches.
+ *
+ * - Otherwise resolved, through symlinks and into the disk's case and Unicode
+ *   form, as git resolves its root.
+ */
+export function spellLikeRepoRoot(params: {
+  cwd: string;
+  repoRoot: string;
+}): string {
+  const { cwd, repoRoot } = params;
+  const relativePath = path.relative(repoRoot, cwd);
+
+  const isInside =
+    relativePath !== ".." &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relativePath);
+
+  return isInside ? cwd : realpathSync.native(cwd);
+}
+
 /** Whether `initCwd` is in the same git repo as `cwd`; false outside any. */
 function isInSameRepo(params: { cwd: string; initCwd: string }): boolean {
   const { cwd, initCwd } = params;

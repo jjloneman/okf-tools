@@ -30,6 +30,7 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
+import { isKnownToGit, toPathKey } from "./git.ts";
 import { describeError } from "./output.ts";
 
 /** A path read as a record: the record, or why it isn't one. */
@@ -336,6 +337,10 @@ export function readRecordText(params: {
 /**
  * Turn absolute bundle directories into paths from the repo root.
  *
+ * - Each is spelled as git will match it (see `spellForGit`), so a bundle
+ *   configured in another case or Unicode form, on a disk that accepts it,
+ *   is the folder git knows.
+ *
  * - The same directory given twice is kept once.
  *
  * - Fails on the first directory that is missing, outside the repo, or
@@ -371,8 +376,10 @@ export function resolveBundleDirs(params: {
       };
     }
 
-    if (!resolved.includes(relativeDir)) {
-      resolved.push(relativeDir);
+    const bundleDir = spellForGit({ filePath: relativeDir, repoRoot });
+
+    if (!includesPath({ filePath: bundleDir, filePaths: resolved })) {
+      resolved.push(bundleDir);
     }
   }
 
@@ -384,6 +391,11 @@ export function resolveBundleDirs(params: {
  *
  * - Each must be an existing `.md` file directly inside one of the bundles,
  *   and not its `index.md` or `log.md`.
+ *
+ * - Each is spelled as git will match it (see `spellForGit`), so a record
+ *   named in another case or Unicode form, on a disk that accepts it, is the
+ *   record git knows; one reached through a symlink keeps its spelling, for
+ *   `loadCandidate` to refuse.
  *
  * - The same file named twice is kept once.
  */
@@ -398,7 +410,13 @@ export function resolveRecordPaths(params: {
 
   for (const recordPath of recordPaths) {
     const absolutePath = path.resolve(cwd, recordPath);
-    const filePath = toRepoPath({ absolutePath, repoRoot });
+    const typedPath = toRepoPath({ absolutePath, repoRoot });
+    const filePath =
+      typedPath !== undefined &&
+      isFile(absolutePath) &&
+      findLinkedPath({ filePath: typedPath, repoRoot }) === undefined
+        ? spellForGit({ filePath: typedPath, repoRoot })
+        : typedPath;
 
     if (filePath === undefined || !isRecordName({ bundleDirs, filePath })) {
       return {
@@ -411,7 +429,7 @@ export function resolveRecordPaths(params: {
       return { isOk: false, reason: `No record at ${recordPath}.` };
     }
 
-    if (!resolved.includes(filePath)) {
+    if (!includesPath({ filePath, filePaths: resolved })) {
       resolved.push(filePath);
     }
   }
@@ -507,6 +525,20 @@ function holdsText(params: {
   }
 }
 
+/**
+ * Whether `filePaths` holds `filePath` in any Unicode form, since git on
+ * macOS takes both forms for one file.
+ */
+function includesPath(params: {
+  filePath: string;
+  filePaths: readonly string[];
+}): boolean {
+  const { filePath, filePaths } = params;
+  const key = toPathKey(filePath);
+
+  return filePaths.some((resolvedPath) => toPathKey(resolvedPath) === key);
+}
+
 /** Whether a path exists and is a directory. */
 function isDirectory(directory: string): boolean {
   return existsSync(directory) && statSync(directory).isDirectory();
@@ -527,8 +559,11 @@ function isRecordName(params: {
 }): boolean {
   const { bundleDirs, filePath } = params;
 
+  const folderKey = toPathKey(path.posix.dirname(filePath));
+
+  // A name git printed can differ from the disk's in Unicode form.
   return (
-    bundleDirs.includes(path.posix.dirname(filePath)) &&
+    bundleDirs.some((bundleDir) => toPathKey(bundleDir) === folderKey) &&
     filePath.endsWith(".md") &&
     !RESERVED_FILES.has(path.posix.basename(filePath))
   );
@@ -591,6 +626,42 @@ function restoreRecords(params: {
 }
 
 /**
+ * Spell a path from the repo root as git will match it, since git compares
+ * paths byte for byte: as given when git's index holds that spelling, else as
+ * the disk spells it, in case and Unicode form.
+ *
+ * - The index wins, since after a rename only in case it can differ from the
+ *   disk, and git matches the index.
+ *
+ * - The path must exist and not be reached through a symlink, so resolving
+ *   it changes only its spelling, never the file it names.
+ */
+function spellForGit(params: { filePath: string; repoRoot: string }): string {
+  const { filePath, repoRoot } = params;
+
+  if (isKnownToGit({ filePath, repoRoot })) {
+    return filePath;
+  }
+
+  return toPosixPath(
+    path.relative(
+      realpathSync.native(repoRoot),
+      realpathSync.native(path.join(repoRoot, filePath))
+    )
+  );
+}
+
+/**
+ * Express a relative path with `/` separators; the repo root itself is `.`,
+ * which git and `path.posix` both read as is.
+ */
+function toPosixPath(relativePath: string): string {
+  return relativePath === ""
+    ? "."
+    : relativePath.split(path.sep).join(path.posix.sep);
+}
+
+/**
  * Express an absolute path from the repo root, with `/` separators.
  *
  * @returns the path, or `undefined` when it's outside the repo.
@@ -611,10 +682,7 @@ function toRepoPath(params: {
     return undefined;
   }
 
-  // The repo root itself is `.`, which git and `path.posix` both read as is.
-  return relativePath === ""
-    ? "."
-    : relativePath.split(path.sep).join(path.posix.sep);
+  return toPosixPath(relativePath);
 }
 
 /**
