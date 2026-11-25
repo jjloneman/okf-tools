@@ -1,0 +1,51 @@
+---
+type: Decision
+title: How okf new and okf touch stamp generated
+description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses."
+tags:
+  - agents
+  - cli
+  - frontmatter
+  - generated
+  - index
+  - refusals
+  - safety
+  - timestamps
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:03:10Z }
+---
+
+# How okf new and okf touch stamp generated
+
+Agents typed `generated.at` by hand and got it wrong, and a time later than a sign-off makes a signed-off record look changed. As of 2026-11-25, OKF v0.3 reads `generated.at` as a record's last meaningful change, so it has to be right. `okf new` and `okf touch` take it from the clock instead.
+
+## Decision
+
+- **`okf new <record> --type <type> --by <producer>`** writes a record holding only frontmatter: `type`, then `title`, `description`, and `tags` when given, `status: draft`, and an inline `generated: { by, at }`.
+  - Tags are a block list, sorted, each once, as [How a record's tags are laid out](tags-layout.md) recommends.
+  - The body is left to the writer, out of scope by the issue.
+  - It never overwrites anything at the path, a broken symlink included, and never makes folders.
+- **`okf new` then syncs the `index.md` that lists the record**, as `okf index` syncs it, so the record's line is written the way every other line is.
+  - It plans both files before writing either, so an index it can't sync writes nothing, and a failed index write removes the record again.
+  - **Rejected:** writing the record and leaving a failed index for `okf index`, which would leave a half-done change for a broken record elsewhere in the bundle.
+  - **Rejected:** adding only the new line, which would need a second way of placing a line beside `okf index`'s.
+- **`okf touch <record>... --by <producer>`** re-stamps `generated.by` and `generated.at` in place, with the same position-based edits and refusals as `okf verify`, adding either key, or `generated` after `status`, when missing.
+  - `--draft` sets a `stable` record back to `status: draft`, only when asked, as the issue says; any other status is kept.
+  - It writes nothing when any named record refuses.
+- **Neither takes a time**: there is no `--at`, since a typed time is the mistake they exist to stop.
+- **Neither adds or changes `verified`, and neither commits**, since signing off stays the person's call (see [Who verifies a record](who-verifies.md)).
+- **`--by` is required and must be an actor**, as `okf.verifiedBy` must; it names the producer, so it never falls back to `okf.verifiedBy`.
+- **The agent rules point at both commands** in place of telling an agent to stamp `generated` itself.
+
+## Why
+
+- A stamp from the clock is right every time, which a typed one isn't, and it matches what v0.3 means by `generated.at`.
+- Reusing the editor and the index sync means a scaffolded or re-stamped record reads the same to every other command, and inherits their refusals.
+- All-or-nothing writes match `okf verify`'s (see [How okf-verify writes and commits records](writes.md)).
+
+## Links
+
+- [Issue #54](https://github.com/jjloneman/okf-tools/issues/54)
+- [How okf index keeps an index.md in step with its records](index-sync.md)
+- [How okf-verify writes and commits records](writes.md)
+- [Who verifies a record](who-verifies.md)
