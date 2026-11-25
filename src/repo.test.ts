@@ -24,6 +24,7 @@ import {
 import type { Outcome } from "./outcome.ts";
 
 import {
+  findOwningBundle,
   listBundleChanges,
   loadCandidate,
   loadCandidates,
@@ -760,6 +761,44 @@ describe("loadCandidates, given folders in a bundle", () => {
         /^docs\/decisions can't be listed: .*EACCES/u
       ) as string,
     });
+  });
+});
+
+describe("findOwningBundle", () => {
+  test.each([
+    {
+      bundleDirs: ["docs", "docs/decisions"],
+      description: "the deepest bundle that holds the path",
+      expected: "docs/decisions",
+      filePath: "docs/decisions/a.md",
+    },
+    {
+      bundleDirs: ["docs", "docs/decisions"],
+      description: "the outer bundle for a path beside the inner one",
+      expected: "docs",
+      filePath: "docs/a.md",
+    },
+    {
+      bundleDirs: [".", "docs"],
+      description: "the bundle `.` for a path in no other",
+      expected: ".",
+      filePath: "notes/a.md",
+    },
+    {
+      bundleDirs: [".", "x"],
+      description: "a one-letter bundle over the bundle `.`",
+      expected: "x",
+      filePath: "x/a.md",
+    },
+    {
+      bundleDirs: ["docs/decisions"],
+      description: "no bundle for a sibling sharing its prefix",
+      expected: undefined,
+      filePath: "docs/decisions-old/a.md",
+    },
+  ])("finds $description", ({ bundleDirs, expected, filePath }) => {
+    // When/Then - the owning bundle, if any
+    expect(findOwningBundle({ bundleDirs, filePath })).toBe(expected);
   });
 });
 

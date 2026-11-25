@@ -14,6 +14,7 @@ import {
   readBaseRef,
   readCommittedText,
   readGitFailure,
+  readWorkingPaths,
 } from "./git.ts";
 
 const { repo } = useTestRepo();
@@ -423,6 +424,38 @@ describe("listWorkingPaths", () => {
 
     // Then - nothing
     expect(workingPaths).toStrictEqual([]);
+  });
+});
+
+describe("readWorkingPaths", () => {
+  test("lists each path git would track", () => {
+    // Given - a committed file and an untracked one
+    repo.write("docs/a.md", "a\n");
+    repo.commitAll("add a");
+    repo.write("docs/b.md", "b\n");
+
+    // When - listing the working tree
+    const listed = readWorkingPaths(repo.root);
+
+    // Then - both, with the repo's package.json
+    expect(listed.isOk && [...listed.value].sort()).toStrictEqual([
+      "docs/a.md",
+      "docs/b.md",
+      "package.json",
+    ]);
+  });
+
+  test("says why when git can't be asked", () => {
+    // Given/When - a folder that isn't a repo
+    const listed = readWorkingPaths("/");
+
+    // Then - the reason, naming the listing
+    expect(listed).toStrictEqual({
+      isOk: false,
+      reason: expect.stringMatching(
+        /^Couldn't list the files git tracks: /u
+      ) as unknown,
+    });
   });
 });
 

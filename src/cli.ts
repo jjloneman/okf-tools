@@ -8,6 +8,7 @@ import type { Outcome } from "./outcome.ts";
 import type { Output, Program } from "./output.ts";
 import type { BundleContext, RunContext } from "./run-context.ts";
 
+import { runCheck } from "./check.ts";
 import {
   describeNoBundles,
   readOkfConfig,
@@ -26,6 +27,7 @@ import { runMigrate } from "./migrate.ts";
 import { runNew } from "./new-record.ts";
 import { runNonInteractive } from "./non-interactive.ts";
 import {
+  CHECK_USAGE,
   DEPRECATE_USAGE,
   DIFF_USAGE,
   formatVerifyUsage,
@@ -33,6 +35,7 @@ import {
   MIGRATE_USAGE,
   NEW_USAGE,
   OKF_USAGE,
+  parseCheckArgs,
   parseCliArgs,
   parseCommand,
   parseDeprecateArgs,
@@ -92,9 +95,10 @@ export type RunParams = {
 
 /**
  * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
- * `okf deprecate`, `okf diff`, `okf guide`, `okf index`, `okf init`,
- * `okf migrate`, `okf new`, `okf status`, `okf tags`, `okf touch`, or
- * `okf verify`; `okf --version` prints the installed version.
+ * `okf check`, `okf deprecate`, `okf diff`, `okf guide`, `okf index`,
+ * `okf init`, `okf migrate`, `okf new`, `okf status`, `okf tags`,
+ * `okf touch`, or `okf verify`; `okf --version` prints the installed
+ * version.
  *
  * - `okf-verify <args>` runs as `okf verify <args>` does, printing under its
  *   own name.
@@ -155,6 +159,10 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runTagsCommand({ args: parsed.args, cwd, output });
   }
 
+  if (parsed.kind === "check") {
+    return runCheckCommand({ args: parsed.args, cwd, output });
+  }
+
   if (parsed.kind === "new") {
     return runNewCommand({ args: parsed.args, cwd, output });
   }
@@ -176,8 +184,8 @@ export async function run(params: RunParams): Promise<ExitCode> {
 
 /**
  * Resolve the repo and bundles a command works with when it needs no one's
- * sign-off: `okf deprecate`, `okf index`, `okf migrate`, `okf new`,
- * `okf tags`, and `okf touch`.
+ * sign-off: `okf check`, `okf deprecate`, `okf index`, `okf migrate`,
+ * `okf new`, `okf tags`, and `okf touch`.
  */
 function buildBundleContext(params: {
   bundles: readonly string[];
@@ -301,6 +309,58 @@ function readRepo(
   }
 
   return { isOk: true, value: { config: config.config, cwd, repoRoot } };
+}
+
+/**
+ * Run `okf check`: read its arguments and config, then report what the spec
+ * rules find in the bundles.
+ */
+function runCheckCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): ExitCode {
+  const { args, cwd, output } = params;
+  const parsed = parseCheckArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(CHECK_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${CHECK_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { options } = parsed;
+
+  try {
+    const context = buildBundleContext({
+      bundles: options.bundles,
+      cwd,
+      output,
+    });
+
+    if (!context.isOk) {
+      output.error(context.reason);
+
+      return EXIT_CODES.failure;
+    }
+
+    return runCheck({
+      context: context.value,
+      format: options.format,
+      isGitHubActions: process.env.GITHUB_ACTIONS === "true",
+      isStrict: options.isStrict,
+    });
+  } catch (error) {
+    output.error(describeError(error));
+
+    return EXIT_CODES.failure;
+  }
 }
 
 /**

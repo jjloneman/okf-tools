@@ -1,8 +1,15 @@
 /*
  * The package's library entry: the pure frontmatter functions `okf-verify` is
  * built on, `run`, the CLI itself, for tools that call it in-process, and the
- * shapes `okf status --format json` and `okf tags --format json` print.
+ * shapes `okf check --format json`, `okf status --format json`, and
+ * `okf tags --format json` print.
  */
+export type {
+  CheckFinding,
+  CheckReport,
+  CheckSeverity,
+  CheckSkipped,
+} from "./check-engine.ts";
 export type { RunParams } from "./cli.ts";
 export { run } from "./cli.ts";
 export type { ExitCode } from "./exit-codes.ts";

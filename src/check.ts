@@ -1,0 +1,247 @@
+/*
+ * `okf check`: report problems in the bundles against OKF's spec rules, as
+ * text for a person, JSON for a program, or annotations in GitHub Actions.
+ *
+ * - It reads every Markdown file in the bundles that git would track,
+ *   records, `index.md` and `log.md` files, and other Markdown alike, but
+ *   none `okf.exclude` matches and none in a folder starting with `.`.
+ *
+ * - It never writes. It exits `1` on an error-level finding, a file it
+ *   couldn't read, or under `--strict` a warning; otherwise `0`.
+ */
+import { existsSync, realpathSync } from "node:fs";
+import path from "node:path";
+
+import type {
+  CheckedBundle,
+  CheckedFile,
+  CheckFinding,
+  CheckReport,
+  CheckSeverity,
+  CheckSkipped,
+} from "./check-engine.ts";
+import type { ExitCode } from "./exit-codes.ts";
+import type { CheckFormat } from "./options.ts";
+import type { Outcome } from "./outcome.ts";
+import type { BundleContext } from "./run-context.ts";
+
+import { buildCheckReport, readCheckedFile } from "./check-engine.ts";
+import { EXIT_CODES } from "./exit-codes.ts";
+import { readWorkingPaths } from "./git.ts";
+import { describeError, toTerminalLine } from "./output.ts";
+import { findOwningBundle, matchExcluded, readRecordText } from "./repo.ts";
+import { SPEC_RULES } from "./spec-rules.ts";
+
+/** The workflow command GitHub Actions annotates a file with, by severity. */
+const ANNOTATION_COMMANDS: Record<CheckSeverity, string> = {
+  error: "error",
+  info: "notice",
+  warning: "warning",
+};
+
+/** Word a finding as a GitHub Actions workflow command, which annotates it. */
+export function formatAnnotation(finding: CheckFinding): string {
+  const { code, line, message, path: filePath, rule, severity } = finding;
+  const properties = [
+    `file=${escapeProperty(filePath)}`,
+    ...(line === null ? [] : [`line=${line}`]),
+    `title=${escapeProperty(`${code} ${rule}`)}`,
+  ];
+
+  return `::${ANNOTATION_COMMANDS[severity]} ${properties.join(",")}::${escapeData(message)}`;
+}
+
+/** Word a finding for a person, as one line: where, how bad, and what. */
+export function formatFinding(finding: CheckFinding): string {
+  const { code, line, message, path: filePath, rule, severity } = finding;
+
+  return toTerminalLine(
+    `${filePath}${line === null ? "" : `:${line}`}: ${severity} ${code} ${rule}: ${message}`
+  );
+}
+
+/** Word the report's totals for a person. */
+export function formatSummary(report: CheckReport): string {
+  const { counts, filesChecked } = report;
+
+  return `${count({ noun: "file", total: filesChecked })} checked: ${count({ noun: "error", total: counts.error })}, ${count({ noun: "warning", total: counts.warning })}, ${counts.info} info.`;
+}
+
+/**
+ * Run `okf check`: read the bundles' Markdown, run the spec rules, and print
+ * what they found.
+ */
+export function runCheck(params: {
+  /**
+   * The repo and bundles to check.
+   *
+   * @example `buildBundleContext(…)`
+   */
+  context: BundleContext;
+
+  /**
+   * How to print the report.
+   *
+   * @example "text"
+   */
+  format: CheckFormat;
+
+  /**
+   * Whether it runs in GitHub Actions, where text findings print as
+   * annotations.
+   *
+   * @example false
+   */
+  isGitHubActions: boolean;
+
+  /**
+   * Whether a warning fails the run too.
+   *
+   * @example false
+   */
+  isStrict: boolean;
+}): ExitCode {
+  const { context, format, isGitHubActions, isStrict } = params;
+  const { output } = context;
+  const read = readBundles(context);
+
+  if (!read.isOk) {
+    output.error(read.reason);
+
+    return EXIT_CODES.failure;
+  }
+
+  const { bundles, skipped } = read.value;
+  const report = buildCheckReport({ bundles, rules: SPEC_RULES, skipped });
+
+  if (format === "json") {
+    output.data(JSON.stringify(report, undefined, 2));
+  } else {
+    for (const { reason } of report.skipped) {
+      output.error(toTerminalLine(`Skipped: ${reason}`));
+    }
+
+    // GitHub shows only so many annotations, and hides an annotation's
+    // path in the log, so each finding prints as a line too.
+    for (const finding of report.findings) {
+      if (isGitHubActions) {
+        output.data(formatAnnotation(finding));
+      }
+
+      output.info(formatFinding(finding));
+    }
+
+    output.info(formatSummary(report));
+  }
+
+  const isFailed =
+    report.counts.error > 0 ||
+    report.skipped.length > 0 ||
+    (isStrict && report.counts.warning > 0);
+
+  return isFailed ? EXIT_CODES.failure : EXIT_CODES.ok;
+}
+
+/** Word a count with its noun, plural unless it's one. */
+function count(params: { noun: string; total: number }): string {
+  const { noun, total } = params;
+
+  return `${total} ${noun}${total === 1 ? "" : "s"}`;
+}
+
+/** Escape a workflow command's message, which ends at a line break. */
+function escapeData(text: string): string {
+  return toTerminalLine(text)
+    .replaceAll("%", "%25")
+    .replaceAll("\r", "%0D")
+    .replaceAll("\n", "%0A");
+}
+
+/** Escape a workflow command's property, which ends at `,` or `:` too. */
+function escapeProperty(text: string): string {
+  return escapeData(text).replaceAll(":", "%3A").replaceAll(",", "%2C");
+}
+
+/**
+ * Whether a file a path names lies inside its bundle once symlinks are
+ * followed, since OKF never follows one out of the bundle (§3.2).
+ */
+function isInsideOnDisk(params: {
+  bundleDir: string;
+  filePath: string;
+  repoRoot: string;
+}): boolean {
+  const { bundleDir, filePath, repoRoot } = params;
+  const root = realpathSync(path.join(repoRoot, bundleDir));
+  const target = realpathSync(path.join(repoRoot, filePath));
+  const relative = path.relative(root, target);
+
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`);
+}
+
+/**
+ * Read every Markdown file in the bundles git would track, grouped by the
+ * deepest bundle that holds each, and the files that couldn't be read.
+ */
+function readBundles(context: BundleContext): Outcome<{
+  bundles: CheckedBundle[];
+  skipped: CheckSkipped[];
+}> {
+  const { bundleDirs, excludeGlobs, repoRoot } = context;
+  const isExcluded = matchExcluded(excludeGlobs);
+  const doesExist = (filePath: string): boolean =>
+    existsSync(path.join(repoRoot, filePath));
+  const files: CheckedFile[] = [];
+  const skipped: CheckSkipped[] = [];
+
+  const listed = readWorkingPaths(repoRoot);
+
+  if (!listed.isOk) {
+    return listed;
+  }
+
+  for (const filePath of [...listed.value].sort()) {
+    const bundleDir = findOwningBundle({ bundleDirs, filePath });
+
+    if (
+      bundleDir === undefined ||
+      !filePath.endsWith(".md") ||
+      path.posix
+        .relative(bundleDir, filePath)
+        .split("/")
+        .some((part) => part.startsWith(".")) ||
+      isExcluded(filePath) ||
+      !doesExist(filePath) ||
+      !isInsideOnDisk({ bundleDir, filePath, repoRoot })
+    ) {
+      continue;
+    }
+
+    try {
+      files.push(
+        readCheckedFile({
+          bundleDir,
+          doesExist,
+          filePath,
+          text: readRecordText({ filePath, repoRoot }),
+        })
+      );
+    } catch (error) {
+      skipped.push({
+        path: filePath,
+        reason: `${filePath} can't be read: ${describeError(error)}`,
+      });
+    }
+  }
+
+  return {
+    isOk: true,
+    value: {
+      bundles: bundleDirs.map((bundleDir) => ({
+        bundleDir,
+        files: files.filter((file) => file.bundleDir === bundleDir),
+      })),
+      skipped,
+    },
+  };
+}

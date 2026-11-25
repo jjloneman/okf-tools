@@ -170,6 +170,24 @@ export function findBundleDir(params: {
 }
 
 /**
+ * Find the bundle a path from the repo root belongs to: the deepest one that
+ * holds it, so a bundle inside another owns its own files.
+ *
+ * @returns the bundle, or `undefined` when none holds it.
+ */
+export function findOwningBundle(params: {
+  bundleDirs: readonly string[];
+  filePath: string;
+}): string | undefined {
+  const { bundleDirs, filePath } = params;
+  const key = toPathKey(filePath);
+
+  return bundleDirs
+    .filter((bundleDir) => isInsideBundle({ bundleDir, key }))
+    .sort((left, right) => toDepth(right) - toDepth(left))[0];
+}
+
+/**
  * Whether a record's bytes on disk are still the text it was listed with.
  *
  * - Bytes are compared, since `readRecordText` decodes only valid UTF-8,
@@ -1102,6 +1120,14 @@ function spellListedPath(params: {
     ...params,
     readName: (givenPath) => path.posix.basename(givenPath),
   });
+}
+
+/**
+ * Count a bundle folder's depth, with the root bundle `.` at `0`, so a
+ * folder one level down always counts deeper than it.
+ */
+function toDepth(bundleDir: string): number {
+  return bundleDir === "." ? 0 : bundleDir.split("/").length;
 }
 
 /**

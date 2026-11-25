@@ -19,11 +19,12 @@ import type { SkippedRecord } from "./repo.ts";
 import type { BundleContext } from "./run-context.ts";
 
 import { EXIT_CODES } from "./exit-codes.ts";
-import { listWorkingPaths, toPathKey } from "./git.ts";
+import { listWorkingPaths } from "./git.ts";
 import { NO_SIGNER } from "./index-command.ts";
 import { planBundle, UNDECLARED_VERSION } from "./migrate-plan.ts";
 import { describeError, toTerminalLine } from "./output.ts";
 import {
+  findOwningBundle,
   loadCandidates,
   matchExcluded,
   readRecordText,
@@ -242,26 +243,6 @@ function diffLines(params: {
 }
 
 /**
- * Find the bundle a file belongs to: the deepest one that holds it, so a
- * bundle inside another owns its own records.
- */
-function findOwner(params: {
-  bundleDirs: readonly string[];
-  filePath: string;
-}): string | undefined {
-  const { bundleDirs, filePath } = params;
-
-  const key = toPathKey(filePath);
-
-  return bundleDirs
-    .filter(
-      (bundleDir) =>
-        bundleDir === "." || key.startsWith(`${toPathKey(bundleDir)}/`)
-    )
-    .sort((left, right) => right.length - left.length)[0];
-}
-
-/**
  * Find the nearest pair of positions, from `left` and `right` on, where the
  * two lists hold the same line, or their ends when there's none.
  */
@@ -346,7 +327,7 @@ function readBundleFiles(params: {
     workingPaths,
   } = params;
   const isOwn = (filePath: string): boolean =>
-    findOwner({ bundleDirs, filePath }) === bundleDir;
+    findOwningBundle({ bundleDirs, filePath }) === bundleDir;
   const isExcluded = matchExcluded(excludeGlobs);
   const indexPath = indexPathOf(bundleDir);
   const skipped = loaded.skipped.filter((file) => isOwn(file.filePath));
