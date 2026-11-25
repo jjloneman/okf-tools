@@ -74,6 +74,31 @@ export type CommitResult =
       reason: string;
     };
 
+/** A commit that changed a file. */
+export type FileCommit = {
+  /**
+   * The commit's full hash.
+   *
+   * @example "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
+   */
+  hash: string;
+
+  /**
+   * The full hashes of the commit's parents, as committed, not as the path's
+   * history simplifies them; empty for a root commit.
+   *
+   * @example `["0f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6"]`
+   */
+  parents: string[];
+
+  /**
+   * The commit's hash as git abbreviates it.
+   *
+   * @example "1a2b3c4"
+   */
+  shortHash: string;
+};
+
 /**
  * The fields a failed `execFileSync` call attaches to its error.
  *
@@ -225,6 +250,43 @@ export function commitFiles(params: {
 }
 
 /**
+ * Diff a file from a commit to the working tree, as plain text: no color, no
+ * external diff driver, no text conversion, and never a "binary files differ"
+ * line, whatever the config and `.gitattributes` say.
+ */
+export function diffSince(params: {
+  commit: string;
+  filePath: string;
+  repoRoot: string;
+}): Outcome<string> {
+  const { commit, filePath, repoRoot } = params;
+
+  try {
+    return {
+      isOk: true,
+      value: runGit({
+        args: [
+          "diff",
+          "--no-color",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--text",
+          commit,
+          "--",
+          filePath,
+        ],
+        repoRoot,
+      }),
+    };
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't diff ${filePath} since ${commit}: ${describeGitFailure(error)}`,
+    };
+  }
+}
+
+/**
  * Find the root of the repo `cwd` is in.
  *
  * - Says why git failed rather than guessing: a missing `git` binary and a
@@ -249,6 +311,17 @@ export function findRepoRoot(cwd: string): Outcome<string> {
           : `Couldn't find the repo root: ${stderr?.trim() ?? "git failed"}`,
     };
   }
+}
+
+/**
+ * Whether the repo is a shallow clone, whose oldest commits are listed without
+ * their parents; `false` when git can't say.
+ */
+export function isShallowRepo(repoRoot: string): boolean {
+  return (
+    tryGit({ args: ["rev-parse", "--is-shallow-repository"], repoRoot }) ===
+    "true"
+  );
 }
 
 /**
@@ -334,6 +407,63 @@ export function listDirtyPaths(params: {
   return {
     isOk: true,
     value: filePaths.filter((filePath) => dirtyPaths.has(toPathKey(filePath))),
+  };
+}
+
+/**
+ * List the commits that changed a file, newest first, under the name it has
+ * now, each with its parents.
+ *
+ * - History from before a rename isn't followed, even under `log.follow`.
+ *
+ * - `--no-show-signature` keeps `log.showSignature`'s gpg lines out of the
+ *   listing, which would read as hashes.
+ */
+export function listFileCommits(params: {
+  filePath: string;
+  repoRoot: string;
+}): Outcome<FileCommit[]> {
+  const { filePath, repoRoot } = params;
+  let output: string;
+
+  try {
+    output = runGit({
+      args: [
+        "log",
+        "--no-follow",
+        "--no-show-signature",
+        "--format=%H %h %P",
+        "--",
+        filePath,
+      ],
+      repoRoot,
+    });
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't read the history of ${filePath}: ${describeGitFailure(error)}`,
+    };
+  }
+
+  return {
+    isOk: true,
+    value: output
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        // `%P` is empty for a root commit, but the space before it stays.
+        const hashEnd = line.indexOf(" ");
+        const shortHashEnd = line.indexOf(" ", hashEnd + 1);
+
+        return {
+          hash: line.slice(0, hashEnd),
+          parents: line
+            .slice(shortHashEnd + 1)
+            .split(" ")
+            .filter(Boolean),
+          shortHash: line.slice(hashEnd + 1, shortHashEnd),
+        };
+      }),
   };
 }
 
@@ -432,34 +562,14 @@ export function readBaseRef(repoRoot: string): string {
 /**
  * Read a file as `HEAD` holds it.
  *
- * - `git ls-tree` prints nothing for a path `HEAD` doesn't have, so a record
- *   never committed reads as `undefined`, not as a failure.
+ * - A record never committed reads as `undefined`, not as a failure (see
+ *   `readTextAt`).
  */
 export function readCommittedText(params: {
   filePath: string;
   repoRoot: string;
 }): Outcome<string | undefined> {
-  const { filePath, repoRoot } = params;
-
-  try {
-    const entry = runGit({
-      args: ["ls-tree", "-z", "HEAD", "--", filePath],
-      repoRoot,
-    });
-
-    return {
-      isOk: true,
-      value:
-        entry === ""
-          ? undefined
-          : runGit({ args: ["show", `HEAD:${filePath}`], repoRoot }),
-    };
-  } catch (error) {
-    return {
-      isOk: false,
-      reason: `Couldn't read ${filePath} at HEAD: ${describeGitFailure(error)}`,
-    };
-  }
+  return readTextAt({ ...params, ref: "HEAD" });
 }
 
 /**
@@ -481,6 +591,40 @@ export function readGitFailure(error: unknown): GitFailure {
     stderr: readField("stderr"),
     stdout: readField("stdout"),
   };
+}
+
+/**
+ * Read a file as a commit holds it.
+ *
+ * - `git ls-tree` prints nothing for a path the commit doesn't have, so a
+ *   file missing there reads as `undefined`, not as a failure.
+ */
+export function readTextAt(params: {
+  filePath: string;
+  ref: string;
+  repoRoot: string;
+}): Outcome<string | undefined> {
+  const { filePath, ref, repoRoot } = params;
+
+  try {
+    const entry = runGit({
+      args: ["ls-tree", "-z", ref, "--", filePath],
+      repoRoot,
+    });
+
+    return {
+      isOk: true,
+      value:
+        entry === ""
+          ? undefined
+          : runGit({ args: ["show", `${ref}:${filePath}`], repoRoot }),
+    };
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't read ${filePath} at ${ref}: ${describeGitFailure(error)}`,
+    };
+  }
 }
 
 /**

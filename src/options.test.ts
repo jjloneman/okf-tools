@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { parseCliArgs, parseCommand } from "./options.ts";
+import { parseCliArgs, parseCommand, parseDiffArgs } from "./options.ts";
 
 const DEFAULTS = {
   bundles: [],
@@ -108,6 +108,11 @@ describe("parseCommand", () => {
       expected: { args: ["--yes", "--changed"], kind: "verify" },
     },
     {
+      args: ["diff", "docs/decisions/a.md"],
+      description: "diff, with the arguments after it",
+      expected: { args: ["docs/decisions/a.md"], kind: "diff" },
+    },
+    {
       args: ["--help"],
       description: "--help",
       expected: { kind: "help" },
@@ -139,5 +144,63 @@ describe("parseCommand", () => {
   ])("reads $description", ({ args, expected }) => {
     // Given/When/Then - the command and its arguments, or why there's none
     expect(parseCommand(args)).toStrictEqual(expected);
+  });
+});
+
+describe("parseDiffArgs", () => {
+  test.each([
+    {
+      args: ["docs/decisions/a.md", "docs/decisions/b.md"],
+      description: "record paths",
+      expected: {
+        bundles: [],
+        by: undefined,
+        recordPaths: ["docs/decisions/a.md", "docs/decisions/b.md"],
+      },
+    },
+    {
+      args: ["--bundle", "docs", "--by", "human:someone", "docs/a.md"],
+      description: "a bundle and a signer",
+      expected: {
+        bundles: ["docs"],
+        by: "human:someone",
+        recordPaths: ["docs/a.md"],
+      },
+    },
+  ])("reads $description", ({ args, expected }) => {
+    // Given/When/Then - the options
+    expect(parseDiffArgs(args)).toStrictEqual({
+      kind: "options",
+      options: expected,
+    });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    { args: ["-h", "--unknown"], description: "-h beside an unknown flag" },
+  ])("asks for help on $description", ({ args }) => {
+    // Given/When/Then - help
+    expect(parseDiffArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: [],
+      description: "no record",
+      message: "Name at least one record.",
+    },
+    {
+      args: ["--bundle", "", "docs/a.md"],
+      description: "an empty --bundle",
+      message: "--bundle needs a directory, not an empty string.",
+    },
+    {
+      args: ["--yes", "docs/a.md"],
+      description: "a verify flag",
+      message: expect.stringContaining("--yes") as unknown,
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // Given/When/Then - a usage error saying why
+    expect(parseDiffArgs(args)).toStrictEqual({ kind: "invalid", message });
   });
 });
