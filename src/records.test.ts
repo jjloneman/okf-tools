@@ -42,6 +42,7 @@ function candidate(params: {
     state,
     summary: {
       generatedAt: undefined,
+      staleAfter: undefined,
       status: "draft",
       title: "A title",
       type: "Decision",

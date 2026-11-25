@@ -49,6 +49,18 @@ export type RecordSummary = {
   generatedAt: Timestamp | undefined;
 
   /**
+   * When the record goes stale, from its `stale_after`, if it says.
+   *
+   * - The record is stale from this instant on, as OKF defines it.
+   *
+   * - Optional, so a summary built before it existed still type-checks;
+   *   `readRecordSummary` always sets it.
+   *
+   * @example "2027-01-01T00:00:00Z"
+   */
+  staleAfter?: Timestamp | undefined;
+
+  /**
    * The record's `status`, when it is one OKF defines.
    *
    * - Absent means `stable`, as OKF defines it.
@@ -168,6 +180,28 @@ export function isGeneratedAhead(summary: RecordTimes): boolean {
 }
 
 /**
+ * Whether a record is past its `stale_after`: stale from that instant on, as
+ * OKF defines it.
+ *
+ * - It reads the clock, unlike `getRecordState`.
+ *
+ * - It compares to the millisecond, not the second, so a record is never
+ *   stale before the instant it names.
+ *
+ * - A `stale_after` that can't be read as a time isn't stale, since no
+ *   instant can be compared with it.
+ */
+export function isStale(summary: Pick<RecordSummary, "staleAfter">): boolean {
+  if (summary.staleAfter === undefined) {
+    return false;
+  }
+
+  const time = readTime(summary.staleAfter);
+
+  return time.isValid && DateTime.utc().toMillis() >= time.toMillis();
+}
+
+/**
  * Whether the signer's latest `verified.at` is later than now, to the second,
  * as a wrong time zone writes it.
  *
@@ -223,6 +257,9 @@ export function readRecordSummary(
   return {
     generatedAt: readTimestamp(
       readField({ doc, key: ENTRY_KEYS.at, map: generated })
+    ),
+    staleAfter: readTimestamp(
+      readField({ doc, key: FRONTMATTER_KEYS.staleAfter, map: contents })
     ),
     status: status !== undefined && isRecordStatus(status) ? status : undefined,
     title: readString(

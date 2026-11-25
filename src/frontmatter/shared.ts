@@ -57,6 +57,7 @@ const FENCE = "---";
  */
 export const FRONTMATTER_KEYS = {
   generated: "generated",
+  staleAfter: "stale_after",
   status: "status",
   title: "title",
   type: "type",
