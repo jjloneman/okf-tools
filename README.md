@@ -1,8 +1,8 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; and `okf tags`, which lists every tag with its record count. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; and `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
-It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) (2026-08-21) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit.
+It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (2026-11-18) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit. `okf --version` prints the installed version and the OKF version it follows.
 
 ## 📖 Table of contents
 
@@ -19,6 +19,7 @@ It follows OKF v0.2 as of commit [`0b87c52`](https://github.com/open-knowledge-f
 - [🗂️ Index](#️-index)
   - [🔖 Tag index](#-tag-index)
 - [✏️ New and touch](#️-new-and-touch)
+- [🚚 Migrate](#-migrate)
 - [🧭 Agents](#-agents)
 - [🏷️ Writing tags](#️-writing-tags)
   - [🔢 Listing tags](#-listing-tags)
@@ -72,7 +73,7 @@ Then configure it in `package.json`:
 }
 ```
 
-- **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files at any depth inside each, other than `index.md` and `log.md` at every level, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#31-reserved-filenames). A bundle inside another counts each record once; a folder git ignores or that holds only ignored files, `.git`, a folder holding another clone, and a symlink to a folder are never read.
+- **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files at any depth inside each, other than `index.md` and `log.md` at every level, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md#31-reserved-filenames). A bundle inside another counts each record once; a folder git ignores or that holds only ignored files, `.git`, a folder holding another clone, and a symlink to a folder are never read.
 - **`okf.verifiedBy`** is the OKF actor each `verified` entry names.
 - **`okf.exclude`** (optional) lists globs, relative to the repo root, of Markdown in a bundle that isn't a record, such as `["**/README.md", "docs/decisions/drafts"]`. A glob that matches a folder excludes everything in it, `*` matches dot files too, and a glob can't start with `!` (other than an extglob such as `!(drafts)`) or `/`, or end with `/`.
 - **`okf.style`** is how a new `verified` entry is laid out, and is optional:
@@ -98,7 +99,8 @@ Node 22 or later, and git, are required.
 
 ## 🚀 Usage
 
-- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), `okf tags --help` the ones in [Listing tags](#-listing-tags), and `okf new --help` and `okf touch --help` the ones in [New and touch](#️-new-and-touch).
+- `okf --help` lists the commands, and `okf verify --help` prints the flags below; `okf diff --help` prints [its own](#-diff), `okf status --help` prints the ones in [Status](#-status), `okf index --help` the ones in [Index](#️-index), `okf tags --help` the ones in [Listing tags](#-listing-tags), `okf new --help` and `okf touch --help` the ones in [New and touch](#️-new-and-touch), and `okf migrate --help` the ones in [Migrate](#-migrate).
+- `okf --version` prints the installed version and the OKF version it follows, such as `okf-tools 0.1.0 (OKF v0.3)`.
 - `okf guide` prints the guidance for agents (see [Agents](#-agents)).
 - `okf` with no command, or one it doesn't know, prints the command list and exits `1`.
 - Options follow the command: `okf verify --yes --changed`, not `okf --yes verify --changed`.
@@ -196,7 +198,7 @@ pnpm okf status
   - **Changed since sign-off:** signed off, then regenerated since (its `generated.at` is later), so the sign-off no longer holds, whatever its `status`; a sign-off ahead of the clock, or one whose time can't be read, counts too;
   - **Draft:** `status: draft`, with no sign-off it has changed since;
   - **Never signed off:** no `verified` entry from the signer, and not a draft;
-  - **Stale:** signed off and unchanged, but past its [`stale_after`](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md#55-lifecycle-stale_after), the instant OKF says it goes stale;
+  - **Stale:** signed off and unchanged, but past its [`stale_after`](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md#55-lifecycle-stale_after), the instant OKF says it goes stale;
   - **Settled:** signed off, unchanged, and not stale.
 - **The signer is `okf.verifiedBy`**, or `--by`, as for `okf verify`: another actor's sign-off doesn't count.
 - **It writes nothing**, and exits `0` whatever it finds: it reports, it doesn't judge. Only a usage error, a config it can't use, a named path that isn't a record, or a bundle it can't list exits `1`.
@@ -346,6 +348,51 @@ pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft
 | `--bundle <dir>`       | A bundle the records are in, relative to where you run it; repeatable. |
 | `--help`, `-h`         | Print the usage.                                                       |
 
+## 🚚 Migrate
+
+```sh
+# Print what moving each bundle to OKF v0.3 would change
+pnpm okf migrate
+
+# Apply it
+pnpm okf migrate --write
+
+# In CI: fail while a bundle still needs migrating
+pnpm okf migrate --check
+```
+
+OKF v0.3 reads a path without a leading `/` from the folder of the file that holds it, where v0.2's examples wrote path fields from the bundle root. Bumping `okf_version` alone would quietly change what those paths name, so `okf migrate` rewrites them in the same step.
+
+- **It migrates a bundle that declares `okf_version` 0.1 or 0.2, or none**, which it reads as 0.2; one already on 0.3 is left alone, so a second run plans nothing.
+- **In the bundle's root `index.md`, it sets `okf_version: "0.3"`**, and fills in a missing `title` and `description` from the first heading and the paragraph right after it, saying what it filled in.
+- **A bare path that names a file only from the bundle root is rewritten** to the relative path that names the same file from its own folder: `references/calc.sql` in `metrics/revenue.md` becomes `../references/calc.sql`.
+  - That covers the path fields `resource`, `sources[].resource`, `computation`, `executor.resource`, `attester.resource`, and `superseded_by`, and every Markdown link and link reference in a record's body, and in every other Markdown file in a subfolder that git doesn't ignore, such as a folder's `index.md` or `log.md`.
+  - A `#fragment` or `?query` is kept on the rewritten path.
+  - A path that is `.` or starts with `/`, `./`, or `../`, a URL, a bare fragment, a footnote, and anything in fenced or inline code are never touched.
+  - A link that already names a file from its own folder is kept, even when the root holds a file of the same name, since v0.2 read links from their own folder too.
+  - A record at the bundle root reads a bare path the same under both rules, so it never changes.
+- **It never touches `generated` or `verified`**, since v0.3 re-stamps `generated.at` only for a change in meaning, so a signed-off record stays signed off.
+- **Every other character is kept as written**, quoting and line breaks included; each edit replaces only the path, by position.
+- **It reports what needs a person**, as `Check:` lines, without changing it:
+  - a bare path that names no file under either rule;
+  - an index with no heading or paragraph to fill `title` or `description` from, or with one of them present but empty;
+  - a v0.1 `timestamp` or `# Citations` list, which v0.3 no longer reads.
+- **It refuses a bundle, as `Blocked:` lines, and changes none of it** when:
+  - a path field names one file from the bundle root and another from its own folder;
+  - the bundle has no root `index.md` to declare the version in;
+  - it declares a version newer than 0.3, or one that isn't `<major>.<minor>`;
+  - a record, or a folder's `index.md` or `log.md`, can't be read or is a symlink;
+  - its frontmatter uses YAML anchors or aliases where a value would change.
+- **`--write` is all or nothing for each bundle**: the root `index.md`, which declares v0.3, is written last, and a failed write restores the files already written.
+- **It exits `1`** when a bundle is refused, or under `--check` when one still needs migrating; otherwise `0`.
+
+| Flag             | Does                                                                |
+| ---------------- | ------------------------------------------------------------------- |
+| `--bundle <dir>` | A bundle to migrate, relative to where you run it; repeat for more. |
+| `--write`        | Apply the changes; without it, print them as diffs.                 |
+| `--check`        | Write nothing; exit `1` when a bundle still needs migrating.        |
+| `--help`, `-h`   | Print the usage.                                                    |
+
 ## 🧭 Agents
 
 Much OKF authoring now happens in a chat with a coding agent, and the non-interactive mode exists for that:
@@ -360,7 +407,7 @@ Much OKF authoring now happens in a chat with a coding agent, and the non-intera
 
 ## OKF records
 
-The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.
+The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) records. okf-tools follows OKF v0.3; `okf migrate` moves a v0.1 or v0.2 bundle to it.
 
 - **Start a new record with `okf new <record> --type <type> --by <producer>/<version>`**, such as `--by claude-code/2.1.316`, which writes it as `status: draft` with `generated` stamped from the clock, and lists it in its index; then write its body.
 - **When you edit a record, re-stamp it with `okf touch <record>... --by <producer>/<version> --draft`**, which sets `generated` from the clock and a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.

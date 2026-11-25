@@ -52,7 +52,7 @@ const FENCE = "---";
 /**
  * The frontmatter keys the frontmatter modules read or write.
  *
- * - OKF v0.2 requires only `type` and lets producers add any key, so this is
+ * - OKF v0.3 requires only `type` and lets producers add any key, so this is
  *   their working set, not the format's full list.
  */
 export const FRONTMATTER_KEYS = {

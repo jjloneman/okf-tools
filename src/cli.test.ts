@@ -33,6 +33,7 @@ import type { RunParams } from "./cli.ts";
 import { run } from "./cli.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { runInteractive } from "./interactive.ts";
+import { formatVersion } from "./version.ts";
 
 // The prompts are covered in interactive.test.ts; here only the dispatch is.
 vi.mock(import("./interactive.ts"), () => ({
@@ -360,6 +361,110 @@ describe.each([
 
     // When - running it
     const code = await runCommand([]);
+
+    // Then - the error, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("EISDIR");
+  });
+});
+
+describe("run as okf --version", () => {
+  test("prints the installed version, unprefixed, outside any repo", async () => {
+    // When - asking for the version from a folder that doesn't exist
+    const code = await run({
+      args: ["--version"],
+      cwd: "/nonexistent/okf-version",
+      isInteractive: false,
+      program: "okf",
+    });
+
+    // Then - the version line alone
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([formatVersion()]);
+    expect(errors).toStrictEqual([]);
+  });
+});
+
+describe("run as okf migrate", () => {
+  /** Run `okf migrate` from the repo root, or another directory. */
+  function runMigrate(args: string[], cwd = repo.root): Promise<number> {
+    return run({
+      args: ["migrate", ...args],
+      cwd,
+      isInteractive: false,
+      program: "okf",
+    });
+  }
+
+  test("prints its usage for --help", async () => {
+    // When - asking for help
+    const code = await runMigrate(["--help"]);
+
+    // Then - its own usage on stdout
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos.join("\n")).toContain("[okf] usage: okf migrate [options]");
+    expect(errors).toStrictEqual([]);
+  });
+
+  test("prints why and its usage for a usage error", async () => {
+    // When - passing both --check and --write
+    const code = await runMigrate(["--check", "--write"]);
+
+    // Then - a usage error, with the usage
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toMatch(
+      /--check writes nothing[\s\S]*usage: okf migrate/u
+    );
+  });
+
+  test("writes the configured bundles under --write", async () => {
+    // Given - two v0.2 bundles, one with a record in a folder
+    repo.write(
+      "docs/decisions/index.md",
+      '---\nokf_version: "0.2"\ntitle: D\ndescription: D.\n---\n'
+    );
+    repo.write("docs/decisions/a.md", record(["type: Decision"]));
+    repo.write(
+      "docs/decisions/sub/b.md",
+      record(["type: Decision", "resource: a.md"])
+    );
+    repo.write("docs/references/index.md", '---\nokf_version: "0.3"\n---\n');
+
+    // When - migrating from a folder in the repo
+    const code = await runMigrate(["--write"], path.join(repo.root, "docs"));
+
+    // Then - migrated, as okf
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([]);
+    expect(infos).toStrictEqual([
+      "[okf] Migrated docs/decisions from OKF v0.2 to v0.3, changing 2 files.",
+      "[okf] docs/references is already on OKF v0.3.",
+    ]);
+    expect(repo.read("docs/decisions/sub/b.md")).toBe(
+      record(["type: Decision", "resource: ../a.md"])
+    );
+  });
+
+  test("fails when no bundles are configured", async () => {
+    // Given - a config naming no bundles
+    repo.write("package.json", "{}\n");
+
+    // When - running it
+    const code = await runMigrate([]);
+
+    // Then - why, and exit 1
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toContain("package.json");
+    expect(infos).toStrictEqual([]);
+  });
+
+  test("reports an unexpected error instead of throwing", async () => {
+    // Given - a package.json that's a folder, so reading it throws
+    rmSync(path.join(repo.root, "package.json"));
+    mkdirSync(path.join(repo.root, "package.json"));
+
+    // When - running it
+    const code = await runMigrate(["--bundle", "docs"]);
 
     // Then - the error, and exit 1
     expect(code).toBe(EXIT_CODES.failure);

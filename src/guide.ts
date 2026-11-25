@@ -18,7 +18,7 @@ import { GUIDE_USAGE, parseGuideArgs } from "./options.ts";
 
 /** What the records are, the paragraph that opens the block and the guide. */
 export const RECORDS_INTRO =
-  "The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md) v0.2 records.";
+  "The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) records. okf-tools follows OKF v0.3; `okf migrate` moves a v0.1 or v0.2 bundle to it.";
 
 /** How an agent writes, edits, and verifies records, as Markdown bullets. */
 export const RECORD_RULES = `- **Start a new record with \`okf new <record> --type <type> --by <producer>/<version>\`**, such as \`--by claude-code/2.1.316\`, which writes it as \`status: draft\` with \`generated\` stamped from the clock, and lists it in its index; then write its body.
@@ -43,6 +43,8 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
   - \`okf index --check\` writes nothing, so run it whenever you like.
 - **\`okf new <record>\`** writes a draft record's frontmatter, stamped from the clock, and its index line. Run it whenever you start a record, before writing its body.
 - **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, in the same change.
+- **\`okf migrate\`** prints the changes that move each bundle from OKF v0.1 or v0.2 to v0.3, and writes nothing; \`--write\` applies them. Run it bare whenever you like, but pass \`--write\` only when the person asks you to migrate.
+  - \`okf migrate --check\` writes nothing, and fails while a bundle still needs migrating.
 - **\`okf init\`** writes the \`okf\` config and the agent block. Run it only when the person asks you to set up okf-tools or refresh the block.
   - \`okf init --check\` writes nothing, so run it whenever you like.
 - **\`okf guide\`** prints this guide.`;
