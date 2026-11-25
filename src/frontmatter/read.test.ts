@@ -1,15 +1,18 @@
-import { describe, expect, test } from "vitest";
+import { DateTime } from "luxon";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { VERIFIED_BY } from "#test/repo";
 
 import {
   findFrontmatterProblem,
   getRecordState,
+  isGeneratedAhead,
   readRecordSummary,
 } from "./read.ts";
 
 const AT = "2026-10-02T13:30:00Z";
 const BODY = "\n# Title\n\nBody text.\n";
+const NOW = "2026-11-20T12:00:00.400Z";
 
 function record(frontmatter: string[]): string {
   return `---\n${frontmatter.join("\n")}\n---\n${BODY}`;
@@ -110,6 +113,42 @@ describe("readRecordSummary", () => {
 
     // Then - only the owner's timestamp is read
     expect(summary?.verifiedAt).toBe("2026-09-28T09:00:00Z");
+  });
+
+  test.each([
+    {
+      description: "the latest of the owner's entries",
+      entries: ["2026-09-01T00:00:00Z", "2026-10-05T00:00:00Z", "~"],
+      expected: "2026-10-05T00:00:00Z",
+    },
+    {
+      description: "the first of two equal latest entries",
+      entries: ["2026-10-05T00:00:00Z", "'2026-10-05T00:00:00.000Z'"],
+      expected: "2026-10-05T00:00:00Z",
+    },
+    {
+      description: "a readable entry past an unreadable one",
+      entries: ["soon", "2026-09-01T00:00:00Z"],
+      expected: "2026-09-01T00:00:00Z",
+    },
+    {
+      description: "the first entry when none reads",
+      entries: ["soon", "later"],
+      expected: "soon",
+    },
+  ])("reads $description", ({ entries, expected }) => {
+    // Given - several entries by the owner
+    const text = record([
+      ...DRAFT_LINES,
+      "verified:",
+      ...entries.map((at) => `  - { by: ${VERIFIED_BY}, at: ${at} }`),
+    ]);
+
+    // When - reading its summary
+    const summary = readRecordSummary({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - the entry that counts is read
+    expect(summary?.verifiedAt).toBe(expected);
   });
 
   test("reads generated.at out of a nested generated block", () => {
@@ -478,6 +517,10 @@ describe("readRecordSummary", () => {
 });
 
 describe("getRecordState", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   test.each([
     {
       description: "never verified",
@@ -534,12 +577,43 @@ describe("getRecordState", () => {
       verifiedAt: "2026-11-13 00:00:00",
     },
     {
+      description: "verified in the second it was generated",
+      expected: "verified",
+      generatedAt: "2026-10-02T13:30:00.500Z",
+      verifiedAt: "2026-10-02T13:30:00Z",
+    },
+    {
+      description: "generated a second after it was verified",
+      expected: "changed",
+      generatedAt: "2026-10-02T13:30:01Z",
+      verifiedAt: "2026-10-02T13:30:00.999Z",
+    },
+    {
+      description: "generated ahead of the clock",
+      expected: "verified",
+      generatedAt: "2026-12-01T10:00:00Z",
+      verifiedAt: "2026-11-01T10:00:00Z",
+    },
+    {
+      description:
+        "verified at an unreadable time, generated ahead of the clock",
+      expected: "changed",
+      generatedAt: "2026-12-01T10:00:00Z",
+      verifiedAt: "soon",
+    },
+    {
       description: "generated later, in ISO basic format",
       expected: "changed",
       generatedAt: "20261113T000000Z",
       verifiedAt: "2026-11-12T00:00:00Z",
     },
   ])("$description is $expected", ({ expected, generatedAt, verifiedAt }) => {
+    // Given - the clock on a fixed day
+    vi.useFakeTimers({
+      now: DateTime.fromISO(NOW).toJSDate(),
+      toFake: ["Date"],
+    });
+
     // When - judging a summary whose timestamps are $description
     const state = getRecordState({
       generatedAt,
@@ -551,5 +625,57 @@ describe("getRecordState", () => {
 
     // Then - the state is $expected
     expect(state).toBe(expected);
+  });
+});
+
+describe("isGeneratedAhead", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test.each([
+    {
+      description: "no generated time",
+      generatedAt: undefined,
+      shouldBeAhead: false,
+    },
+    {
+      description: "an unreadable one",
+      generatedAt: "soon",
+      shouldBeAhead: false,
+    },
+    {
+      description: "one in the past",
+      generatedAt: "2026-11-20T11:59:59Z",
+      shouldBeAhead: false,
+    },
+    {
+      description: "one later in the same second",
+      generatedAt: "2026-11-20T12:00:00.900Z",
+      shouldBeAhead: false,
+    },
+    {
+      description: "one in the next second",
+      generatedAt: "2026-11-20T12:00:01Z",
+      shouldBeAhead: true,
+    },
+  ])("is $shouldBeAhead for $description", ({ generatedAt, shouldBeAhead }) => {
+    // Given - the clock on a fixed day
+    vi.useFakeTimers({
+      now: DateTime.fromISO(NOW).toJSDate(),
+      toFake: ["Date"],
+    });
+
+    // When - asking whether the generation time is ahead of it
+    const isAhead = isGeneratedAhead({
+      generatedAt,
+      status: "draft",
+      title: "T",
+      type: "Decision",
+      verifiedAt: undefined,
+    });
+
+    // Then - only a time in a later second is
+    expect(isAhead).toBe(shouldBeAhead);
   });
 });

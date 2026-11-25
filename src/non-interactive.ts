@@ -14,7 +14,7 @@ import {
 import { EXIT_CODES } from "./exit-codes.ts";
 import { listChangedPaths, listDirtyPaths } from "./git.ts";
 import { printError, printInfo } from "./output.ts";
-import { needsSignOff } from "./records.ts";
+import { describeState, needsSignOff } from "./records.ts";
 import { loadCandidate, loadCandidatesAt, resolveRecordPaths } from "./repo.ts";
 
 /** The records a run would consider, or why they can't be loaded. */
@@ -80,8 +80,8 @@ export function runNonInteractive(params: {
 
   loaded.candidates
     .filter((candidate) => !needsSignOff(candidate))
-    .forEach(({ filePath }) => {
-      printInfo(`skipped ${filePath}: already verified, unchanged`);
+    .forEach((candidate) => {
+      printInfo(`skipped ${candidate.filePath}: ${describeState(candidate)}`);
     });
 
   const selected = loaded.candidates.filter(needsSignOff);

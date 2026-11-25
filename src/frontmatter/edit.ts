@@ -25,6 +25,7 @@ import { checkMeaning, createEntry, findAmbiguity } from "./meaning.ts";
 import {
   describeYamlErrors,
   ENTRY_KEYS,
+  findLatestIndex,
   findLineEnd,
   findPair,
   FRONTMATTER_KEYS,
@@ -34,6 +35,7 @@ import {
   readIndent,
   readLineBreak,
   readNodeEnd,
+  readTimestamp,
   splitFrontmatter,
 } from "./shared.ts";
 import { RECORD_STATUSES } from "./types.ts";
@@ -280,7 +282,8 @@ export function findEditProblem(
  * gets `at` as its timestamp.
  *
  * - An existing entry for `verifiedBy` has its `at` updated rather than
- *   gaining a second entry; one without an `at` gains one.
+ *   gaining a second entry; one without an `at` gains one. With several, the
+ *   one with the latest readable `at` is updated, as the reads judge by it.
  *
  * - Only the layouts `readEditableLayout` allows are edited; any other, or
  *   frontmatter that isn't valid YAML, is refused for a person to edit by hand.
@@ -540,9 +543,14 @@ function formatEntry(params: FormatEntryParams): string {
 function planVerifiedEdit(params: PlanVerifiedEditParams): TextEditResult {
   const { at, layout, lineBreak, text, verifiedBy } = params;
   const { map, verified } = layout;
-  const ownEntry = readEntries(verified).find(
+  const ownEntries = readEntries(verified).filter(
     ({ by }) => by !== undefined && isSignersBy({ by, verifiedBy })
   );
+
+  // The entry the state is judged by, as `findOwnEntry` picks it, so the
+  // meaning check expects this one renewed.
+  const ownEntry =
+    ownEntries[findLatestIndex(ownEntries.map(({ at }) => readTimestamp(at)))];
 
   if (ownEntry !== undefined) {
     return { edit: renewOwnEntry({ at, entry: ownEntry, text }), isOk: true };

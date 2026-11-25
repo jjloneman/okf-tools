@@ -4,6 +4,7 @@ import path from "node:path";
 import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
 
 import { verifyRecord } from "./frontmatter/edit.ts";
+import { isGeneratedAhead } from "./frontmatter/read.ts";
 
 /** A record in a bundle that could be verified. */
 export type Candidate = {
@@ -116,12 +117,19 @@ export function currentTimestamp(): string {
   return DateTime.utc().startOf("second").toISO({ suppressMilliseconds: true });
 }
 
-/** Word a candidate's state as a short hint. */
+/**
+ * Word a candidate's state as a short hint.
+ *
+ * - A verified record whose `generated.at` is ahead of the clock says so,
+ *   since it reads as unchanged only because it can't be judged.
+ */
 export function describeState(candidate: Candidate): string {
   const hints: Record<RecordState, string> = {
     changed: "changed since you verified it",
     unverified: candidate.summary.status ?? "no status",
-    verified: "already verified, unchanged",
+    verified: isGeneratedAhead(candidate.summary)
+      ? "already verified; generated.at is ahead of the clock"
+      : "already verified, unchanged",
   };
 
   return hints[candidate.state];

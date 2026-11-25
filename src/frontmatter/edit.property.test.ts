@@ -11,11 +11,13 @@
  *   path, which `RUN_OPTIONS` takes to replay it.
  */
 import fc from "fast-check";
-import { describe, expect, test } from "vitest";
+import { DateTime } from "luxon";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { parseDocument } from "yaml";
 
+import { currentTimestamp } from "../records.ts";
 import { verifyRecord } from "./edit.ts";
-import { readRecordSummary } from "./read.ts";
+import { getRecordState, readRecordSummary } from "./read.ts";
 
 /** One `verified` entry, any of whose keys may be missing. */
 type EntryModel = {
@@ -440,6 +442,35 @@ function entryArb(verifiedBy: string): fc.Arbitrary<EntryModel> {
     );
 }
 
+/**
+ * Find the signer's entry a sign-off renews: the one whose `at` is the latest
+ * timestamp, the first of any that tie, or the first when none is one; `-1`
+ * when the signer has none.
+ */
+function findRenewedIndex(params: {
+  entries: readonly EntryModel[];
+  verifiedBy: string;
+}): number {
+  const { entries, verifiedBy } = params;
+  const ownIndexes = entries.flatMap((entry, index) =>
+    isOwn({ entry, verifiedBy }) ? [index] : []
+  );
+
+  const readMillis = (index: number): number => {
+    const value = entries[index]?.at?.value ?? "";
+
+    return OLD_ATS.includes(value)
+      ? DateTime.fromISO(value).toMillis()
+      : Number.NEGATIVE_INFINITY;
+  };
+
+  return ownIndexes.reduce(
+    (latest, index) =>
+      readMillis(index) > readMillis(latest) ? index : latest,
+    ownIndexes[0] ?? -1
+  );
+}
+
 /** Whether an entry is the signer's. */
 function isOwn(params: { entry: EntryModel; verifiedBy: string }): boolean {
   return params.entry.by?.value === params.verifiedBy;
@@ -583,9 +614,10 @@ function expectedMeaning(model: RecordModel): Record<string, unknown> {
   const entries = readModelEntries(layout);
 
   const objects = entries.map(toObject);
-  const ownIndex = entries.findIndex((entry) =>
-    isOwn({ entry, verifiedBy: model.verifiedBy })
-  );
+  const ownIndex = findRenewedIndex({
+    entries,
+    verifiedBy: model.verifiedBy,
+  });
 
   if (ownIndex !== -1) {
     objects[ownIndex] = { ...objects[ownIndex], at: AT };
@@ -997,6 +1029,67 @@ describe("verifyRecord over generated layouts", () => {
             isOk: false,
             reason: "the signer's name holds a line break",
           });
+        }
+      ),
+      RUN_OPTIONS
+    );
+  });
+});
+
+describe("the state right after a sign-off", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Any time from 2000 to 2100, to the millisecond. */
+  const timeArb = fc.date({
+    max: DateTime.fromISO("2100-01-01T00:00:00Z").toJSDate(),
+    min: DateTime.fromISO("2000-01-01T00:00:00Z").toJSDate(),
+    noInvalidDate: true,
+  });
+
+  test("is verified, for any record and any clock", () => {
+    fc.assert(
+      fc.property(
+        RECORD_ARB,
+        timeArb,
+        timeArb,
+        fc.boolean(),
+        (model, generatedAt, now, isBlock) => {
+          // Given - a record generated at any time, and the clock at any other
+          const generated: FieldModel = {
+            key: "generated",
+            keyProperty: "",
+            value: {
+              at: { style: "plain", value: generatedAt.toISOString() },
+              by: { style: "plain", value: "claude-code/model" },
+              isBlock,
+            },
+          };
+          const text = `${render({
+            ...model,
+            fields: [
+              ...model.fields.filter(({ key }) => key !== "generated"),
+              generated,
+            ],
+          }).lines.join("")}${BODY}`;
+
+          vi.useFakeTimers({ now, toFake: ["Date"] });
+
+          // When - signing it off at the time the CLI stamps
+          const result = verifyRecord({
+            at: currentTimestamp(),
+            text,
+            verifiedBy: model.verifiedBy,
+          });
+
+          // Then - it reads as verified
+          const summary = readRecordSummary({
+            text: result.isOk ? result.text : "",
+            verifiedBy: model.verifiedBy,
+          });
+
+          expect(summary && getRecordState(summary)).toBe("verified");
         }
       ),
       RUN_OPTIONS
