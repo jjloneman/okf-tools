@@ -91,6 +91,7 @@ pnpm okf:verify --yes --changed
 
 - `--yes` alone is a usage error: it needs `--changed` or record paths, so nothing is ever verified by accident.
 - A named record that's already verified, and unchanged since, is skipped.
+- "Where you run it" is the folder you call `pnpm` from, when that's in the package's repo. With `pnpm --dir <package>` or `npm --prefix <package>` from another repo or no repo, paths resolve from the package root instead.
 - Exit codes: `0` worked, `1` failed, `2` nothing needed verifying.
 
 ### 🏳️ Flags
