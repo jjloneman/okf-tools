@@ -7,7 +7,8 @@
  *
  * - An error is what §11.1 makes a conformance failure: frontmatter that
  *   doesn't parse as a mapping, and an `index.md` or `log.md` that breaks §8
- *   or §9. Everything else is a warning, as upstream has it.
+ *   or §9. Everything else is a warning, or information that needs no fix,
+ *   as upstream has it.
  *
  * - A key the spec doesn't define passes without a finding, so a repo can
  *   use okf-tools beside a tool that adds its own keys.
@@ -25,6 +26,7 @@ import type {
 } from "./check-engine.ts";
 
 import { readNodeLine } from "./check-engine.ts";
+import { getRecordState, isStale } from "./frontmatter/read.ts";
 import {
   isNullScalar,
   readTimestamp,
@@ -39,7 +41,7 @@ import {
 } from "./markdown.ts";
 
 /** A parsed file's frontmatter, as the concept and index rules read it. */
-type ParsedFile = {
+export type ParsedFile = {
   /**
    * The file.
    *
@@ -177,6 +179,56 @@ export const SPEC_RULES: readonly CheckRule[] = [
     code: "E007",
     name: "frontmatter-unique-keys",
     severity: "error",
+  },
+  {
+    checkFile: (file) =>
+      withConcept(file, (parsed) => {
+        const node = parsed.get("stale_after");
+        const staleAfter = readTimestamp(node);
+
+        return staleAfter !== undefined &&
+          isValidTimestamp(staleAfter) &&
+          isStale({ staleAfter })
+          ? [
+              {
+                line: readNodeLine({ file, node }),
+                message: `the concept is stale: stale_after ${staleAfter} has passed (§5.5)`,
+              },
+            ]
+          : [];
+      }),
+    code: "I201",
+    name: "stale",
+    severity: "info",
+  },
+  {
+    checkFile: (file) =>
+      withConcept(file, (parsed) => {
+        const generatedAt = readTimestamp(readGeneratedAt(parsed)[0]?.node);
+        const times = readEvents(parsed)
+          .filter(({ isComplete }) => isComplete)
+          .map(({ at }) => readTimestamp(at) ?? "")
+          .filter(isValidTimestamp);
+
+        return generatedAt === undefined ||
+          !isValidTimestamp(generatedAt) ||
+          times.length === 0 ||
+          times.some(
+            (verifiedAt) =>
+              getRecordState({ generatedAt, verifiedAt }) === "verified"
+          )
+          ? []
+          : [
+              {
+                line: readNodeLine({ file, node: parsed.get("verified") }),
+                message:
+                  "no verification is current: each verified event is older than generated.at, so consumers read the concept as unverified (§5.3)",
+              },
+            ];
+      }),
+    code: "I204",
+    name: "no-current-verification",
+    severity: "info",
   },
   {
     checkFile: (file) =>
@@ -446,6 +498,80 @@ export const SPEC_RULES: readonly CheckRule[] = [
   },
 ];
 
+/** Whether a timestamp is in one of §5's forms and names a real instant. */
+export function isValidTimestamp(value: string): boolean {
+  return (
+    (DATE_TIME.test(value) || DATE.test(value)) &&
+    DateTime.fromISO(value, { zone: "utc" }).isValid
+  );
+}
+
+/** Read each `verified` event, a bare mapping as one (§5.2). */
+export function readEvents(parsed: ParsedFile): {
+  at: unknown;
+  by: unknown;
+  index: number;
+  isComplete: boolean;
+  node: unknown;
+}[] {
+  const verified = parsed.get("verified");
+
+  if (isBlank(verified)) {
+    return [];
+  }
+
+  const items: unknown[] = isSeq(verified) ? verified.items : [verified];
+
+  return items.map((item, index) => {
+    const node = parsed.resolve(item);
+    const by = parsed.read(node, "by");
+    const at = parsed.read(node, "at");
+
+    return {
+      at,
+      by,
+      index,
+      isComplete: !isBlank(by) && !isBlank(at),
+      node,
+    };
+  });
+}
+
+/** Read a file's parsed frontmatter, or `undefined` when it has none. */
+export function readParsed(file: CheckedFile): ParsedFile | undefined {
+  if (file.frontmatter.kind !== "parsed") {
+    return undefined;
+  }
+
+  const { doc, map } = file.frontmatter;
+  const read = (from: unknown, key: string): unknown => {
+    const resolved = resolveAlias({ doc, node: from });
+
+    return isMap(resolved)
+      ? resolveAlias({ doc, node: resolved.get(key, true) })
+      : undefined;
+  };
+
+  return {
+    file,
+    get: (key) => read(map, key),
+    read,
+    resolve: (node) => resolveAlias({ doc, node }),
+  };
+}
+
+/** Run a check over a concept's frontmatter, or find nothing in any other file. */
+export function withConcept(
+  file: CheckedFile,
+  check: (parsed: ParsedFile) => RuleHit[]
+): RuleHit[] {
+  const parsed = readParsed(file);
+
+  return file.kind === "markdown" && parsed !== undefined && isConcept(parsed)
+    ? check(parsed)
+    : [];
+}
+
 /** Warn about an actor in neither of §7's forms. */
 function checkActor(params: {
   field: string;
@@ -627,45 +753,6 @@ function isDateOnly(value: string): boolean {
   return DATE.test(value) && isValidTimestamp(value);
 }
 
-/** Whether a timestamp is in one of §5's forms and names a real instant. */
-function isValidTimestamp(value: string): boolean {
-  return (
-    (DATE_TIME.test(value) || DATE.test(value)) &&
-    DateTime.fromISO(value, { zone: "utc" }).isValid
-  );
-}
-
-/** Read each `verified` event, a bare mapping as one (§5.2). */
-function readEvents(parsed: ParsedFile): {
-  at: unknown;
-  by: unknown;
-  index: number;
-  isComplete: boolean;
-  node: unknown;
-}[] {
-  const verified = parsed.get("verified");
-
-  if (isBlank(verified)) {
-    return [];
-  }
-
-  const items: unknown[] = isSeq(verified) ? verified.items : [verified];
-
-  return items.map((item, index) => {
-    const node = parsed.resolve(item);
-    const by = parsed.read(node, "by");
-    const at = parsed.read(node, "at");
-
-    return {
-      at,
-      by,
-      index,
-      isComplete: !isBlank(by) && !isBlank(at),
-      node,
-    };
-  });
-}
-
 /** Read `generated.at` when `generated` has a `by` and a non-blank `at`. */
 function readGeneratedAt(
   parsed: ParsedFile
@@ -714,46 +801,11 @@ function readLogHeadings(file: CheckedFile): {
   });
 }
 
-/** Read a file's parsed frontmatter, or `undefined` when it has none. */
-function readParsed(file: CheckedFile): ParsedFile | undefined {
-  if (file.frontmatter.kind !== "parsed") {
-    return undefined;
-  }
-
-  const { doc, map } = file.frontmatter;
-  const read = (from: unknown, key: string): unknown => {
-    const resolved = resolveAlias({ doc, node: from });
-
-    return isMap(resolved)
-      ? resolveAlias({ doc, node: resolved.get(key, true) })
-      : undefined;
-  };
-
-  return {
-    file,
-    get: (key) => read(map, key),
-    read,
-    resolve: (node) => resolveAlias({ doc, node }),
-  };
-}
-
 /** Whether a file's frontmatter is OKF's to read: a concept's or the root index's. */
 function readsFrontmatter(file: CheckedFile): boolean {
   return (
     file.kind === "markdown" || (file.kind === "index" && file.isAtBundleRoot)
   );
-}
-
-/** Run a check over a concept's frontmatter, or find nothing in any other file. */
-function withConcept(
-  file: CheckedFile,
-  check: (parsed: ParsedFile) => RuleHit[]
-): RuleHit[] {
-  const parsed = readParsed(file);
-
-  return file.kind === "markdown" && parsed !== undefined && isConcept(parsed)
-    ? check(parsed)
-    : [];
 }
 
 /** Run a check over the root `index.md`'s parsed frontmatter, or find nothing. */

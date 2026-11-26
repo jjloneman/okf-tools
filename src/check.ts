@@ -1,10 +1,15 @@
 /*
- * `okf check`: report problems in the bundles against OKF's spec rules, as
- * text for a person, JSON for a program, or annotations in GitHub Actions.
+ * `okf check`: report problems in the bundles against OKF's spec rules and
+ * okf-tools' trust rules, as text for a person, JSON for a program, or
+ * annotations in GitHub Actions.
  *
  * - It reads every Markdown file in the bundles that git would track,
  *   records, `index.md` and `log.md` files, and other Markdown alike, but
  *   none `okf.exclude` matches and none in a folder starting with `.`.
+ *
+ * - Each file changed since the base branch is also read as the branch's
+ *   merge base holds it, for the rule that fails a record changed without
+ *   a new `generated.at`. `--changed` reports on those files alone.
  *
  * - It never writes. It exits `1` on an error-level finding, a file it
  *   couldn't read, or under `--strict` a warning; otherwise `0`.
@@ -20,6 +25,7 @@ import type {
   CheckSeverity,
   CheckSkipped,
 } from "./check-engine.ts";
+import type { DraftPolicy } from "./config.ts";
 import type { ExitCode } from "./exit-codes.ts";
 import type { CheckFormat } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
@@ -27,10 +33,21 @@ import type { BundleContext } from "./run-context.ts";
 
 import { buildCheckReport, readCheckedFile } from "./check-engine.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
-import { readWorkingPaths } from "./git.ts";
+import {
+  readMergeBase,
+  readTextAt,
+  readWorkingPaths,
+  toPathKey,
+} from "./git.ts";
 import { describeError, toTerminalLine } from "./output.ts";
-import { findOwningBundle, matchExcluded, readRecordText } from "./repo.ts";
+import {
+  findOwningBundle,
+  listBundleChanges,
+  matchExcluded,
+  readRecordText,
+} from "./repo.ts";
 import { SPEC_RULES } from "./spec-rules.ts";
+import { buildTrustRules } from "./trust-rules.ts";
 
 /** The workflow command GitHub Actions annotates a file with, by severity. */
 const ANNOTATION_COMMANDS: Record<CheckSeverity, string> = {
@@ -68,8 +85,8 @@ export function formatSummary(report: CheckReport): string {
 }
 
 /**
- * Run `okf check`: read the bundles' Markdown, run the spec rules, and print
- * what they found.
+ * Run `okf check`: read the bundles' Markdown, run the spec and trust rules,
+ * and print what they found.
  */
 export function runCheck(params: {
   /**
@@ -80,11 +97,26 @@ export function runCheck(params: {
   context: BundleContext;
 
   /**
+   * How a draft record is reported, from `okf.drafts`; a notice when unset.
+   *
+   * @example "block"
+   */
+  drafts: DraftPolicy | undefined;
+
+  /**
    * How to print the report.
    *
    * @example "text"
    */
   format: CheckFormat;
+
+  /**
+   * Whether `--changed` asked to report only on the files changed since the
+   * base branch.
+   *
+   * @example true
+   */
+  isChanged: boolean;
 
   /**
    * Whether it runs in GitHub Actions, where text findings print as
@@ -101,7 +133,8 @@ export function runCheck(params: {
    */
   isStrict: boolean;
 }): ExitCode {
-  const { context, format, isGitHubActions, isStrict } = params;
+  const { context, drafts, format, isChanged, isGitHubActions, isStrict } =
+    params;
   const { output } = context;
   const read = readBundles(context);
 
@@ -111,8 +144,24 @@ export function runCheck(params: {
     return EXIT_CODES.failure;
   }
 
-  const { bundles, skipped } = read.value;
-  const report = buildCheckReport({ bundles, rules: SPEC_RULES, skipped });
+  const { bundles, changedKeys, hasBase, skipped } = read.value;
+
+  // On stderr in every format, so a JSON reader and a green CI job still
+  // show that the gate saw only uncommitted changes.
+  if (isChanged && !hasBase) {
+    output.error(
+      "Can't diff against the base branch; checking uncommitted changes only. In CI, fetch the base branch, such as with actions/checkout's fetch-depth: 0."
+    );
+  }
+
+  const report = buildCheckReport({
+    bundles,
+    isInScope: isChanged
+      ? (filePath) => changedKeys.has(toPathKey(filePath))
+      : undefined,
+    rules: [...SPEC_RULES, ...buildTrustRules(drafts)],
+    skipped,
+  });
 
   if (format === "json") {
     output.data(JSON.stringify(report, undefined, 2));
@@ -181,10 +230,16 @@ function isInsideOnDisk(params: {
 
 /**
  * Read every Markdown file in the bundles git would track, grouped by the
- * deepest bundle that holds each, and the files that couldn't be read.
+ * deepest bundle that holds each, the files that couldn't be read, and the
+ * files changed since the base branch.
+ *
+ * - A changed file is also read as the branch's merge base holds it, or
+ *   `HEAD` when there's no base to diff against.
  */
 function readBundles(context: BundleContext): Outcome<{
   bundles: CheckedBundle[];
+  changedKeys: ReadonlySet<string>;
+  hasBase: boolean;
   skipped: CheckSkipped[];
 }> {
   const { bundleDirs, excludeGlobs, repoRoot } = context;
@@ -199,6 +254,16 @@ function readBundles(context: BundleContext): Outcome<{
   if (!listed.isOk) {
     return listed;
   }
+
+  const changes = listBundleChanges({ bundleDirs, repoRoot });
+
+  if (!changes.isOk) {
+    return changes;
+  }
+
+  const base = readMergeBase(repoRoot);
+  const baseCommit = base?.commit;
+  const changedKeys = new Set([...changes.value.paths].map(toPathKey));
 
   for (const filePath of [...listed.value].sort()) {
     const bundleDir = findOwningBundle({ bundleDirs, filePath });
@@ -217,9 +282,21 @@ function readBundles(context: BundleContext): Outcome<{
       continue;
     }
 
+    const baseText: Outcome<string | undefined> =
+      baseCommit === undefined || !changedKeys.has(toPathKey(filePath))
+        ? { isOk: true, value: undefined }
+        : readTextAt({ filePath, ref: baseCommit, repoRoot });
+
+    if (!baseText.isOk) {
+      skipped.push({ path: filePath, reason: baseText.reason });
+
+      continue;
+    }
+
     try {
       files.push(
         readCheckedFile({
+          baseText: baseText.value,
           bundleDir,
           doesExist,
           filePath,
@@ -241,6 +318,8 @@ function readBundles(context: BundleContext): Outcome<{
         bundleDir,
         files: files.filter((file) => file.bundleDir === bundleDir),
       })),
+      changedKeys,
+      hasBase: base?.isBranchBase === true,
       skipped,
     },
   };

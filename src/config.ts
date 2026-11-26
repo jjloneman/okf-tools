@@ -7,6 +7,12 @@ import { ENTRY_STYLE_NAMES, isEntryStyle } from "./frontmatter/shared.ts";
 import { ENTRY_STYLES } from "./frontmatter/types.ts";
 import { describeError } from "./output.ts";
 
+/**
+ * How `okf check` reports a draft record: not at all, as a warning, or as an
+ * error; unset, it's a notice.
+ */
+export type DraftPolicy = (typeof DRAFT_POLICIES)[number];
+
 /** The `okf` block of a consumer's `package.json`. */
 export type OkfConfig = {
   /**
@@ -15,6 +21,13 @@ export type OkfConfig = {
    * @example `["docs/decisions", "docs/references"]`
    */
   bundles: readonly string[] | undefined;
+
+  /**
+   * How `okf check` reports a draft record; a notice when unset.
+   *
+   * @example "block"
+   */
+  drafts: DraftPolicy | undefined;
 
   /**
    * Globs, relative to the repo root, of files and folders in the bundles
@@ -137,6 +150,9 @@ export type SettingsResult =
       settings: Settings;
     };
 
+/** The values `okf.drafts` takes. */
+export const DRAFT_POLICIES = ["allow", "block", "warn"] as const;
+
 /**
  * An OKF actor the frontmatter can hold unquoted in the inline
  * `{ by: …, at: … }` entry, and that YAML reads back as a string.
@@ -185,6 +201,7 @@ export function readOkfConfig(
 ): OkfConfigResult {
   const empty = {
     bundles: undefined,
+    drafts: undefined,
     exclude: undefined,
     style: undefined,
     verifiedBy: undefined,
@@ -215,7 +232,7 @@ export function readOkfConfig(
     return { isOk: false, reason: "`okf` in package.json must be an object." };
   }
 
-  const { bundles, exclude, style, verifiedBy } = block;
+  const { bundles, drafts, exclude, style, verifiedBy } = block;
 
   if (bundles !== undefined && !isStringList(bundles)) {
     return {
@@ -255,7 +272,17 @@ export function readOkfConfig(
     };
   }
 
-  return { config: { bundles, exclude, style, verifiedBy }, isOk: true };
+  if (drafts !== undefined && !isDraftPolicy(drafts)) {
+    return {
+      isOk: false,
+      reason: `\`okf.drafts\` in package.json must be one of ${DRAFT_POLICIES.join(", ")}.`,
+    };
+  }
+
+  return {
+    config: { bundles, drafts, exclude, style, verifiedBy },
+    isOk: true,
+  };
 }
 
 /**
@@ -330,6 +357,11 @@ export function selectBundleDirs(params: {
   return options.bundles.length > 0
     ? options.bundles.map((dir) => path.resolve(cwd, dir))
     : (config.bundles ?? []).map((dir) => path.resolve(repoRoot, dir));
+}
+
+/** Whether a parsed JSON value is one of `okf.drafts`' values. */
+function isDraftPolicy(value: unknown): value is DraftPolicy {
+  return DRAFT_POLICIES.some((policy) => policy === value);
 }
 
 /** Whether a parsed JSON value is a list of non-empty strings. */

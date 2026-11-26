@@ -49,6 +49,14 @@ export type CheckedBundle = {
 /** A Markdown file in a bundle, read once for every rule. */
 export type CheckedFile = {
   /**
+   * Its text at the commit the branch's changes are judged against, when it
+   * changed since and that commit holds it.
+   *
+   * @example `"---\ntype: Decision\n---\n"`
+   */
+  baseText: string | undefined;
+
+  /**
    * The folder of the bundle that holds it, the deepest when bundles nest.
    *
    * @example "docs/decisions"
@@ -376,6 +384,16 @@ export function buildCheckReport(params: {
   bundles: readonly CheckedBundle[];
 
   /**
+   * Whether a file is one to report on; every file is, unless given.
+   *
+   * - A bundle-wide rule still sees every file, so only its findings are
+   *   narrowed.
+   *
+   * @example `(filePath) => changed.has(filePath)`
+   */
+  isInScope?: ((filePath: string) => boolean) | undefined;
+
+  /**
    * The rules to run.
    *
    * @example `SPEC_RULES`
@@ -389,11 +407,15 @@ export function buildCheckReport(params: {
    */
   skipped: readonly CheckSkipped[];
 }): CheckReport {
-  const { bundles, rules, skipped } = params;
+  const { bundles, isInScope = () => true, rules, skipped } = params;
   const findings: CheckFinding[] = [];
+  let filesChecked = 0;
 
   for (const bundle of bundles) {
     const found: CheckFinding[] = [];
+    const files = bundle.files.filter((file) => isInScope(file.filePath));
+
+    filesChecked += files.length;
 
     for (const rule of rules) {
       const named = {
@@ -403,10 +425,12 @@ export function buildCheckReport(params: {
       };
 
       for (const hit of rule.checkBundle?.(bundle) ?? []) {
-        found.push({ ...named, ...hit });
+        if (isInScope(hit.path)) {
+          found.push({ ...named, ...hit });
+        }
       }
 
-      for (const file of bundle.files) {
+      for (const file of files) {
         for (const hit of rule.checkFile?.(file) ?? []) {
           found.push({ ...named, ...hit, path: file.filePath });
         }
@@ -422,10 +446,7 @@ export function buildCheckReport(params: {
       info: countSeverity({ findings, severity: "info" }),
       warning: countSeverity({ findings, severity: "warning" }),
     },
-    filesChecked: bundles.reduce(
-      (total, bundle) => total + bundle.files.length,
-      0
-    ),
+    filesChecked,
     findings,
     schemaVersion: CHECK_SCHEMA_VERSION,
     skipped: [...skipped],
@@ -434,6 +455,7 @@ export function buildCheckReport(params: {
 
 /** Read a Markdown file once, for every rule to check. */
 export function readCheckedFile(params: {
+  baseText?: string | undefined;
   bundleDir: string;
   doesExist: (filePath: string) => boolean;
   filePath: string;
@@ -450,6 +472,7 @@ export function readCheckedFile(params: {
 
   return {
     ...params,
+    baseText: params.baseText,
     doesOpenWithFence: firstLine === "---",
     frontmatter: readFrontmatterState({
       doesOpenWithFence: firstLine === "---",

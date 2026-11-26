@@ -222,8 +222,8 @@ export function getRecordState(summary: RecordTimes): RecordState {
  */
 export function getTrustTier(summary: TrustTimes): TrustTier {
   const { generatedAt, verifications = [] } = summary;
-  const current = readLatestByActor(verifications).filter(
-    ({ at }) => !isAhead(at) && isAtOrAfterGeneration({ at, generatedAt })
+  const current = readLatestByActor(verifications).filter(({ at }) =>
+    isCurrentVerification({ at, generatedAt })
   );
 
   if (current.length === 0) {
@@ -233,6 +233,35 @@ export function getTrustTier(summary: TrustTimes): TrustTier {
   return current.some(({ by }) => isHumanActor(by))
     ? TRUST_TIERS.humanReviewed
     : TRUST_TIERS.machineConfirmed;
+}
+
+/**
+ * Whether a `verified` event is current, as OKF v0.3 counts one: at or after
+ * `generated.at`, to the whole second, and not ahead of the clock.
+ *
+ * - A missing or unreadable `generated.at` can't be compared, so any
+ *   readable sign-off not ahead of the clock is current, as
+ *   `getRecordState` has it.
+ *
+ * - It reads the clock, so a sign-off ahead of it isn't current, as a
+ *   listing treats such a sign-off as `changed`.
+ */
+export function isCurrentVerification(params: {
+  /**
+   * When the event says it signed the record off.
+   *
+   * @example "2026-10-02T13:30:00Z"
+   */
+  at: Timestamp;
+
+  /**
+   * When the record was last generated, if it says.
+   *
+   * @example "2026-10-01T15:00:00Z"
+   */
+  generatedAt: Timestamp | undefined;
+}): boolean {
+  return !isAhead(params.at) && isAtOrAfterGeneration(params);
 }
 
 /**
@@ -278,6 +307,29 @@ export function isStale(summary: Pick<RecordSummary, "staleAfter">): boolean {
  */
 export function isVerifiedAhead(summary: RecordTimes): boolean {
   return isAhead(summary.verifiedAt);
+}
+
+/**
+ * Keep each actor's latest event, in the order each actor first appears:
+ * the one whose `at` is latest once read, as `findLatestIndex` picks it.
+ *
+ * - `okf verify` renews only the signer's latest event, so an older one is
+ *   history, never a sign-off of its own.
+ */
+export function readLatestByActor<T extends Verification>(
+  verifications: readonly T[]
+): T[] {
+  const byActor = new Map<string, T[]>();
+
+  for (const event of verifications) {
+    byActor.set(event.by, [...(byActor.get(event.by) ?? []), event]);
+  }
+
+  return [...byActor.values()].flatMap((events) => {
+    const latestIndex = findLatestIndex(events.map(({ at }) => at));
+
+    return events.filter((_event, index) => index === latestIndex);
+  });
 }
 
 /**
@@ -426,26 +478,6 @@ function isAtOrAfterGeneration(params: {
 /** Whether an actor is a person: `human:` with an id after it. */
 function isHumanActor(by: string): boolean {
   return by.startsWith(HUMAN_SCHEME) && by.length > HUMAN_SCHEME.length;
-}
-
-/**
- * Keep each actor's latest event, in the order each actor first appears:
- * the one whose `at` is latest once read, as `findLatestIndex` picks it.
- */
-function readLatestByActor(
-  verifications: readonly Verification[]
-): Verification[] {
-  const byActor = new Map<string, Verification[]>();
-
-  for (const event of verifications) {
-    byActor.set(event.by, [...(byActor.get(event.by) ?? []), event]);
-  }
-
-  return [...byActor.values()].flatMap((events) => {
-    const latestIndex = findLatestIndex(events.map(({ at }) => at));
-
-    return events.filter((_event, index) => index === latestIndex);
-  });
 }
 
 /**

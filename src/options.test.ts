@@ -645,12 +645,31 @@ describe("parseCheckArgs", () => {
     {
       args: [],
       description: "no arguments",
-      options: { bundles: [], format: "text", isStrict: false },
+      options: {
+        bundles: [],
+        format: "text",
+        isChanged: false,
+        isStrict: false,
+      },
     },
     {
-      args: ["--bundle", "a", "--bundle", "b", "--format", "json", "--strict"],
-      description: "bundles, --format json, and --strict",
-      options: { bundles: ["a", "b"], format: "json", isStrict: true },
+      args: [
+        "--bundle",
+        "a",
+        "--bundle",
+        "b",
+        "--changed",
+        "--format",
+        "json",
+        "--strict",
+      ],
+      description: "bundles, --changed, --format json, and --strict",
+      options: {
+        bundles: ["a", "b"],
+        format: "json",
+        isChanged: true,
+        isStrict: true,
+      },
     },
   ])("reads $description", ({ args, options }) => {
     // When/Then - the options
