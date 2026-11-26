@@ -58,6 +58,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `scripts/spec-watch/` — the spec watch that `spec-watch.yml` runs (see [Spec watch](#-spec-watch)), covered like `src/` and never published; `bin.ts` is its entry.
 - `spec/upstream.json` — the pin: the upstream spec okf-tools supports.
 - `docs/decisions/` — the repo's own OKF bundle of design decisions (see [Design decisions](#-design-decisions)).
+- `docs/references/` — the repo's OKF v0.3 bundle of dated reference records, such as the landscape of other OKF tools, each with a `stale_after` (see [References](#-references)).
 - `test/repo.ts` — scratch git repos, fabricated records, and the shared `VERIFIED_BY` for the tests, imported as `#test/repo`.
 - `test/spec-watch.ts` — a fake `fetch` that answers for GitHub and ntfy, and a fabricated upstream, for the spec watch's tests, imported as `#test/spec-watch`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
@@ -215,6 +216,13 @@ Why the package works the way it does is recorded in [docs/decisions/](docs/deci
   - no `verified` means it is an unreviewed draft;
   - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again;
   - set a signed-off record you edit back to `status: draft`, even for a link-only edit, keeping its `verified` entry; `okf-verify` sets it to `stable` again on sign-off.
+
+## 🔖 References
+
+[docs/references/](docs/references/index.md) is a second bundle, declared `okf_version: "0.3"`, of what was true outside okf-tools on a date, such as [the landscape of other OKF tools](docs/references/landscape.md) that `/product-review` reads.
+
+- **Its [index](docs/references/index.md) holds the rules:** every record has a `stale_after`, and marks each claim "read" or "tried", with its date, and recommends no tool.
+- **Refreshing one is a PR like any other**, written and signed off like a decision record (see [Design decisions](#-design-decisions)); sign one off with `--stale-in` naming only reference records, since a decision never goes stale.
 
 ## 🛑 Deleting things
 
