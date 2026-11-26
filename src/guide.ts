@@ -25,6 +25,8 @@ export const RECORDS_INTRO =
 /** How an agent writes, edits, and verifies records, as Markdown bullets. */
 export const RECORD_RULES: string = [
   `- **Start a new record with \`okf new <record> --type <type> --by <producer>/<version>\`**, such as \`--by claude-code/2.1.316\`, which writes it as \`status: draft\` with \`generated\` stamped from the clock, and lists it in its index; then write its body.
+- **List in \`sources\` each repo file or folder a record was written from**, with \`resource\` relative to the record's folder, such as \`../../src/git.ts\`, and footnote each claim it rests on with a footnote whose label is the source's \`id\`, such as \`[^git]\`, so \`okf check\` warns when a cited file changes after the record was written or signed off.
+  - Cite files, or a folder only when the record covers all of it, and leave out a file nearly every change touches, such as \`package.json\`, which would warn on every release.
 - **When you edit a record, other than its \`tags\` alone, re-stamp it with \`okf touch <record>... --by <producer>/<version> --draft\`**, which sets \`generated\` from the clock and a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
   - Never type \`generated.at\` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a \`verified\` entry yourself.** Signing a record off is the person's call.
