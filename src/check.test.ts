@@ -6,6 +6,7 @@ import { record, useTestRepo, VERIFIED_BY, verifiedRecord } from "#test/repo";
 
 import type { CheckFinding, CheckReport } from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
+import type { HouseRules } from "./house-rules.ts";
 import type { BundleContext } from "./run-context.ts";
 
 import { CHECK_SCHEMA_VERSION } from "./check-engine.ts";
@@ -80,6 +81,13 @@ function check(params: {
   format?: "json" | "text";
 
   /**
+   * The house rules turned on, from `okf.rules`.
+   *
+   * @example `{ "tags-sorted": "error" }`
+   */
+  houseRules?: HouseRules;
+
+  /**
    * Whether `--changed` scopes the report to changed files.
    *
    * @example true
@@ -105,6 +113,7 @@ function check(params: {
     drafts,
     excludeGlobs = [],
     format = "text",
+    houseRules = {},
     isChanged = false,
     isGitHubActions = false,
     isStrict = false,
@@ -125,6 +134,7 @@ function check(params: {
     context,
     drafts,
     format,
+    houseRules,
     isChanged,
     isGitHubActions,
     isStrict,

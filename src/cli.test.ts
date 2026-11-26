@@ -426,6 +426,28 @@ describe("run as okf check", () => {
     ]);
   });
 
+  test("runs the house rules okf.rules turns on", async () => {
+    // Given - a bundle whose record's tags are out of order, and the rule on
+    repo.write(
+      "package.json",
+      `${JSON.stringify({
+        okf: { bundles: ["kb"], rules: { "tags-sorted": "error" } },
+      })}\n`
+    );
+    repo.write("kb/index.md", rootIndex);
+    repo.write("kb/a.md", record(["type: Decision", "tags: [b, a]"]));
+
+    // When - checking
+    const code = await runCheck([]);
+
+    // Then - the house rule's error
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(infos).toStrictEqual([
+      '[okf] kb/a.md:3: error H002 tags-sorted: tags aren\'t sorted: "a" comes after "b"',
+      "[okf] 2 files checked: 1 error, 0 warnings, 0 info.",
+    ]);
+  });
+
   test("prints annotations in GitHub Actions", async () => {
     // Given - a bundle named with --bundle, with a bad log heading
     repo.write("notes/index.md", rootIndex);

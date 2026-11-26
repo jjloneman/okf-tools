@@ -626,6 +626,9 @@ sign-off from before the change still counts, as when generated.at wasn't
 re-stamped. A draft is a notice, or as \`okf.drafts\` in package.json says:
 allow, warn, or block.
 
+The house rules, such as sorted tags or an index that matches its records,
+run only as \`okf.rules\` in package.json turns each on: warn or error.
+
 It exits 1 on an error-level finding or a file it can't read, and under
 --strict on a warning too; otherwise 0.
 

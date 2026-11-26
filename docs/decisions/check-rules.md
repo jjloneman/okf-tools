@@ -20,7 +20,7 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T00:42:43Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:42:51Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
@@ -42,9 +42,12 @@ As of 2026-11-25, from `src/check.ts`, `src/check-engine.ts`, `src/spec-rules.ts
   - an actor is any `<producer>/<version>` or `<scheme>:<id>`, so `team:` and other schemes pass (`W103` only for neither form).
 - **A key the spec doesn't define passes without a finding**, as [Who owns the spec rules `okf check` runs](spec-rules.md) decided, so the `integrity` key okfit writes is never flagged.
   - **Rejected:** upstream's `I203`, which notes every extension key without an `x-` prefix.
-- **`W115` goes past `validate.py`:** it checks the links in every `index.md`, so a line left behind by a deleted record is reported; upstream checks links only in concepts' bodies.
+- **`W115` goes past `validate.py`:** it checks the links in every `index.md` as well as in concepts' bodies, so a line left behind by a deleted record is reported; upstream checks links only in concepts' bodies.
+  - In a bundle declared v0.2 or earlier, or undeclared, a bare link that resolves only from the bundle root passes, as #46 settled (see [Which house rules okf check runs, and how a repo turns them on](house-rules.md)); upstream reads a link from its file alone.
+- **`superseded_by` is checked as `validate.py` checks it:** `W116` when it resolves to no file, `W119` when it resolves only through v0.2's fallback from the bundle root, and `W123` on a record that isn't `status: deprecated`. `W116` keeps its `license` check on the root `index.md` too.
+- **`W108` reports a footnote whose label is no `sources` entry's `id`**, at the first line it's on, a definition counted as a use.
 - **v0.3's root `index.md` rules are in:** a bundle with no root `index.md`, or one without `okf_version` (`W125`), a `license` that's neither an SPDX expression nor a file in the bundle (`W116`), and an unquoted `okf_version` (`W117`).
-- **The rest of `validate.py` waits:** the `sources`, path-field, footnote, body-link, and attested-computation rules, and the `I` findings other than `I201` and `I204`, which #45 brought in with the trust rules (see [How okf check judges whether a sign-off still holds](trust-rules.md)). The gaps in the codes are those rules.
+- **The rest of `validate.py` waits:** the other `sources` and path-field rules, and the attested-computation rules, and the `I` findings other than `I201` and `I204`, which #45 brought in with the trust rules (see [How okf check judges whether a sign-off still holds](trust-rules.md)). The gaps in the codes are those rules.
 - **It reads every Markdown file git would track in the bundles**, records, `index.md` and `log.md` alike, skipping dot-paths, `okf.exclude`, and symlinks that lead out of the bundle (§3.2).
 - **Exit codes:** `1` on an error, or a file it can't read, and under `--strict` on a warning too; otherwise `0`. `--strict` is upstream's flag name.
 - **Output:** a line a finding, `path:line: severity code rule: message`, then a summary; `--format json` prints a versioned report; in GitHub Actions, text findings print as workflow annotations too, `info` as a notice, and still as lines, since GitHub shows only so many annotations.

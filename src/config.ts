@@ -1,10 +1,12 @@
 import path from "node:path";
 
 import type { EntryStyle } from "./frontmatter/types.ts";
+import type { HouseRules } from "./house-rules.ts";
 import type { CliOptions } from "./options.ts";
 
 import { ENTRY_STYLE_NAMES, isEntryStyle } from "./frontmatter/shared.ts";
 import { ENTRY_STYLES } from "./frontmatter/types.ts";
+import { readHouseRules } from "./house-rules.ts";
 import { describeError } from "./output.ts";
 
 /**
@@ -36,6 +38,13 @@ export type OkfConfig = {
    * @example `["docs/decisions/README.md", "docs/drafts"]`
    */
   exclude: readonly string[] | undefined;
+
+  /**
+   * The house rules `okf check` runs, at their levels; none when unset.
+   *
+   * @example `{ "tags-sorted": "error" }`
+   */
+  rules: HouseRules;
 
   /**
    * How a new `verified` entry is laid out.
@@ -203,6 +212,7 @@ export function readOkfConfig(
     bundles: undefined,
     drafts: undefined,
     exclude: undefined,
+    rules: {},
     style: undefined,
     verifiedBy: undefined,
   };
@@ -232,7 +242,7 @@ export function readOkfConfig(
     return { isOk: false, reason: "`okf` in package.json must be an object." };
   }
 
-  const { bundles, drafts, exclude, style, verifiedBy } = block;
+  const { bundles, drafts, exclude, rules, style, verifiedBy } = block;
 
   if (bundles !== undefined && !isStringList(bundles)) {
     return {
@@ -279,8 +289,21 @@ export function readOkfConfig(
     };
   }
 
+  const houseRules = readHouseRules(rules);
+
+  if (!houseRules.isOk) {
+    return houseRules;
+  }
+
   return {
-    config: { bundles, drafts, exclude, style, verifiedBy },
+    config: {
+      bundles,
+      drafts,
+      exclude,
+      rules: houseRules.rules,
+      style,
+      verifiedBy,
+    },
     isOk: true,
   };
 }

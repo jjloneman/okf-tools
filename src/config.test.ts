@@ -6,6 +6,7 @@ const EMPTY = {
   bundles: undefined,
   drafts: undefined,
   exclude: undefined,
+  rules: {},
   style: undefined,
   verifiedBy: undefined,
 };
@@ -24,12 +25,13 @@ describe("readOkfConfig", () => {
     expect(readOkfConfig(text)).toStrictEqual({ config: EMPTY, isOk: true });
   });
 
-  test("reads the bundles, the drafts policy, the exclusions, the style, and the actor", () => {
+  test("reads the bundles, the drafts policy, the exclusions, the house rules, the style, and the actor", () => {
     // Given - a full okf block
     const okf = {
       bundles: ["docs/decisions"],
       drafts: "block",
       exclude: ["docs/decisions/README.md"],
+      rules: { "tags-sorted": "error" },
       style: "block",
       verifiedBy: "human:jjloneman",
     };
@@ -38,6 +40,17 @@ describe("readOkfConfig", () => {
     expect(readOkfConfig(JSON.stringify({ okf }))).toStrictEqual({
       config: okf,
       isOk: true,
+    });
+  });
+
+  test("refuses house rules it can't read", () => {
+    // Given - a rule name nothing defines
+    const text = JSON.stringify({ okf: { rules: { "tag-case": "warn" } } });
+
+    // When/Then - refused, naming the rule
+    expect(readOkfConfig(text)).toStrictEqual({
+      isOk: false,
+      reason: expect.stringContaining('no house rule "tag-case"') as string,
     });
   });
 
@@ -51,6 +64,7 @@ describe("readOkfConfig", () => {
         bundles: undefined,
         drafts: undefined,
         exclude: ["!(docs)/**"],
+        rules: {},
         style: undefined,
         verifiedBy: undefined,
       },
@@ -125,6 +139,7 @@ describe("resolveSettings", () => {
     bundles: ["docs/decisions"],
     drafts: undefined,
     exclude: undefined,
+    rules: {},
     style: undefined,
     verifiedBy: "human:jjloneman",
   };
@@ -219,6 +234,7 @@ describe("resolveSettings", () => {
         bundles: ["docs"],
         drafts: undefined,
         exclude: undefined,
+        rules: {},
         style: undefined,
         verifiedBy: undefined,
       },
@@ -232,6 +248,7 @@ describe("resolveSettings", () => {
         bundles: ["docs"],
         drafts: undefined,
         exclude: undefined,
+        rules: {},
         style: undefined,
         verifiedBy: undefined,
       },
@@ -257,6 +274,7 @@ describe("resolveSettings", () => {
         bundles: ["docs"],
         drafts: undefined,
         exclude: undefined,
+        rules: {},
         style: undefined,
         verifiedBy: undefined,
       },
