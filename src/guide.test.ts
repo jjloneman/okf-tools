@@ -6,6 +6,7 @@ import { run } from "./cli.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { GUIDE, RECORD_RULES, RECORDS_INTRO } from "./guide.ts";
 import { formatVerifyUsage, GUIDE_USAGE, OKF_USAGE } from "./options.ts";
+import { TAG_RULES } from "./tag-rules.ts";
 
 /** A directory that doesn't exist, since the guide reads nothing. */
 const NOWHERE = "/nonexistent/okf-guide";
@@ -84,6 +85,15 @@ describe("GUIDE", () => {
     expect(AGENT_BLOCK).toContain(`${RECORDS_INTRO}\n`);
     expect(AGENT_BLOCK).toContain(`${RECORD_RULES}\n`);
     expect(AGENT_BLOCK).toContain("Run `okf guide`");
+  });
+
+  test("holds the tag rules the record skill quotes", () => {
+    // Given - the guide's record rules
+    const rules = RECORD_RULES;
+
+    // When/Then - they end with the shared tag rules
+    expect(rules.endsWith(TAG_RULES)).toBe(true);
+    expect(GUIDE).toContain(TAG_RULES);
   });
 
   test("prints the rules the README's Agents section shows", () => {

@@ -17,8 +17,9 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `src/` — the package, one concern per file, each with its `*.test.ts` beside it.
   - `okf-bin.ts` and `bin.ts` — the `okf` and `okf-verify` entries, each calling `start` in `start.ts`, which reads the process, calls `run`, and sets the exit code.
   - `cli.ts` — `run`: reads `okf`'s command (`okf-verify` goes straight to `verify`), parses that command's arguments, resolves the repo, config, and bundles, then dispatches to `okf check`, `okf deprecate`, `okf diff`, `okf guide`, `okf index`, `okf init`, `okf migrate`, `okf new`, `okf status`, `okf tags`, `okf touch`, or a verify mode, or prints `okf --version`. `okf check`, `okf deprecate`, `okf index`, `okf migrate`, `okf new`, `okf tags`, and `okf touch` need no signer, so they resolve only the repo, config, and bundles, as a `BundleContext`. It never throws.
-  - `guide.ts` — `okf guide`, and the text it prints: the record rules, `RECORD_RULES` and `RECORDS_INTRO`, which the agent block is built from, each command with when an agent may run it, and each skill from `skills.ts`. A new command adds its line there; a test fails until it does.
+  - `guide.ts` — `okf guide`, and the text it prints: the record rules, `RECORD_RULES` and `RECORDS_INTRO`, which the agent block is built from, ending with `tag-rules.ts`'s `TAG_RULES`, each command with when an agent may run it, and each skill from `skills.ts`. A new command adds its line there; a test fails until it does.
   - `init.ts` — `okf init`: plans the `okf` block of `package.json`, the agent block in each instruction file, and each skill's `.claude/skills/<name>/SKILL.md`, then writes them all, or with `--check` only reports. It never throws.
+  - `tag-rules.ts` — `TAG_RULES`, how an agent chooses and writes a record's tags, quoted word for word by the record rules and the okf-record skill, whose tag audit it guides.
   - `skills.ts` — `SKILLS`, the text of the okf-architecture, okf-record, and okf-review Agent Skills `okf init` installs, and `judgeSkill`, which says whether an installed copy is current, stale, missing, or someone else's, by its marker line. A skill never writes `verified` or a timestamp, and the record skill points at upstream's okf-generate for content rules (see [Which skills okf-tools ships](docs/decisions/skills.md)).
   - `package-json.ts` — `writeOkfMember`: replaces only the `okf` member of a `package.json` by position, keeping every other byte.
   - `agent-block.ts` — the agent block's text, `AGENT_BLOCK`, built from `guide.ts`'s rules, which the README's Agents section quotes word for word (a test checks it), and the pure logic that finds the markers and rewrites only what's between them; `findMarkedBlock` finds any pair of marker lines, for the tag index too.
@@ -218,6 +219,7 @@ Why the package works the way it does is recorded in [docs/decisions/](docs/deci
   - no `verified` means it is an unreviewed draft;
   - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again;
   - set a signed-off record you edit back to `status: draft`, even for a link-only edit, keeping its `verified` entry; `okf-verify` sets it to `stable` again on sign-off.
+  - a change to `tags` alone is the exception: keep `generated` and `status` as they are, so a signed-off record stays signed off (see [How okf new and okf touch stamp generated](docs/decisions/new-and-touch.md)).
 
 ## 🔖 References
 

@@ -11,7 +11,7 @@ tags:
   - upstream
   - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T23:28:20Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:39:09Z }
 ---
 
 # Which skills okf-tools ships, and how okf init installs them
@@ -23,7 +23,8 @@ A CLI can't write a record's prose; an agent can, but it needs to be told how, a
 As of 2026-11-25, from `src/skills.ts`, `src/init.ts`, `src/guide.ts`, and the README:
 
 - **Three skills ship, one constant each in `src/skills.ts`:**
-  - **`okf-record`** is the trust workflow around a record: start it with `okf new`, re-stamp it with `okf touch --draft` after every edit, keep it `status: draft`, write `tags` as a block list, and leave sign-off to `okf verify`.
+  - **`okf-record`** is the trust workflow around a record: start it with `okf new`, re-stamp it with `okf touch --draft` after every edit apart from a change to `tags` alone, keep it `status: draft`, write `tags` by the shared rules in `src/tag-rules.ts`, which `okf guide` prints too, and leave sign-off to `okf verify`.
+    - Its tag audit finds records with too few or too many tags, proposes every new list in one table, and writes only the lists the person approves, without re-stamping them (see [How okf new and okf touch stamp generated](new-and-touch.md)).
   - **`okf-review`** reads `okf status --format json` and `okf diff`, and summarizes for the person what changed in meaning in each record since their last sign-off, and what to check; it writes nothing.
   - **`okf-architecture`** creates, updates, or audits a `type: Architecture` record written from the code it lists in `sources`, from a fixed outline, with every claim footnoted to a source. Each version of the record names the commit it was written from, and an update rewrites only the sections whose cited sources changed since that commit; an audit reports one verdict per claim and edits nothing.
 - **The record skill narrows to what okf-tools owns, and points at upstream's `okf-generate` skill for what goes in a record.** okf-generate, which OKF v0.3 ships, already covers sources, footnotes, types, links, and index and log files, so restating it would drift.
@@ -50,6 +51,7 @@ As of 2026-11-25, from `src/skills.ts`, `src/init.ts`, `src/guide.ts`, and the R
 
 - [Issue #51](https://github.com/jjloneman/okf-tools/issues/51), and its comment of 2026-11-25 comparing it with OKF v0.3
 - [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which added the block-list tags to its plan
+- [Issue #66](https://github.com/jjloneman/okf-tools/issues/66), which added the tag rules and the tag audit
 - [Upstream's okf-generate skill](https://github.com/open-knowledge-format/open-knowledge-format/tree/527e81aff55992be21507e97004286789126f88c/skills/okf-generate)
 - [What `okf init` writes, and how it keeps the agent block current](init.md)
 - [What `okf guide` prints, and where the agent rules are written](guide.md)

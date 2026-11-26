@@ -16,22 +16,23 @@ import type { Output } from "./output.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { GUIDE_USAGE, parseGuideArgs } from "./options.ts";
 import { SKILLS } from "./skills.ts";
+import { TAG_RULES } from "./tag-rules.ts";
 
 /** What the records are, the paragraph that opens the block and the guide. */
 export const RECORDS_INTRO =
   "The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) records. okf-tools follows OKF v0.3; `okf migrate` moves a v0.1 or v0.2 bundle to it.";
 
 /** How an agent writes, edits, and verifies records, as Markdown bullets. */
-export const RECORD_RULES = `- **Start a new record with \`okf new <record> --type <type> --by <producer>/<version>\`**, such as \`--by claude-code/2.1.316\`, which writes it as \`status: draft\` with \`generated\` stamped from the clock, and lists it in its index; then write its body.
-- **When you edit a record, re-stamp it with \`okf touch <record>... --by <producer>/<version> --draft\`**, which sets \`generated\` from the clock and a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
+export const RECORD_RULES: string = [
+  `- **Start a new record with \`okf new <record> --type <type> --by <producer>/<version>\`**, such as \`--by claude-code/2.1.316\`, which writes it as \`status: draft\` with \`generated\` stamped from the clock, and lists it in its index; then write its body.
+- **When you edit a record, other than its \`tags\` alone, re-stamp it with \`okf touch <record>... --by <producer>/<version> --draft\`**, which sets \`generated\` from the clock and a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
   - Never type \`generated.at\` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a \`verified\` entry yourself.** Signing a record off is the person's call.
 - **Verify only when the person asks you to**, with \`okf verify --yes <record>...\`, naming the files they approved.
   - Pass \`--changed\` instead only when they asked for every changed record.
-  - Never verify a record as a side effect of drafting or editing it.
-- **Write \`tags\` as a block list**, one \`- tag\` per line, sorted, in kebab-case.
-  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.
-  - List the tags the bundles already use with \`okf tags\`, which reads every layout, rather than \`grep\`.`;
+  - Never verify a record as a side effect of drafting or editing it.`,
+  TAG_RULES,
+].join("\n");
 
 /** Each command, and when an agent may run it, as Markdown bullets. */
 const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, and writes nothing. Run it whenever you need to know which records are draft, changed, or stale; \`--format json\` prints it for a program.
@@ -42,10 +43,10 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
 - **\`okf verify\`** without \`--yes\` asks in a terminal which records to sign off. It's for the person, not for you.
 - **\`okf check\`** reports problems in the bundles against OKF's spec rules, and whether each record's sign-off still holds, and writes nothing. Run it whenever you like, and after editing records, before you hand back; fix each error it reports in the files you touched, such as a body changed without a re-stamped \`generated\`. \`--changed\` reports only on what the branch changed, and \`--format json\` prints it for a program.
 - **\`okf tags\`** lists every tag in the bundles with its record count, and writes nothing. Run it whenever you choose a record's tags; \`--format json\` prints it for a program.
-- **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, or retitle a record, in the same change.
+- **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, retitle, or retag a record, in the same change.
   - \`okf index --check\` writes nothing, so run it whenever you like.
 - **\`okf new <record>\`** writes a draft record's frontmatter, stamped from the clock, and its index line. Run it whenever you start a record, before writing its body.
-- **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, in the same change.
+- **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, other than to its \`tags\` alone, in the same change.
 - **\`okf deprecate <record>... --by <producer>/<version>\`** marks records \`status: deprecated\`, kept for links and history, and re-stamps \`generated\` as \`okf touch\` does; \`--superseded-by <record>\` names the record that replaces them. Run it when a change retires or replaces a record, in place of deleting it.
 - **\`okf migrate\`** prints the changes that move each bundle from OKF v0.1 or v0.2 to v0.3, and writes nothing; \`--write\` applies them. Run it bare whenever you like, but pass \`--write\` only when the person asks you to migrate.
   - \`okf migrate --check\` writes nothing, and fails while a bundle still needs migrating.

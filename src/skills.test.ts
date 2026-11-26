@@ -4,6 +4,7 @@ import { parse } from "yaml";
 import type { Skill } from "./skills.ts";
 
 import { judgeSkill, SKILL_MARKER_PREFIX, SKILLS } from "./skills.ts";
+import { TAG_RULES } from "./tag-rules.ts";
 
 /** The record skill, which the judging tests use. */
 const RECORD_SKILL = findRecordSkill();
@@ -67,6 +68,30 @@ describe("SKILLS", () => {
       expect(text).toMatch(/never add,? (?:or )?change/iu);
     }
   );
+});
+
+describe("okf-record", () => {
+  test("holds the tag rules okf guide prints", () => {
+    // Given - the record skill's text
+    const { text } = RECORD_SKILL;
+
+    // When/Then - it quotes the shared tag rules word for word
+    expect(text).toContain(TAG_RULES);
+  });
+
+  test("audits tags by proposing first, and never re-stamps a retag", () => {
+    // Given - the record skill's audit section
+    const [, audit = ""] = RECORD_SKILL.text.split("## Audit a bundle's tags");
+
+    // When - reading what it tells an agent to do
+    const [section = ""] = audit.split("\n## ");
+
+    // Then - it proposes before writing, and keeps generated for tags alone
+    expect(section).toContain("Write nothing yet");
+    expect(section).toContain("Write only the lists the person approves");
+    expect(section).toContain("Don't run `okf touch`");
+    expect(section).toContain("tags-count");
+  });
 });
 
 describe("judgeSkill", () => {

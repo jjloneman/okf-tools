@@ -29,6 +29,7 @@ It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-f
 - [🧭 Agents](#-agents)
   - [🧩 Skills](#-skills)
 - [🏷️ Writing tags](#️-writing-tags)
+  - [🎯 Choosing tags](#-choosing-tags)
   - [🔢 Listing tags](#-listing-tags)
 - [📚 Library](#-library)
 - [🛠️ Development](#️-development)
@@ -621,15 +622,28 @@ Much OKF authoring now happens in a chat with a coding agent, and the non-intera
 The Markdown files in the bundles that `okf.bundles` lists in `package.json` are [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) records. okf-tools follows OKF v0.3; `okf migrate` moves a v0.1 or v0.2 bundle to it.
 
 - **Start a new record with `okf new <record> --type <type> --by <producer>/<version>`**, such as `--by claude-code/2.1.316`, which writes it as `status: draft` with `generated` stamped from the clock, and lists it in its index; then write its body.
-- **When you edit a record, re-stamp it with `okf touch <record>... --by <producer>/<version> --draft`**, which sets `generated` from the clock and a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
+- **When you edit a record, other than its `tags` alone, re-stamp it with `okf touch <record>... --by <producer>/<version> --draft`**, which sets `generated` from the clock and a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
   - Never type `generated.at` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a `verified` entry yourself.** Signing a record off is the person's call.
 - **Verify only when the person asks you to**, with `okf verify --yes <record>...`, naming the files they approved.
   - Pass `--changed` instead only when they asked for every changed record.
   - Never verify a record as a side effect of drafting or editing it.
-- **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case.
-  - Give each record 5 to 10 specific tags, reusing the bundle's existing tags where one fits.
-  - List the tags the bundles already use with `okf tags`, which reads every layout, rather than `grep`.
+- **Give each record 5 to 10 specific tags**, so a search finds it by any term a reader would type:
+  - its topic, and the area of the repo it covers;
+  - the tools and products it names;
+  - the task or problem it's about;
+  - the words someone searching for it would type, common synonyms included.
+- **Reuse the bundle's tags first.** List them with `okf tags`, which reads every layout, rather than `grep`, and add a new tag only when none fits.
+  - Prefer specific tags to broad ones: a tag most of the bundle's records carry helps no search.
+  - Never add a near-duplicate of a tag the bundle has, such as its plural or another spelling.
+- **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case, even where upstream's examples show a one-line `[a, b]` list, which okf-tools reads as the same tags.
+- **A change to `tags` alone keeps `generated` and `status`**, so a signed-off record stays signed off: don't run `okf touch` for it.
+  - Any other change in the same edit, to the body or another field, `title` and `description` included, is re-stamped as usual.
+  - Run `okf index` after it, which syncs each tag index.
+- **Where `okf.rules` in `package.json` turns on a tag rule, it wins over these:**
+  - `tags-count`'s `min` and `max` replace 5 to 10;
+  - `tags-layout` with `flow` means a one-line `[a, b]` list;
+  - `tags-vocabulary` allows only the tags it lists, so ask the person before adding one to it.
 
 Run `okf guide` through the repo's package manager, such as `pnpm exec okf guide`, for every okf-tools command and when you may run each, printed from the installed version.
 ```
@@ -642,11 +656,11 @@ The agent signs as the person (the configured `okf.verifiedBy`), since the appro
 
 `okf init` also installs three [Agent Skills](https://agentskills.io) in `.claude/skills`, where Claude Code finds them, from the installed version:
 
-| Skill              | Use it to                                                                                                       |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `okf-record`       | Draft or edit a record: start it with `okf new`, re-stamp it with `okf touch --draft`, and leave it a draft.    |
-| `okf-review`       | Summarize what changed in each record since its last sign-off, from `okf status` and `okf diff`, for the owner. |
-| `okf-architecture` | Create, update, or audit a `type: Architecture` record, written from the code it lists in `sources`.            |
+| Skill              | Use it to                                                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `okf-record`       | Draft or edit a record: start it with `okf new`, re-stamp it with `okf touch --draft`, and leave it a draft; or audit a bundle's tags. |
+| `okf-review`       | Summarize what changed in each record since its last sign-off, from `okf status` and `okf diff`, for the owner.                        |
+| `okf-architecture` | Create, update, or audit a `type: Architecture` record, written from the code it lists in `sources`.                                   |
 
 - **okf-tools never writes `verified`, and neither does any skill.** The person signs a record off with `okf verify`, or an agent runs `okf verify --yes` when they ask it to, naming the records.
 - **No skill types a timestamp:** `okf new` and `okf touch` stamp `generated` from the clock.
@@ -672,6 +686,21 @@ tags:
 - **Any valid layout still works**: okf-tools reads flow and block lists alike.
 
 The full reasoning is in [How a record's tags are laid out](docs/decisions/tags-layout.md).
+
+### 🎯 Choosing tags
+
+- **Give each record 5 to 10 specific tags**: its topic and area, the tools it names, the problem it's about, and the words a searcher would type, synonyms included.
+  - Reuse a tag `okf tags` lists before adding one, and prefer specific tags: one on most records helps no search.
+  - The agent block, `okf guide`, and the `okf-record` skill all print the same tag rules.
+- **A change to `tags` alone keeps `generated` and `status`**, so retagging a signed-off record leaves it signed off.
+  - Tags help a reader find a record; they don't change what it says.
+  - Any other change in the same edit, `title` and `description` included, is re-stamped with `okf touch` as usual.
+- **`okf-record` audits a bundle's tags** when asked:
+  - it finds records outside 5 to 10 tags, from the [`tags-count`](#-house-rules) house rule when it's on;
+  - it proposes each fuller list in one table, and writes only the ones the person approves;
+  - it never signs a record off.
+
+The re-stamp rule's reasoning is in [How okf new and okf touch stamp generated](docs/decisions/new-and-touch.md).
 
 ### 🔢 Listing tags
 
