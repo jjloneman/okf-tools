@@ -11,9 +11,22 @@ tags:
   - okf-verify
   - timestamps
   - verification
+sources:
+  - id: sign-off-diff
+    resource: ../../src/sign-off-diff.ts
+    title: src/sign-off-diff.ts, what changed since a sign-off
+  - id: git
+    resource: ../../src/git.ts
+    title: src/git.ts, every git call
+  - id: interactive
+    resource: ../../src/interactive.ts
+    title: src/interactive.ts, the interactive verify mode
+  - id: diff
+    resource: ../../src/diff.ts
+    title: src/diff.ts, the okf diff command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:12:12Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What a re-verification shows as changed
@@ -22,7 +35,7 @@ A record that was signed off and then regenerated needs a fresh sign-off, but th
 
 ## Decision
 
-As of 2026-11-25, from `readSignOffDiff` in `src/sign-off-diff.ts`, `listFileCommits`, `readTextAt` and `diffSince` in `src/git.ts`, `src/interactive.ts`, and `src/diff.ts`:
+As of 2026-11-25, from `readSignOffDiff` in `src/sign-off-diff.ts`[^sign-off-diff], `listFileCommits`, `readTextAt` and `diffSince` in `src/git.ts`[^git], `src/interactive.ts`[^interactive], and `src/diff.ts`[^diff]:
 
 - **The diff starts at the commit that set the signer's current sign-off.** Of the record's commits under its current name, it is the newest that:
   - holds the same `verified.at` for the signer as the disk, compared to the second;
@@ -52,3 +65,11 @@ As of 2026-11-25, from `readSignOffDiff` in `src/sign-off-diff.ts`, `listFileCom
 - [Issue #56](https://github.com/jjloneman/okf-tools/issues/56)
 - [How okf-tools lays out its commands](command-layout.md)
 - [What a record counts as changed against](base-ref.md)
+
+[^sign-off-diff]: `src/sign-off-diff.ts`, what changed since a sign-off.
+
+[^git]: `src/git.ts`, every git call.
+
+[^interactive]: `src/interactive.ts`, the interactive verify mode.
+
+[^diff]: `src/diff.ts`, the `okf diff` command.

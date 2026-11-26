@@ -20,9 +20,15 @@ sources:
   - id: okf-spec-v02
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification, v0.2
+  - id: migrate-plan
+    resource: ../../src/migrate-plan.ts
+    title: src/migrate-plan.ts, the plan for one bundle's migration
+  - id: migrate
+    resource: ../../src/migrate.ts
+    title: src/migrate.ts, the okf migrate command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T21:38:47Z }
-verified: { by: human:jjloneman, at: 2026-11-26T21:42:38Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf migrate moves a bundle to OKF v0.3
@@ -31,7 +37,7 @@ OKF v0.3 reads a path without a leading `/` from the folder of the file that hol
 
 ## Decision
 
-As of 2026-11-25, from `src/migrate-plan.ts`, `src/migrate.ts`, `src/options.ts`, and issue #59:
+As of 2026-11-25, from `src/migrate-plan.ts`[^migrate-plan], `src/migrate.ts`[^migrate], `src/options.ts`, and issue #59:
 
 - **A bare path that names a file only from the bundle root is rewritten**, in the same step as the version bump, to the shortest relative path that names the same file from its own folder.
   - It covers the path fields v0.3 lists[^okf-spec] and every Markdown link and link reference in a record's body, and in every other Markdown file in a subfolder that git doesn't ignore, such as a folder's `index.md` or `log.md`; a URL, a `/` path, a bare fragment, and a path opening with `./` or `../` read the same under both rules and are never touched, nor is a footnote or anything in fenced or inline code. A path's own `#fragment` or `?query` is kept.
@@ -70,3 +76,7 @@ As of 2026-11-25, from `src/migrate-plan.ts`, `src/migrate.ts`, `src/options.ts`
 [^okf-spec]: OKF v0.3 §5.2, a trivial edit such as link repair doesn't change `generated.at`; §6 and §6.2, one resolution rule for links and the path fields; and §12.1, the root fallback for bundles that declare 0.2 or earlier.
 
 [^okf-spec-v02]: OKF v0.2 §6.1, a link is a `/` path or a standard relative one, and §6.3, whose examples point into `references/` from the root.
+
+[^migrate-plan]: `src/migrate-plan.ts`, the plan for one bundle's migration.
+
+[^migrate]: `src/migrate.ts`, the `okf migrate` command.

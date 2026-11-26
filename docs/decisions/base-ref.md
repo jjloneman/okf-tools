@@ -11,9 +11,13 @@ tags:
   - okf-verify
   - paths
   - selection
+sources:
+  - id: git
+    resource: ../../src/git.ts
+    title: src/git.ts, every git call
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What a record counts as changed against
@@ -22,7 +26,7 @@ The interactive checklist opens on the records changed on the branch, and `--yes
 
 ## Decision
 
-As of 2026-11-11, from `readBaseRef` and `listChangedPaths` in `src/git.ts`:
+As of 2026-11-11, from `readBaseRef` and `listChangedPaths` in `src/git.ts`[^git]:
 
 - **The base ref, first match wins:**
   1. `origin/HEAD`, the remote's default branch;
@@ -45,3 +49,5 @@ As of 2026-11-11, from `readBaseRef` and `listChangedPaths` in `src/git.ts`:
 ## Consequences
 
 - A repo whose default branch isn't `main` works once `origin/HEAD` is set (`git remote set-head origin --auto`).
+
+[^git]: `src/git.ts`, every git call.

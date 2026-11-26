@@ -30,6 +30,7 @@ description: okf-tools' design decisions, one record per decision, each saying w
 - [Which files in a bundle are records](bundle-contents.md) - Every `.md` file at any depth under a configured bundle is a record, other than `index.md` and `log.md` at every level and the paths `okf.exclude` matches; a bundle inside another counts each record once, and a symlink to a folder is never followed.
 - [Which house rules okf check runs, and how a repo turns them on](house-rules.md) - `okf check` runs okf-tools' own `H` rules on conventions the spec leaves open, tags, key order, index lines, uncited sources and wikilinks, each off until `okf.rules` names it at `warn` or `error`, as ESLint takes rules; a convention upstream's validate.py checks, such as a footnote with no source or a broken link, is a spec rule instead.
 - [Which OKF spec okf-tools follows](spec-pin.md) - okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.3 text at `527e81a`; every spec link points to the pin, and `okf migrate` moves a v0.1 or v0.2 bundle to it.
+- [Which repo files a decision record cites in sources](record-sources.md) - Each decision record cites in sources the code and config files it was written from, relative to its folder, so okf check's T007 warns when one changes; files every release or most features touch, package.json, src/options.ts, src/cli.ts, README.md and AGENTS.md, are left out.
 - [Which skills okf-tools ships, and how okf init installs them](skills.md) - `okf init` installs three Agent Skills in `.claude/skills`, okf-record, okf-review and okf-architecture, written whole from the installed version; they cover the trust workflow and point at upstream's okf-generate for content, never write `verified`, and stamp only through the CLI.
 - [Who owns the spec rules `okf check` runs](spec-rules.md) - okf-tools builds the spec rules into `okf check` itself, on the frontmatter reader `okf verify` uses; a trial of okfit, okf-lint and okf-kit on a fabricated bundle rejected adopting any of them, and adopting one is revisited if v0.3 grows the spec rules well past what okf-tools reads.
 - [Who verifies a record](who-verifies.md) - Verification is the person's call, but not only a terminal prompt may record it; an agent verifies with `--yes` when the person asks, naming the files and signing as the person.
@@ -53,6 +54,9 @@ tags:
   - selection
   - verification
 sources:
+  - id: guide
+    resource: ../../src/guide.ts
+    title: src/guide.ts, the okf guide text and record rules
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
@@ -66,7 +70,7 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 - **`tags`** — every subject the decision covers, usually 5 to 10, from the vocabulary below, as a block list right after `description`, one `- tag` per line (see [How a record's tags are laid out](tags-layout.md)).
   - Lowercase kebab-case, sorted alphabetically.
   - Add a tag to the vocabulary before using it.
-- **`sources`** — the external material a decision rests on, such as a spec or a tool's docs, when there is any.
+- **`sources`** — what a decision rests on: each repo file it was written from, relative to the record's folder (`../../src/git.ts`), so `okf check` warns when one changes, leaving out the files AGENTS.md names, such as `package.json`; and any outside material, such as a spec or a tool's docs.
   - The body cites each one with a footnote keyed to its `id`.
 - **`status`** — the decision's lifecycle:
   - `draft` — proposed, not yet settled.

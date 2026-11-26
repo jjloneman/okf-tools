@@ -10,9 +10,19 @@ tags:
   - help
   - okf-verify
   - output
+sources:
+  - id: okf-bin
+    resource: ../../src/okf-bin.ts
+    title: src/okf-bin.ts, the okf entry
+  - id: bin
+    resource: ../../src/bin.ts
+    title: src/bin.ts, the okf-verify entry
+  - id: output
+    resource: ../../src/output.ts
+    title: src/output.ts, the prefixed output lines
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:12:05Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf-tools lays out its commands
@@ -21,7 +31,7 @@ The package is named okf-tools, but shipped one binary, `okf-verify`. Every plan
 
 ## Decision
 
-As of 2026-11-25, from `package.json`, `src/okf-bin.ts`, `src/bin.ts`, `src/cli.ts`, `src/options.ts`, and `src/output.ts`:
+As of 2026-11-25, from `package.json`, `src/okf-bin.ts`[^okf-bin], `src/bin.ts`[^bin], `src/cli.ts`, `src/options.ts`, and `src/output.ts`[^output]:
 
 - **One binary, `okf`, takes the command as its first argument.** `verify` is the first command; each new tool is another.
   - **Rejected:** a binary per tool (`okf-verify`, `okf-lint`, …), which has no command that lists them and grows `.bin` with every tool.
@@ -44,3 +54,9 @@ As of 2026-11-25, from `package.json`, `src/okf-bin.ts`, `src/bin.ts`, `src/cli.
 - [Issue #41](https://github.com/jjloneman/okf-tools/issues/41)
 - [Who verifies a record](who-verifies.md)
 - [What `--yes` verifies, and how it exits](yes-selection.md)
+
+[^okf-bin]: `src/okf-bin.ts`, the `okf` entry.
+
+[^bin]: `src/bin.ts`, the `okf-verify` entry.
+
+[^output]: `src/output.ts`, the prefixed output lines.

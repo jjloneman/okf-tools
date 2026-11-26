@@ -20,9 +20,21 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
+  - id: house-rules
+    resource: ../../src/house-rules.ts
+    title: src/house-rules.ts, the opt-in house rules
+  - id: spec-rules
+    resource: ../../src/spec-rules.ts
+    title: src/spec-rules.ts, the rules the spec states
+  - id: index-sync
+    resource: ../../src/index-sync.ts
+    title: src/index-sync.ts, the rewrite of one index.md
+  - id: config
+    resource: ../../src/config.ts
+    title: src/config.ts, which reads the okf block of package.json
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:23:21Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # Which house rules okf check runs, and how a repo turns them on
@@ -31,7 +43,7 @@ Repos enforce conventions the spec leaves open by hand: tags from one vocabulary
 
 ## Decision
 
-As of 2026-11-26, from `src/house-rules.ts`, `src/spec-rules.ts`, `src/index-sync.ts`, and `src/config.ts`:
+As of 2026-11-26, from `src/house-rules.ts`[^house-rules], `src/spec-rules.ts`[^spec-rules], `src/index-sync.ts`[^index-sync], and `src/config.ts`[^config]:
 
 - **Every house rule is off until `okf.rules` names it**, so a bundle the spec calls conformant never fails on a convention its repo didn't choose.
 - **A rule takes a level, `off`, `warn` or `error`, or `[level, { options }]`**, as ESLint takes rules, in the `okf` block of `package.json`.
@@ -85,3 +97,11 @@ As of 2026-11-26, from `src/house-rules.ts`, `src/spec-rules.ts`, `src/index-syn
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 
 [^validate-py]: The checker in the spec repo's `okf-generate` skill.
+
+[^house-rules]: `src/house-rules.ts`, the opt-in house rules.
+
+[^spec-rules]: `src/spec-rules.ts`, the rules the spec states.
+
+[^index-sync]: `src/index-sync.ts`, the rewrite of one `index.md`.
+
+[^config]: `src/config.ts`, which reads the `okf` block of `package.json`.

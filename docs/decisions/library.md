@@ -10,9 +10,25 @@ tags:
   - timestamps
   - typescript
   - validation
+sources:
+  - id: frontmatter-edit
+    resource: ../../src/frontmatter/edit.ts
+    title: src/frontmatter/edit.ts, verifyRecord and findEditProblem
+  - id: frontmatter-read
+    resource: ../../src/frontmatter/read.ts
+    title: src/frontmatter/read.ts, the record reads and findFrontmatterProblem
+  - id: frontmatter-shared
+    resource: ../../src/frontmatter/shared.ts
+    title: src/frontmatter/shared.ts, the timestamp checks
+  - id: frontmatter-types
+    resource: ../../src/frontmatter/types.ts
+    title: src/frontmatter/types.ts, the public types and constants
+  - id: index
+    resource: ../../src/index.ts
+    title: src/index.ts, the library's exports
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:07:31Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:22:42Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What the library accepts, and how it refuses
@@ -21,7 +37,7 @@ The package exports the frontmatter functions `okf-verify` is built on. Their ty
 
 ## Decision
 
-As of 2026-11-25, from `src/frontmatter/` and `src/index.ts`:
+As of 2026-11-25, from `src/frontmatter/edit.ts`[^frontmatter-edit], `read.ts`[^frontmatter-read], `shared.ts`[^frontmatter-shared] and `types.ts`[^frontmatter-types], and `src/index.ts`[^index]:
 
 - **`verifyRecord` refuses an `at` it can't write as a sign-off every reader dates alike.** It accepts RFC 3339's profile of ISO 8601: a date, `T`, a time to the minute, second, or fraction, and a zone, `Z` or `±HH:MM`. Hours, minutes, and offsets are range-checked, and luxon's `DateTime.fromISO` must read it, so a day the month lacks is refused too.
   - **Rejected:** accepting whatever luxon reads. It reads a time on its own as today's, so the sign-off would date differently every day; it reads `+99:99` and `24:00`; and a decimal comma (`13:30:00,5Z`) ends the value inside `{ by, at }`.
@@ -45,3 +61,13 @@ The types promised what the functions couldn't keep, and the fix had to be addit
 
 - [#36](https://github.com/jjloneman/okf-tools/issues/36) — validate the timestamp and export the frontmatter checks.
 - [#25](https://github.com/jjloneman/okf-tools/issues/25) — the code audit that found it.
+
+[^frontmatter-edit]: `src/frontmatter/edit.ts`, `verifyRecord` and `findEditProblem`.
+
+[^frontmatter-read]: `src/frontmatter/read.ts`, the record reads and `findFrontmatterProblem`.
+
+[^frontmatter-shared]: `src/frontmatter/shared.ts`, the timestamp checks.
+
+[^frontmatter-types]: `src/frontmatter/types.ts`, the public types and constants.
+
+[^index]: `src/index.ts`, the library's exports.

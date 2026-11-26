@@ -11,9 +11,22 @@ tags:
   - safety
   - selection
   - verification
+sources:
+  - id: non-interactive
+    resource: ../../src/non-interactive.ts
+    title: src/non-interactive.ts, the --yes verify mode
+  - id: exit-codes
+    resource: ../../src/exit-codes.ts
+    title: src/exit-codes.ts, the exit codes
+  - id: working-directory
+    resource: ../../src/working-directory.ts
+    title: src/working-directory.ts, which resolves the working directory
+  - id: repo
+    resource: ../../src/repo.ts
+    title: src/repo.ts, the file-system work on records
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:48:52Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What `--yes` verifies, and how it exits
@@ -22,7 +35,7 @@ The non-interactive mode has no prompt to confirm a choice, so the command line 
 
 ## Decision
 
-As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit-codes.ts`, and as of 2026-11-25, `src/working-directory.ts` and `src/repo.ts`:
+As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`[^non-interactive], and `src/exit-codes.ts`[^exit-codes], and as of 2026-11-25, `src/working-directory.ts`[^working-directory] and `src/repo.ts`[^repo]:
 
 - **`--yes` needs exactly one selection:**
   - `--changed`: every changed record in the configured bundles that still needs a sign-off, either never verified by the signer or regenerated since they verified it;
@@ -87,3 +100,11 @@ As of 2026-11-12, from `src/options.ts`, `src/non-interactive.ts`, and `src/exit
 
 - Agents should prefer named paths over `--changed` (see [Who verifies a record](who-verifies.md)).
 - Changing an exit code or a valid combination is a breaking change to the CLI, and needs a changeset that says so.
+
+[^non-interactive]: `src/non-interactive.ts`, the `--yes` verify mode.
+
+[^exit-codes]: `src/exit-codes.ts`, the exit codes.
+
+[^working-directory]: `src/working-directory.ts`, which resolves the working directory.
+
+[^repo]: `src/repo.ts`, the file-system work on records.

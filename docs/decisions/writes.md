@@ -13,9 +13,34 @@ tags:
   - safety
   - symlinks
   - yaml
+sources:
+  - id: apply
+    resource: ../../src/apply.ts
+    title: src/apply.ts, which writes and commits sign-offs
+  - id: frontmatter-edit
+    resource: ../../src/frontmatter/edit.ts
+    title: src/frontmatter/edit.ts, verifyRecord's position-based edits
+  - id: frontmatter-meaning
+    resource: ../../src/frontmatter/meaning.ts
+    title: src/frontmatter/meaning.ts, the checks that an edit keeps its meaning
+  - id: frontmatter-layout
+    resource: ../../src/frontmatter/layout.ts
+    title: src/frontmatter/layout.ts, the allowlist of editable layouts
+  - id: frontmatter-read
+    resource: ../../src/frontmatter/read.ts
+    title: src/frontmatter/read.ts, the field reads
+  - id: frontmatter-shared
+    resource: ../../src/frontmatter/shared.ts
+    title: src/frontmatter/shared.ts, the failsafe-schema parse and the positions the edits share
+  - id: git
+    resource: ../../src/git.ts
+    title: src/git.ts, every git call
+  - id: repo
+    resource: ../../src/repo.ts
+    title: src/repo.ts, the file-system work on records
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:20:10Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:53:28Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf-verify writes and commits records
@@ -24,7 +49,7 @@ Between listing records and committing them, the interactive mode waits on a per
 
 ## Decision
 
-As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `src/repo.ts`:
+As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontmatter-edit], `meaning.ts`[^frontmatter-meaning], `layout.ts`[^frontmatter-layout], `read.ts`[^frontmatter-read], `shared.ts`[^frontmatter-shared], `src/git.ts`[^git], and `src/repo.ts`[^repo]:
 
 - **Targeted edits, never a YAML round-trip:** `status: draft` becomes `stable` (any other status is left alone), and the signer's `verified` entry is added or renewed. Nothing else in the record is reformatted.
   - As of 2026-11-12, fields are read with the `yaml` package's failsafe schema, and an edit replaces only the characters it changes, at the positions the parser reports.
@@ -98,3 +123,19 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 - Running `okf-verify` with unrelated work staged is safe; that work stays staged and uncommitted.
 - Changing the write path means keeping each guard above, or updating this record in the same PR.
 - `okf check --fix` writes records under the same guards, but never edits `generated` or `verified`, and commits nothing (see [What okf check --fix fixes, and how it writes](fixes.md)).
+
+[^apply]: `src/apply.ts`, which writes and commits sign-offs.
+
+[^frontmatter-edit]: `src/frontmatter/edit.ts`, `verifyRecord`'s position-based edits.
+
+[^frontmatter-meaning]: `src/frontmatter/meaning.ts`, the checks that an edit keeps its meaning.
+
+[^frontmatter-layout]: `src/frontmatter/layout.ts`, the allowlist of editable layouts.
+
+[^frontmatter-read]: `src/frontmatter/read.ts`, the field reads.
+
+[^frontmatter-shared]: `src/frontmatter/shared.ts`, the failsafe-schema parse and the positions the edits share.
+
+[^git]: `src/git.ts`, every git call.
+
+[^repo]: `src/repo.ts`, the file-system work on records.

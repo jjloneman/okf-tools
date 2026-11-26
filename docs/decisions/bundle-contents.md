@@ -17,9 +17,15 @@ sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
+  - id: repo
+    resource: ../../src/repo.ts
+    title: src/repo.ts, the file-system work on records
+  - id: config
+    resource: ../../src/config.ts
+    title: src/config.ts, which reads the okf block of package.json
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # Which files in a bundle are records
@@ -28,7 +34,7 @@ A bundle may hold subdirectories, and reserves `index.md` and `log.md` at every 
 
 ## Decision
 
-As of 2026-11-25, from `src/repo.ts` and `src/config.ts`:
+As of 2026-11-25, from `src/repo.ts`[^repo] and `src/config.ts`[^config]:
 
 - **A record is any `.md` file at any depth under a configured bundle**, both when the bundle is listed and when a path is named or found by `--changed`.
   - **Rejected:** only the files directly inside a bundle, as before, since a bundle that groups its records in folders had none of them offered.
@@ -64,3 +70,7 @@ As of 2026-11-25, from `src/repo.ts` and `src/config.ts`:
 - Issue #42.
 
 [^okf-spec]: OKF v0.3 §3, the bundle layout, §3.1, the reserved file names, and §9, `log.md` at any level of the hierarchy.
+
+[^repo]: `src/repo.ts`, the file-system work on records.
+
+[^config]: `src/config.ts`, which reads the `okf` block of `package.json`.

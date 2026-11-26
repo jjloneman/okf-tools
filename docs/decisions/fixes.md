@@ -13,9 +13,22 @@ tags:
   - safety
   - tags
   - yaml
+sources:
+  - id: fix
+    resource: ../../src/fix.ts
+    title: src/fix.ts, which plans and writes the --fix fixes
+  - id: frontmatter-format
+    resource: ../../src/frontmatter/format.ts
+    title: src/frontmatter/format.ts, the --fix formatting edits
+  - id: check
+    resource: ../../src/check.ts
+    title: src/check.ts, the okf check command
+  - id: house-rules
+    resource: ../../src/house-rules.ts
+    title: src/house-rules.ts, the opt-in house rules
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:52:01Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What okf check --fix fixes, and how it writes
@@ -24,7 +37,7 @@ verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 
 ## Decision
 
-As of 2026-11-26, from `src/fix.ts`, `src/frontmatter/format.ts`, `src/check.ts`, and `src/house-rules.ts`:
+As of 2026-11-26, from `src/fix.ts`[^fix], `src/frontmatter/format.ts`[^frontmatter-format], `src/check.ts`[^check], and `src/house-rules.ts`[^house-rules]:
 
 - **It fixes only what `okf check` reported**, so the house rules `okf.rules` turns on and `okf.exclude` decide what it touches; then it reports what's left, with the same exit code `okf check` gives, so a refused fix counts by the findings it leaves.
   - Under `--changed`, it fixes only the files the branch changed and the indexes that list them, not a record reported only for citing a changed file.
@@ -62,3 +75,11 @@ As of 2026-11-26, from `src/fix.ts`, `src/frontmatter/format.ts`, `src/check.ts`
 - [#47](https://github.com/jjloneman/okf-tools/issues/47) — `okf check --fix` and `okf format`, with the comment that aligned it with v0.3.
 - [#65](https://github.com/jjloneman/okf-tools/issues/65) — the block `tags` fix.
 - [Which house rules okf check runs, and how a repo turns them on](house-rules.md) — the rules these fix.
+
+[^fix]: `src/fix.ts`, which plans and writes the `--fix` fixes.
+
+[^frontmatter-format]: `src/frontmatter/format.ts`, the `--fix` formatting edits.
+
+[^check]: `src/check.ts`, the `okf check` command.
+
+[^house-rules]: `src/house-rules.ts`, the opt-in house rules.

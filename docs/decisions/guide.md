@@ -11,9 +11,16 @@ tags:
   - okf-init
   - okf-verify
   - selection
+sources:
+  - id: guide
+    resource: ../../src/guide.ts
+    title: src/guide.ts, the okf guide text and record rules
+  - id: agent-block
+    resource: ../../src/agent-block.ts
+    title: src/agent-block.ts, the agent block's text and markers
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:20:41Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written
@@ -22,7 +29,7 @@ Guidance copied into a repo goes stale when the package updates, and before `okf
 
 ## Decision
 
-As of 2026-11-25, from `src/guide.ts`, `src/agent-block.ts`, `src/options.ts`, `src/cli.ts`, and the README:
+As of 2026-11-25, from `src/guide.ts`[^guide], `src/agent-block.ts`[^agent-block], `src/options.ts`, `src/cli.ts`, and the README:
 
 - **`okf guide` prints, as Markdown, what the records are, the rules for writing and verifying them, then each command and when an agent may run it.**
   - `okf verify --yes` signs as the configured `okf.verifiedBy`, the person, so an agent never passes `--by` with its own name.
@@ -50,3 +57,7 @@ As of 2026-11-25, from `src/guide.ts`, `src/agent-block.ts`, `src/options.ts`, `
 - [What `okf init` writes, and how it keeps the agent block current](init.md)
 - [Who verifies a record](who-verifies.md)
 - [How okf-tools lays out its commands](command-layout.md)
+
+[^guide]: `src/guide.ts`, the `okf guide` text and record rules.
+
+[^agent-block]: `src/agent-block.ts`, the agent block's text and markers.

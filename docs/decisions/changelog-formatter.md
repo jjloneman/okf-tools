@@ -18,9 +18,15 @@ sources:
   - id: node-type-stripping
     resource: https://nodejs.org/api/typescript.html
     title: Node.js, modules and TypeScript
+  - id: changelog
+    resource: ../../scripts/changelog.ts
+    title: scripts/changelog.ts, the changesets changelog formatter
+  - id: changeset-config
+    resource: ../../.changeset/config.json
+    title: .changeset/config.json, which names the changelog formatter
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How changelog lines are built
@@ -29,7 +35,7 @@ changesets' default formatter writes `- <short hash>: <summary>` and reads no co
 
 ## Decision
 
-As of 2026-11-11, from `scripts/changelog.ts` and `.changeset/config.json`:
+As of 2026-11-11, from `scripts/changelog.ts`[^changelog] and `.changeset/config.json`[^changeset-config]:
 
 - **A custom formatter,** named by `changelog` in `.changeset/config.json`[^changesets-changelog].
 - **Each line reads the commit that added the changeset,** which after a squash merge is the PR title: `- ✨ **okf-verify:** <summary> (<short hash>)`.
@@ -60,3 +66,7 @@ As of 2026-11-11, from `scripts/changelog.ts` and `.changeset/config.json`:
 [^changesets-changelog]: changesets lets `changelog` name a module exporting `getReleaseLine` and `getDependencyReleaseLine`.
 
 [^node-type-stripping]: Node strips erasable TypeScript syntax when it loads a `.ts` file, unflagged from 22.18; it refuses to for files under `node_modules`.
+
+[^changelog]: `scripts/changelog.ts`, the changesets changelog formatter.
+
+[^changeset-config]: `.changeset/config.json`, which names the changelog formatter.

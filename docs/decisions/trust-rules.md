@@ -20,9 +20,24 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
+  - id: trust-rules
+    resource: ../../src/trust-rules.ts
+    title: src/trust-rules.ts, the trust rules
+  - id: source-rules
+    resource: ../../src/source-rules.ts
+    title: src/source-rules.ts, the rules on a record's sources
+  - id: spec-rules
+    resource: ../../src/spec-rules.ts
+    title: src/spec-rules.ts, the rules the spec states
+  - id: check
+    resource: ../../src/check.ts
+    title: src/check.ts, the okf check command
+  - id: config
+    resource: ../../src/config.ts
+    title: src/config.ts, which reads the okf block of package.json
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:03:37Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf check judges whether a sign-off still holds
@@ -31,7 +46,7 @@ verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 
 ## Decision
 
-As of 2026-11-26, from `src/trust-rules.ts`, `src/source-rules.ts`, `src/spec-rules.ts`, `src/check.ts`, and `src/config.ts`:
+As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`[^source-rules], `src/spec-rules.ts`[^spec-rules], `src/check.ts`[^check], and `src/config.ts`[^config]:
 
 - **A sign-off is current as OKF v0.3 counts one**[^okf-spec]: its `at` is at or after `generated.at`, to the whole second, and not ahead of the clock. §5.3's "only current verifications count" is the basis for "changed since sign-off", not house policy.
   - A sign-off ahead of the clock isn't current, as #92 settled for listings.
@@ -89,3 +104,13 @@ As of 2026-11-26, from `src/trust-rules.ts`, `src/source-rules.ts`, `src/spec-ru
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 
 [^validate-py]: The checker in the spec repo's `okf-generate` skill.
+
+[^trust-rules]: `src/trust-rules.ts`, the trust rules.
+
+[^source-rules]: `src/source-rules.ts`, the rules on a record's sources.
+
+[^spec-rules]: `src/spec-rules.ts`, the rules the spec states.
+
+[^check]: `src/check.ts`, the `okf check` command.
+
+[^config]: `src/config.ts`, which reads the `okf` block of `package.json`.

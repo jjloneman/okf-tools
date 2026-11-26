@@ -14,9 +14,15 @@ sources:
   - id: changesets-empty
     resource: https://github.com/changesets/changesets/blob/main/docs/command-line-options.md
     title: Changesets, command line options
+  - id: ci-workflow
+    resource: ../../.github/workflows/ci.yml
+    title: .github/workflows/ci.yml, the CI workflow
+  - id: main-ruleset
+    resource: ../../.github/rulesets/main.json
+    title: .github/rulesets/main.json, the ruleset that protects main
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T17:31:37Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # Why every PR adds a changeset
@@ -25,7 +31,7 @@ Releases come from changeset files, not commit messages, so a PR that forgets on
 
 ## Decision
 
-As of 2026-11-11, from `.github/workflows/ci.yml` and `.github/rulesets/main.json`:
+As of 2026-11-11, from `.github/workflows/ci.yml`[^ci-workflow] and `.github/rulesets/main.json`[^main-ruleset]:
 
 - **Every PR adds a changeset:**
   - `pnpm changeset` when it changes what ships, a `minor` for a breaking change in 0.x and a `patch` otherwise;
@@ -48,3 +54,7 @@ As of 2026-11-11, from `.github/workflows/ci.yml` and `.github/rulesets/main.jso
 - Merging a version PR has one manual step: approving its CI run.
 
 [^changesets-empty]: `changeset --empty` adds a changeset that bumps no package.
+
+[^ci-workflow]: `.github/workflows/ci.yml`, the CI workflow.
+
+[^main-ruleset]: `.github/rulesets/main.json`, the ruleset that protects `main`.

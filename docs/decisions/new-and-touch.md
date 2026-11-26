@@ -13,9 +13,22 @@ tags:
   - tags
   - timestamps
   - verification
+sources:
+  - id: frontmatter-scaffold
+    resource: ../../src/frontmatter/scaffold.ts
+    title: src/frontmatter/scaffold.ts, a new draft record's frontmatter
+  - id: new-record
+    resource: ../../src/new-record.ts
+    title: src/new-record.ts, the okf new command
+  - id: frontmatter-touch
+    resource: ../../src/frontmatter/touch.ts
+    title: src/frontmatter/touch.ts, the re-stamp edit
+  - id: touch
+    resource: ../../src/touch.ts
+    title: src/touch.ts, the okf touch command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf new and okf touch stamp generated
@@ -24,17 +37,17 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 
 ## Decision
 
-- **`okf new <record> --type <type> --by <producer>`** writes a record holding only frontmatter: `type`, then `title`, `description`, and `tags` when given, `status: draft`, and an inline `generated: { by, at }`.
+- **`okf new <record> --type <type> --by <producer>`**[^frontmatter-scaffold] writes a record holding only frontmatter: `type`, then `title`, `description`, and `tags` when given, `status: draft`, and an inline `generated: { by, at }`.
   - Tags are a block list, sorted, each once, as [How a record's tags are laid out](tags-layout.md) recommends.
   - The body is left to the writer, out of scope by the issue.
   - It never overwrites anything at the path, a broken symlink included, and never makes folders.
-- **`okf new` then syncs the `index.md` that lists the record**, as `okf index` syncs it, so the record's line is written the way every other line is.
+- **`okf new` then syncs the `index.md` that lists the record**[^new-record], as `okf index` syncs it, so the record's line is written the way every other line is.
   - It plans both files before writing either, so an index it can't sync writes nothing, and a failed index write removes the record again.
   - **Rejected:** writing the record and leaving a failed index for `okf index`, which would leave a half-done change for a broken record elsewhere in the bundle.
   - **Rejected:** adding only the new line, which would need a second way of placing a line beside `okf index`'s.
-- **`okf touch <record>... --by <producer>`** re-stamps `generated.by` and `generated.at` in place, with the same position-based edits and refusals as `okf verify`, adding either key, or `generated` after `status`, when missing.
+- **`okf touch <record>... --by <producer>`**[^frontmatter-touch] re-stamps `generated.by` and `generated.at` in place, with the same position-based edits and refusals as `okf verify`, adding either key, or `generated` after `status`, when missing.
   - `--draft` sets a `stable` record back to `status: draft`, only when asked, as the issue says; any other status is kept.
-  - It writes nothing when any named record refuses.
+  - It writes nothing when any named record refuses.[^touch]
 - **Neither takes a time**: there is no `--at`, since a typed time is the mistake they exist to stop.
 - **Neither adds or changes `verified`, and neither commits**, since signing off stays the person's call (see [Who verifies a record](who-verifies.md)).
 - **`--by` is required and must be an actor**, as `okf.verifiedBy` must; it names the producer, so it never falls back to `okf.verifiedBy`.
@@ -62,3 +75,11 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - [How okf index keeps an index.md in step with its records](index-sync.md)
 - [How okf-verify writes and commits records](writes.md)
 - [Who verifies a record](who-verifies.md)
+
+[^frontmatter-scaffold]: `src/frontmatter/scaffold.ts`, a new draft record's frontmatter.
+
+[^new-record]: `src/new-record.ts`, the `okf new` command.
+
+[^frontmatter-touch]: `src/frontmatter/touch.ts`, the re-stamp edit.
+
+[^touch]: `src/touch.ts`, the `okf touch` command.

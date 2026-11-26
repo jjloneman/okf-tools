@@ -11,9 +11,16 @@ tags:
   - roadmap
   - skills
   - staleness
+sources:
+  - id: product-review-skill
+    resource: ../../.claude/skills/product-review/SKILL.md
+    title: .claude/skills/product-review/SKILL.md, the product review skill
+  - id: product-review-reminder
+    resource: ../../.github/workflows/product-review-reminder.yml
+    title: .github/workflows/product-review-reminder.yml, the review reminder
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:08:34Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How product ideas are found and decided
@@ -22,7 +29,7 @@ Ideas for okf-tools beyond the bugs in front of it only came up when the owner r
 
 ## Decision
 
-As of 2026-11-25, from `.claude/skills/product-review/SKILL.md` and `.github/workflows/product-review-reminder.yml`:
+As of 2026-11-25, from `.claude/skills/product-review/SKILL.md`[^product-review-skill] and `.github/workflows/product-review-reminder.yml`[^product-review-reminder]:
 
 - **A repo-local skill, `/product-review`, holds the review prompt.**
   - It reads the README, the decision records, the changelog, this repo's issues, the spec's new issues and PRs, and the landscape record in `docs/references/`.
@@ -53,3 +60,7 @@ As of 2026-11-25, from `.claude/skills/product-review/SKILL.md` and `.github/wor
 
 - [#61](https://github.com/jjloneman/okf-tools/issues/61) — the issue that asked for the review.
 - [#64](https://github.com/jjloneman/okf-tools/issues/64) — the roadmap it was planned in.
+
+[^product-review-skill]: `.claude/skills/product-review/SKILL.md`, the product review skill.
+
+[^product-review-reminder]: `.github/workflows/product-review-reminder.yml`, the review reminder.

@@ -14,9 +14,15 @@ sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
+  - id: bin
+    resource: ../../src/bin.ts
+    title: src/bin.ts, the okf-verify entry
+  - id: guide
+    resource: ../../src/guide.ts
+    title: src/guide.ts, the okf guide text and record rules
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # Who verifies a record
@@ -25,12 +31,12 @@ A `verified` entry says a person reviewed a record[^okf-spec]. The question is w
 
 ## Decision
 
-As of 2026-11-11, from `src/bin.ts`, `src/cli.ts`, `src/options.ts`, and the README:
+As of 2026-11-11, from `src/bin.ts`[^bin], `src/cli.ts`, `src/options.ts`, and the README:
 
 - **Verification is the person's call; how it's recorded is not restricted.**
   - The interactive mode, the default, prompts in a terminal and refuses to start without one on both stdin and stdout.
   - The non-interactive mode (`--yes`) records the same sign-off with no prompts, so an agent or a workflow can run it.
-- **What an agent should do** is guidance, not a check the tool enforces. As of 2026-11-25 it's written once, in `src/guide.ts`: `okf guide` prints it, the block `okf init` writes into a repo's `AGENTS.md` holds it, and the README's Agents section quotes that block; `okf verify --help` points at `okf guide` (see [What `okf guide` prints](guide.md)). This repo's AGENTS.md states it for this repo too:
+- **What an agent should do** is guidance, not a check the tool enforces. As of 2026-11-25 it's written once, in `src/guide.ts`[^guide]: `okf guide` prints it, the block `okf init` writes into a repo's `AGENTS.md` holds it, and the README's Agents section quotes that block; `okf verify --help` points at `okf guide` (see [What `okf guide` prints](guide.md)). This repo's AGENTS.md states it for this repo too:
   - don't verify a record unless the person asks; drafting, editing, and regenerating a record never imply a sign-off;
   - name the files the person approved, rather than passing `--changed`, unless they asked for every changed record;
   - sign as the person (the configured `okf.verifiedBy`), since the approval is theirs.
@@ -48,3 +54,7 @@ As of 2026-11-11, from `src/bin.ts`, `src/cli.ts`, `src/options.ts`, and the REA
 - A later GitHub Actions approval flow can call `okf-verify --yes --by <approver> <paths>` with no new mode.
 
 [^okf-spec]: OKF v0.3 §5.3's trust tiers derive from the current `verified` events: unverified, machine-confirmed, or human-reviewed.
+
+[^bin]: `src/bin.ts`, the `okf-verify` entry.
+
+[^guide]: `src/guide.ts`, the `okf guide` text and record rules.
