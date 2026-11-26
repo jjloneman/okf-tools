@@ -17,7 +17,7 @@ tags:
   - timestamps
   - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:07:31Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:20:10Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -100,3 +100,4 @@ As of 2026-11-11, from `src/apply.ts`, `src/frontmatter/`, `src/git.ts`, and `sr
 
 - Running `okf-verify` with unrelated work staged is safe; that work stays staged and uncommitted.
 - Changing the write path means keeping each guard above, or updating this record in the same PR.
+- `okf check --fix` writes records under the same guards, but never edits `generated` or `verified`, and commits nothing (see [What okf check --fix fixes, and how it writes](fixes.md)).
