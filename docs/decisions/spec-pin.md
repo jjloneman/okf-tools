@@ -4,6 +4,7 @@ title: Which OKF spec okf-tools follows
 description: okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.3 text at `527e81a`; every spec link points to the pin, and `okf migrate` moves a v0.1 or v0.2 bundle to it.
 tags:
   - links
+  - pinning
   - spec
   - spec-watch
   - status

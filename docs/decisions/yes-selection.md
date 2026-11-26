@@ -4,8 +4,10 @@ title: What `--yes` verifies, and how it exits
 description: "`--yes` needs an explicit selection, `--changed` or record paths, never both and never neither; it skips records already verified and committed, and exits `0` worked, `1` failed, `2` nothing to verify."
 tags:
   - agents
-  - cli
+  - case-sensitivity
   - exit-codes
+  - okf-verify
+  - paths
   - safety
   - selection
   - verification

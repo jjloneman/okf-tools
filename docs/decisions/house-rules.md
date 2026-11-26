@@ -5,8 +5,10 @@ description: "`okf check` runs okf-tools' own `H` rules on conventions the spec 
 tags:
   - checks
   - config
+  - eslint
   - index
   - links
+  - okf-check
   - spec
   - tags
   - upstream

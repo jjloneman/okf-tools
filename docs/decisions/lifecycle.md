@@ -3,8 +3,10 @@ type: Decision
 title: How okf deprecate and --stale-in write a record's lifecycle
 description: "`okf deprecate` sets `status: deprecated` and a bundle-rooted `superseded_by`, re-stamping `generated`, and `okf verify --stale-in` writes `stale_after` as an ISO 8601 duration past the sign-off, in UTC."
 tags:
-  - cli
+  - deprecation
   - frontmatter
+  - okf-deprecate
+  - okf-verify
   - paths
   - refusals
   - staleness

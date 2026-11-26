@@ -3,10 +3,10 @@ type: Decision
 title: How okf migrate moves a bundle to OKF v0.3
 description: "`okf migrate` declares v0.3 in the root `index.md`, fills a missing `title` and `description`, and rewrites each bare path that names a file only from the bundle root to the relative path v0.3 reads, by position; it never touches `generated` or `verified`, refuses a bundle whose paths are ambiguous, and is a dry run unless `--write`."
 tags:
-  - cli
   - exit-codes
   - frontmatter
   - links
+  - okf-migrate
   - paths
   - refusals
   - safety

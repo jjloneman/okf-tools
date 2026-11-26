@@ -4,10 +4,12 @@ title: What `okf guide` prints, and where the agent rules are written
 description: "`okf guide` prints the record rules, each command with when an agent may run it, and the skills `okf init` installs, as unprefixed Markdown from the installed version; the rules are one text in `src/guide.ts`, shared with the `okf init` block and the README, and `okf verify --help` points at the guide."
 tags:
   - agents
-  - cli
   - exit-codes
   - guidance
   - instructions
+  - okf-guide
+  - okf-init
+  - okf-verify
   - selection
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:20:41Z }

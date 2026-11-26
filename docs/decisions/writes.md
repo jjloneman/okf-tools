@@ -4,18 +4,15 @@ title: How okf-verify writes and commits records
 description: Edits only an allowlist of layouts, writing a new entry in the record's own style, never through a symlink; all or nothing; each record is re-read just before writing and the time re-stamped at confirmation, a commit git would refuse writes nothing, a failed write rolls back the others, the commit names only the verified files and is unstaged if rejected, and it never pushes or skips hooks.
 tags:
   - commits
-  - config
   - encoding
-  - exit-codes
   - frontmatter
   - git
+  - okf-verify
   - refusals
   - rollback
   - safety
-  - status
   - symlinks
-  - timestamps
-  - verification
+  - yaml
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:20:10Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }

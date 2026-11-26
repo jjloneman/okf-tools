@@ -7,9 +7,10 @@ tags:
   - ci
   - landscape
   - npm
-  - sign-off
+  - pypi
   - upstream
-  - validators
+  - validation
+  - verification
 sources:
   - id: okf-md
     resource: https://okf.md/tools/

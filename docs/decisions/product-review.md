@@ -5,7 +5,11 @@ description: A `/product-review` skill, run only on the owner's go-ahead, opens 
 tags:
   - agents
   - github-actions
+  - ideas
+  - issues
+  - ntfy
   - roadmap
+  - skills
   - staleness
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:08:34Z }

@@ -5,9 +5,9 @@ description: "`okf status` lists every record under the first group that fits, c
 tags:
   - agents
   - api
-  - cli
   - exit-codes
   - json
+  - okf-status
   - staleness
   - status
   - trust-tiers

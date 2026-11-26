@@ -5,10 +5,10 @@ description: "`okf check` runs the spec rules on a pure engine, with upstream va
 tags:
   - checks
   - ci
-  - cli
   - exit-codes
   - github-actions
   - json
+  - okf-check
   - spec
   - upstream
   - validation

@@ -3,10 +3,11 @@ type: Decision
 title: How okf index keeps an index.md in step with its records
 description: "`okf index` rewrites each top-level list line that links to a record from its title and description, sorted by title within its run, adds missing records, drops gone ones, and keeps a tag index between markers; everything else in the file stays as written, and `--check` fails when an index differs."
 tags:
-  - cli
   - exit-codes
   - index
   - links
+  - okf-index
+  - okf-tags
   - refusals
   - safety
   - tags

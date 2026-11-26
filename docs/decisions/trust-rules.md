@@ -4,14 +4,13 @@ title: How okf check judges whether a sign-off still holds
 description: "`okf check` runs okf-tools' own `T` trust rules beside the spec rules: a draft is a notice unless `okf.drafts` says allow, warn or block, a sign-off counts only while current as OKF v0.3 defines it, a body changed since the base branch under a sign-off the base already held that still counts is an error, and a file in the repo that a record's `sources` cite warns when it changed after the record was written or signed off, and fails when it's gone; `--changed` reports only on what the branch changed."
 tags:
   - change-detection
-  - checks
   - ci
-  - cli
   - config
   - git
+  - okf-check
+  - pull-requests
   - sources
   - staleness
-  - status
   - timestamps
   - verification
 sources:

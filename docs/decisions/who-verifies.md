@@ -5,7 +5,9 @@ description: Verification is the person's call, but not only a terminal prompt m
 tags:
   - actors
   - agents
-  - cli
+  - guidance
+  - okf-verify
+  - safety
   - selection
   - verification
 sources:

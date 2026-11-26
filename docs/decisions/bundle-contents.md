@@ -3,9 +3,11 @@ type: Decision
 title: Which files in a bundle are records
 description: "Every `.md` file at any depth under a configured bundle is a record, other than `index.md` and `log.md` at every level and the paths `okf.exclude` matches; a bundle inside another counts each record once, and a symlink to a folder is never followed."
 tags:
+  - bundles
   - config
   - dependencies
   - git
+  - globs
   - node
   - paths
   - selection

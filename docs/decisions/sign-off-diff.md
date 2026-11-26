@@ -4,8 +4,11 @@ title: What a re-verification shows as changed
 description: The diff from the newest commit that set the signer's current `verified.at` in a record not generated again after it, to the record on disk; with no such commit, or no sign-off, the whole record; shown before the interactive confirm and by `okf diff`.
 tags:
   - change-detection
-  - cli
   - git
+  - history
+  - interactive
+  - okf-diff
+  - okf-verify
   - timestamps
   - verification
 status: stable

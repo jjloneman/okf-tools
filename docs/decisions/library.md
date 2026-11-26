@@ -8,6 +8,7 @@ tags:
   - refusals
   - status
   - timestamps
+  - typescript
   - validation
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T19:07:31Z }

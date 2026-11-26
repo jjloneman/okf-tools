@@ -6,6 +6,9 @@ tags:
   - aliases
   - cli
   - commands
+  - exit-codes
+  - help
+  - okf-verify
   - output
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:12:05Z }

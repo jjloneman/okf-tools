@@ -3,11 +3,12 @@ type: Decision
 title: What okf check --fix fixes, and how it writes
 description: "`okf check --fix`, also `okf format`, fixes only the house-rule findings with one obvious fix, sorted tags, a block tags list, key order and index lines, moving text by position under verify's guards; it never edits generated or verified, refuses what it can't move safely, and commits nothing."
 tags:
-  - checks
-  - cli
   - formatting
   - frontmatter
   - index
+  - okf-check
+  - okf-format
+  - prettier
   - refusals
   - safety
   - tags

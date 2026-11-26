@@ -6,6 +6,9 @@ tags:
   - agents
   - formatting
   - frontmatter
+  - okf-format
+  - okf-tags
+  - prettier
   - tags
   - yaml
 sources:
