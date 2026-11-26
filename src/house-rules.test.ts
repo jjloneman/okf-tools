@@ -114,6 +114,11 @@ describe("readHouseRules", () => {
       value: { "tags-layout": ["error", { layout: "block" }] },
     },
     {
+      description: "key-order's order",
+      expected: { "key-order": { level: "warn", order: ["type", "title"] } },
+      value: { "key-order": ["warn", { order: ["type", "title"] }] },
+    },
+    {
       description: "tags-vocabulary's tags",
       expected: { "tags-vocabulary": { level: "warn", tags: ["a", "b"] } },
       value: { "tags-vocabulary": ["warn", { tags: ["a", "b"] }] },
@@ -140,7 +145,7 @@ describe("readHouseRules", () => {
     {
       description: "an unknown rule",
       reason:
-        "`okf.rules` in package.json: there's no house rule \"tag-case\"; they're index-entry-missing, index-entry-order, index-entry-stale, source-uncited, tags-count, tags-kebab-case, tags-layout, tags-required, tags-sorted, tags-vocabulary, wikilink.",
+        "`okf.rules` in package.json: there's no house rule \"tag-case\"; they're index-entry-missing, index-entry-order, index-entry-stale, key-order, source-uncited, tags-count, tags-kebab-case, tags-layout, tags-required, tags-sorted, tags-vocabulary, wikilink.",
       value: { "tag-case": "warn" },
     },
     {
@@ -202,6 +207,30 @@ describe("readHouseRules", () => {
       reason:
         '`okf.rules` in package.json: "tags-layout" takes a layout of any, block, flow.',
       value: { "tags-layout": ["warn", { layout: "inline" }] },
+    },
+    {
+      description: "a key order with no keys",
+      reason:
+        '`okf.rules` in package.json: "key-order" needs its keys, each once, as [level, { "order": [...] }].',
+      value: { "key-order": "warn" },
+    },
+    {
+      description: "an empty key order",
+      reason:
+        '`okf.rules` in package.json: "key-order" needs its keys, each once, as [level, { "order": [...] }].',
+      value: { "key-order": ["warn", { order: [] }] },
+    },
+    {
+      description: "a key order that isn't text",
+      reason:
+        '`okf.rules` in package.json: "key-order" needs its keys, each once, as [level, { "order": [...] }].',
+      value: { "key-order": ["warn", { order: [1] }] },
+    },
+    {
+      description: "a key order naming a key twice",
+      reason:
+        '`okf.rules` in package.json: "key-order" needs its keys, each once, as [level, { "order": [...] }].',
+      value: { "key-order": ["warn", { order: ["type", "type"] }] },
     },
     {
       description: "a vocabulary with no tags",
@@ -560,6 +589,55 @@ describe("H010 source-uncited", () => {
       findLines({
         files: { "kb/a.md": text },
         rules: { "source-uncited": "warn" },
+      })
+    ).toStrictEqual(expected);
+  });
+});
+
+describe("H012 key-order", () => {
+  test.each([
+    {
+      description: "keys in order, unlisted keys after them",
+      expected: [],
+      text: concept(["title: A", "status: draft", "x-acme: a"]),
+    },
+    {
+      description: "an unlisted key between listed ones",
+      expected: ["kb/a.md:4 H012"],
+      text: concept(["x-acme: a", "title: A"]),
+    },
+    {
+      description:
+        "a key ahead of one listed before it, at the key that belongs there",
+      expected: ["kb/a.md:4 H012"],
+      text: concept(["status: draft", "title: A"]),
+    },
+    {
+      description: "an unlisted key ahead of every listed one",
+      expected: ["kb/a.md:3 H012"],
+      text: concept(["x-acme: a", "title: A"]).replace(
+        "type: Decision\nx-acme: a",
+        "x-acme: a\ntype: Decision"
+      ),
+    },
+    {
+      description: "a key that isn't a single value",
+      expected: [],
+      text: concept(["status: draft", "? [a]", ": b", "title: A"]),
+    },
+    {
+      description: "a file that isn't a concept",
+      expected: [],
+      text: record(["status: draft", "title: A"]),
+    },
+  ])("checks $description", ({ expected, text }) => {
+    // When/Then - what it reports
+    expect(
+      findLines({
+        files: { "kb/a.md": text },
+        rules: {
+          "key-order": { level: "warn", order: ["type", "title", "status"] },
+        },
       })
     ).toStrictEqual(expected);
   });

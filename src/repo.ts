@@ -170,6 +170,24 @@ export function findBundleDir(params: {
 }
 
 /**
+ * Find where a path from the repo root really leads, when a symlink in the
+ * repo, at the path or any folder above it, sends it elsewhere.
+ *
+ * @returns the real path, or `undefined` when it's the path itself.
+ */
+export function findLinkedPath(params: {
+  filePath: string;
+  repoRoot: string;
+}): string | undefined {
+  const { filePath, repoRoot } = params;
+  const realPath = realpathSync(path.join(repoRoot, filePath));
+
+  return realPath === path.join(realpathSync(repoRoot), filePath)
+    ? undefined
+    : realPath;
+}
+
+/**
  * Find the bundle a path from the repo root belongs to: the deepest one that
  * holds it, so a bundle inside another owns its own files.
  *
@@ -781,24 +799,6 @@ function findIndexSpelling(params: {
       toFoldKey(entry) === key &&
       isDiskSpelling({ filePath, indexPath: entry, repoRoot })
   );
-}
-
-/**
- * Find where a path from the repo root really leads, when a symlink in the
- * repo, at the path or any folder above it, sends it elsewhere.
- *
- * @returns the real path, or `undefined` when it's the path itself.
- */
-function findLinkedPath(params: {
-  filePath: string;
-  repoRoot: string;
-}): string | undefined {
-  const { filePath, repoRoot } = params;
-  const realPath = realpathSync(path.join(repoRoot, filePath));
-
-  return realPath === path.join(realpathSync(repoRoot), filePath)
-    ? undefined
-    : realPath;
 }
 
 /**

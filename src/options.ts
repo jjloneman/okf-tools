@@ -34,6 +34,14 @@ export type CheckOptions = {
   isChanged: boolean;
 
   /**
+   * Whether `--fix` asked to fix what has one obvious fix, then report
+   * what's left.
+   *
+   * @example true
+   */
+  isFix: boolean;
+
+  /**
    * Whether a warning fails the run too, from `--strict`.
    *
    * @example true
@@ -250,6 +258,7 @@ export type ParsedCommand =
         | "check"
         | "deprecate"
         | "diff"
+        | "format"
         | "guide"
         | "index"
         | "init"
@@ -395,9 +404,12 @@ export const OKF_USAGE = `usage: okf <command> [options]
 commands:
   check   report problems in the bundles against OKF's spec rules,
           and whether each sign-off still holds, writing nothing
+          unless --fix
   deprecate
           mark records \`status: deprecated\`, naming what replaces them
   diff    print what changed in records since their last sign-off
+  format  fix what okf check finds that has one obvious fix, such as
+          unsorted tags; the same as okf check --fix
   guide   print when an agent may run each command, and the rules for
           writing records
   index   sync each index.md's record lines and tag index from the
@@ -618,8 +630,8 @@ export const CHECK_USAGE = `usage: okf check [options]
 Reports problems in the bundles against the rules OKF's spec states, and
 whether each record's sign-off still holds: every Markdown file git would
 track, records, index.md and log.md alike. Each finding names its file,
-line, severity, and rule. It writes nothing. In GitHub Actions, text
-findings also print as annotations on the files.
+line, severity, and rule. It writes nothing unless --fix. In GitHub
+Actions, text findings also print as annotations on the files.
 
 A record whose body changed since the base branch is an error while a
 sign-off from before the change still counts, as when generated.at wasn't
@@ -629,13 +641,45 @@ allow, warn, or block.
 The house rules, such as sorted tags or an index that matches its records,
 run only as \`okf.rules\` in package.json turns each on: warn or error.
 
-It exits 1 on an error-level finding or a file it can't read, and under
---strict on a warning too; otherwise 0.
+--fix, or \`okf format\`, first fixes the house-rule findings that have
+one obvious fix: unsorted tags, a flow tags list under tags-layout block,
+keys out of key-order's order, and index lines okf index would rewrite.
+It moves text as written and never edits generated or verified, so a
+sign-off still holds. An index fix writes the whole index as okf index
+would. Under --changed it fixes only the files the branch changed, and
+their indexes. A file it can't fix safely is named, and keeps its
+findings, which decide the exit code. Then it reports what's left. It
+commits nothing.
+
+It exits 1 on an error-level finding, a file it can't read, or a write
+that fails, and under --strict on a warning too; otherwise 0.
 
 options:
   --bundle <dir>     a bundle directory to check; repeat for more
                      (default: \`okf.bundles\` in package.json)
   --changed          report only on files changed since the base branch
+  --fix              fix what has one obvious fix, then report the rest
+  --format <format>  text (the default) or json
+  --strict           fail on warnings too
+  --help, -h         print this help`;
+
+/** How to call `okf format`, printed for `--help` and after a usage error. */
+export const FORMAT_USAGE = `usage: okf format [options]
+
+The same as okf check --fix: fixes what okf check finds that has one
+obvious fix, as the house rules \`okf.rules\` turns on in package.json
+ask, then reports what's left. It never edits generated or verified, and
+commits nothing; run \`okf check --help\` for what it fixes.
+
+A fix it refuses keeps its findings, which decide the exit code: 1 on an
+error-level finding, a file it can't read, or a write that fails, and
+under --strict on a warning too; otherwise 0.
+
+options:
+  --bundle <dir>     a bundle directory to fix; repeat for more
+                     (default: \`okf.bundles\` in package.json)
+  --changed          fix only the files changed since the base branch,
+                     and their indexes, and report on those
   --format <format>  text (the default) or json
   --strict           fail on warnings too
   --help, -h         print this help`;
@@ -684,50 +728,7 @@ record; \`okf guide\` prints the rules.`;
 export function parseCheckArgs(
   args: readonly string[]
 ): ParsedArgs<CheckOptions> {
-  let parsed: ReturnType<typeof parseCheckLine>;
-
-  try {
-    parsed = parseCheckLine(args);
-  } catch (error) {
-    // Asking for help is never a usage error, even beside a flag that is.
-    return isHelpAsked(args)
-      ? { kind: "help" }
-      : { kind: "invalid", message: describeError(error) };
-  }
-
-  const { positionals, values } = parsed;
-
-  if (values.help === true) {
-    return { kind: "help" };
-  }
-
-  const bundles = values.bundle ?? [];
-  const problem = findBundlesProblem({
-    bundles,
-    command: "okf check",
-    positionals,
-  });
-
-  if (problem !== undefined) {
-    return { kind: "invalid", message: problem };
-  }
-
-  const format = values.format ?? "text";
-
-  return isStatusFormat(format)
-    ? {
-        kind: "options",
-        options: {
-          bundles,
-          format,
-          isChanged: values.changed === true,
-          isStrict: values.strict === true,
-        },
-      }
-    : {
-        kind: "invalid",
-        message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
-      };
+  return parseCheckCommandArgs({ args, command: "okf check" });
 }
 
 /** Read the command line into options, or say why it can't run. */
@@ -787,6 +788,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     name === "check" ||
     name === "deprecate" ||
     name === "diff" ||
+    name === "format" ||
     name === "guide" ||
     name === "index" ||
     name === "init" ||
@@ -893,6 +895,16 @@ export function parseDiffArgs(args: readonly string[]): ParsedDiffArgs {
   return positionals.length === 0
     ? { kind: "invalid", message: "Name at least one record." }
     : { kind: "options", options };
+}
+
+/**
+ * Read `okf format`'s command line, which takes `okf check`'s flags, into
+ * options, or say why it can't run, under its own name.
+ */
+export function parseFormatArgs(
+  args: readonly string[]
+): ParsedArgs<CheckOptions> {
+  return parseCheckCommandArgs({ args, command: "okf format" });
 }
 
 /** Read `okf guide`'s arguments, or say why they can't run. */
@@ -1173,6 +1185,59 @@ function isStatusFormat(format: string): format is StatusFormat {
   return STATUS_FORMATS.some((known) => known === format);
 }
 
+/** Read `okf check`'s flags under the name the command was run by. */
+function parseCheckCommandArgs(params: {
+  args: readonly string[];
+  command: "okf check" | "okf format";
+}): ParsedArgs<CheckOptions> {
+  const { args, command } = params;
+  let parsed: ReturnType<typeof parseCheckLine>;
+
+  try {
+    parsed = parseCheckLine(args);
+  } catch (error) {
+    // Asking for help is never a usage error, even beside a flag that is.
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const bundles = values.bundle ?? [];
+  const problem = findBundlesProblem({
+    bundles,
+    command,
+    positionals,
+  });
+
+  if (problem !== undefined) {
+    return { kind: "invalid", message: problem };
+  }
+
+  const format = values.format ?? "text";
+
+  return isStatusFormat(format)
+    ? {
+        kind: "options",
+        options: {
+          bundles,
+          format,
+          isChanged: values.changed === true,
+          isFix: values.fix === true,
+          isStrict: values.strict === true,
+        },
+      }
+    : {
+        kind: "invalid",
+        message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
+      };
+}
+
 /**
  * Run `parseArgs` over the CLI's flags.
  *
@@ -1421,6 +1486,7 @@ function parseCheckLine(args: readonly string[]) {
     options: {
       bundle: { multiple: true, type: "string" },
       changed: { type: "boolean" },
+      fix: { type: "boolean" },
       format: { type: "string" },
       help: { short: "h", type: "boolean" },
       strict: { type: "boolean" },

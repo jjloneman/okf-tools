@@ -23,13 +23,15 @@ import type {
   CheckedFile,
   CheckRule,
   CheckSeverity,
+  RuleHit,
 } from "./check-engine.ts";
 import type { IndexDrift, IndexRecord } from "./index-sync.ts";
 import type { ParsedFile } from "./spec-rules.ts";
 
 import { readNodeLine } from "./check-engine.ts";
+import { orderKeyNames } from "./frontmatter/format.ts";
 import { readRecordSummary } from "./frontmatter/read.ts";
-import { readTimestamp } from "./frontmatter/shared.ts";
+import { readString, readTimestamp } from "./frontmatter/shared.ts";
 import { NO_SIGNER } from "./index-command.ts";
 import { findIndexDrift } from "./index-sync.ts";
 import {
@@ -66,6 +68,14 @@ export type HouseRules = {
    * @example "error"
    */
   "index-entry-stale"?: HouseLevel;
+
+  /**
+   * Top-level keys out of the order `order` lists, the keys it doesn't list
+   * after the ones it does.
+   *
+   * @example `{ level: "warn", order: ["type", "title", "description"] }`
+   */
+  "key-order"?: { level: HouseLevel; order: readonly string[] };
 
   /**
    * A `sources` entry no footnote in the body cites by its `id`.
@@ -202,6 +212,7 @@ const KEBAB_CASE = /^[\da-z]+(?:-[\da-z]+)*$/u;
 const RULE_OPTIONS: Readonly<
   Partial<Record<HouseRuleName, readonly string[]>>
 > = {
+  "key-order": ["order"],
   "tags-count": ["max", "min"],
   "tags-layout": ["layout"],
   "tags-vocabulary": ["tags"],
@@ -236,6 +247,13 @@ const HOUSE_RULES: {
       checkBundle: (bundle) => checkIndexes({ bundle, kind: "stale" }),
     }),
     code: "H008",
+  },
+  "key-order": {
+    build: ({ order }) => ({
+      checkFile: (file) =>
+        withConcept(file, (parsed) => checkKeyOrder({ order, parsed })),
+    }),
+    code: "H012",
   },
   "source-uncited": {
     build: () => ({
@@ -422,6 +440,43 @@ export function buildHouseRules(rules: HouseRules): CheckRule[] {
 }
 
 /**
+ * Judge each index in a bundle as the index rules do: where it differs from
+ * what `okf index` would write, or why `okf index` can't read it.
+ *
+ * - `okf check --fix` reads it too, so it syncs the very index a finding
+ *   judged.
+ */
+export function judgeIndexes(bundle: CheckedBundle): {
+  found: ReturnType<typeof findIndexDrift>;
+  indexPath: string;
+}[] {
+  const indexes = new Map(
+    bundle.files
+      .filter((file) => file.kind === "index")
+      .map((file) => [file.filePath, file])
+  );
+  const records = bundle.files.flatMap((file) => readIndexRecord(file));
+
+  return [...indexes.values()].map((index) => ({
+    found: findIndexDrift({
+      doesExist: index.doesExist,
+      indexPath: index.filePath,
+      records,
+      scoped: records.filter(
+        (record) =>
+          findNearestIndex({
+            bundle,
+            folder: path.posix.dirname(record.path),
+            indexes,
+          }) === index.filePath
+      ),
+      text: index.text,
+    }),
+    indexPath: index.filePath,
+  }));
+}
+
+/**
  * Read `okf.rules`: each rule's level, `off`, `warn` or `error`, or a
  * `[level, options]` pair, as ESLint takes them.
  *
@@ -490,46 +545,58 @@ function checkIndexes(params: {
   kind: IndexDrift["kind"];
 }): BundleHit[] {
   const { bundle, kind } = params;
-  const indexes = new Map(
-    bundle.files
-      .filter((file) => file.kind === "index")
-      .map((file) => [file.filePath, file])
-  );
-  const records = bundle.files.flatMap((file) => readIndexRecord(file));
 
-  return [...indexes.values()].flatMap((index) => {
-    const scoped = records.filter(
-      (record) =>
-        findNearestIndex({
-          bundle,
-          folder: path.posix.dirname(record.path),
-          indexes,
-        }) === index.filePath
-    );
-
-    const found = findIndexDrift({
-      doesExist: index.doesExist,
-      indexPath: index.filePath,
-      records,
-      scoped,
-      text: index.text,
-    });
-
+  return judgeIndexes(bundle).flatMap(({ found, indexPath }) => {
     // Every index rule says so, since each alone would otherwise pass it.
     if (!found.isOk) {
       return [
         {
           line: 1,
-          message: `can't judge ${index.filePath} against its records, since okf index can't read it: ${found.problem}`,
-          path: index.filePath,
+          message: `can't judge ${indexPath} against its records, since okf index can't read it: ${found.problem}`,
+          path: indexPath,
         },
       ];
     }
 
     return found.drift
       .filter((drift) => drift.kind === kind)
-      .map((drift) => describeDrift({ drift, indexPath: index.filePath }));
+      .map((drift) => describeDrift({ drift, indexPath }));
   });
+}
+
+/**
+ * Report the first top-level key out of the order `key-order` lists: the key
+ * that belongs where another sits.
+ */
+function checkKeyOrder(params: {
+  order: readonly string[];
+  parsed: ParsedFile;
+}): RuleHit[] {
+  const { order, parsed } = params;
+  const keys = parsed.keys.map((key) => ({ key, name: readString(key) }));
+  const names = keys.flatMap(({ name }) => (name === undefined ? [] : [name]));
+
+  // A key that isn't a single value can't be ordered by name.
+  if (names.length < keys.length) {
+    return [];
+  }
+
+  const wanted = orderKeyNames({ keyOrder: order, names });
+  const index = wanted.findIndex((name, at) => name !== names[at]);
+  const misplaced = wanted[index];
+  const displaced = names[index];
+
+  return misplaced === undefined || displaced === undefined
+    ? []
+    : [
+        {
+          line: readNodeLine({
+            file: parsed.file,
+            node: keys[names.indexOf(misplaced)]?.key,
+          }),
+          message: `\`${misplaced}\` belongs before \`${displaced}\`, as key-order lists the keys`,
+        },
+      ];
 }
 
 /**
@@ -667,6 +734,20 @@ function readRuleOptions(params: {
   | { isOk: false; reason: string }
   | { isOk: true; rule: HouseRules[HouseRuleName] } {
   const { level, name, options } = params;
+
+  if (name === "key-order") {
+    const { order } = options;
+
+    return Array.isArray(order) &&
+      order.length > 0 &&
+      order.every((key) => typeof key === "string") &&
+      new Set(order).size === order.length
+      ? { isOk: true, rule: { level, order } }
+      : {
+          isOk: false,
+          reason: `"key-order" needs its keys, each once, as [level, { "order": [...] }].`,
+        };
+  }
 
   if (name === "tags-count") {
     const { max = DEFAULT_TAG_COUNT.max, min = DEFAULT_TAG_COUNT.min } =
