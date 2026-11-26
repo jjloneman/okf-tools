@@ -35,8 +35,11 @@ sources:
   - id: config
     resource: ../../src/config.ts
     title: src/config.ts, which reads the okf block of package.json
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+  - id: git
+    resource: ../../src/git.ts
+    title: src/git.ts, every git call
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:42:59Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
@@ -68,8 +71,10 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - **`T007 source-changed` warns when a file in the repo that `sources` cites changed after the record was last written or signed off**, as #52 asked, so a record written from code shows when the code moved on.
   - A `resource` counts when it resolves by §6's rules[^okf-spec] to a path in the repo, a folder included, even outside the bundle: a record about code cites the code. Only the path's git history and whether it exists are read, never its text, which §6 keeps a consumer from reading outside the bundle.
   - A URL is skipped, and so is a value with a space, which §6 has a path percent-encode, so it's a scope descriptor.
-  - A change is a commit to the path, or uncommitted changes to it, later than both `generated.at` and the latest sign-off, to the whole second, by the commit's author time.
-    - **Rejected:** the committer time. A rebase, a cherry-pick, or an amend resets it to now, so every source commit on a rebased branch would read as newer than the record.
+  - A change is a commit to the path, or uncommitted changes to it, later than both `generated.at` and the latest sign-off, to the whole second, by the commit's committer time[^git], as #136 asked: when it landed, not when it was written.
+    - **Rejected:** the author time. A rebase or a cherry-pick keeps it, so a commit written before the record was re-stamped but landed after it read as already seen, and the record never warned about a change it never saw.
+    - A merge commit still dates the change by the branch's commit, since `git log` on a path leaves out a merge that took the path from one side, so a branch commit made before the re-stamp and merged after it still reads as seen.
+    - A rebase, a cherry-pick, or an amend resets the committer time to when it ran, so after a rebase, a branch's commit that changes a source but not its record reads as newer than the record's re-stamp in an earlier commit, and warns until the record is re-stamped again; the squash merge this repo uses changes both in one commit, which the next rule leaves out.
   - A commit that changed the record too doesn't count, since the record kept up with it, as a squash-merged pull request does; nor do uncommitted changes while the record has some too.
   - It's a warning, not an error: it works at file level, so a change that leaves the record true still warns, and judging the prose is the review skill's audit mode.
   - A `generated.at` or sign-off later than now doesn't count, as `T003` and `T004` warn, so it can't hide a source change until the clock passes it.
@@ -114,3 +119,5 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 [^check]: `src/check.ts`, the `okf check` command.
 
 [^config]: `src/config.ts`, which reads the `okf` block of `package.json`.
+
+[^git]: `src/git.ts`, every git call.

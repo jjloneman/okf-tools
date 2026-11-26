@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import path from "node:path";
@@ -427,6 +428,41 @@ describe("listBranchCommits", () => {
 });
 
 describe("listPathChanges", () => {
+  test("dates a commit by when it was committed, not when it was authored", () => {
+    // Given - a commit authored a day before it was committed, as a rebase
+    // or a cherry-pick lands it
+    repo.write("src/a.ts", "a\n");
+    repo.git("add", "--all");
+    execFileSync("git", ["commit", "--quiet", "-m", "add a"], {
+      cwd: repo.root,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: "2026-10-01T15:00:00Z",
+        GIT_COMMITTER_DATE: "2026-10-02T15:00:00Z",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    // When - listing the file's changes
+    const changes = listPathChanges({
+      filePath: "src/a.ts",
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - the commit, dated by its committer time
+    expect(changes).toMatchObject({
+      isOk: true,
+      value: {
+        commits: [
+          {
+            committedAt: DateTime.fromISO("2026-10-02T15:00:00Z").toSeconds(),
+          },
+        ],
+      },
+    });
+  });
+
   test("lists a folder's commits, newest first, and its uncommitted files", () => {
     // Given - two commits to a folder, one elsewhere, and an untracked file
     repo.write("src/a.ts", "a\n");
@@ -437,13 +473,13 @@ describe("listPathChanges", () => {
     repo.commitAll("edit a");
     repo.write("src/c.ts", "c\n");
     const log = repo
-      .git("log", "--format=%H %h %at", "-2", "--", "src")
+      .git("log", "--format=%H %h %ct", "-2", "--", "src")
       .trim()
       .split("\n")
       .map((line) => {
-        const [hash, shortHash, authoredAt] = line.split(" ");
+        const [hash, shortHash, committedAt] = line.split(" ");
 
-        return { authoredAt: Number(authoredAt), hash, shortHash };
+        return { committedAt: Number(committedAt), hash, shortHash };
       });
 
     // When - listing the folder's changes

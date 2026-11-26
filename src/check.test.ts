@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { chmodSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
@@ -448,6 +449,38 @@ describe("runCheck", () => {
         /^kb\/a\.md:4: warning T007 source-changed: source \.\.\/src\/a\.ts changed in [\da-f]+, at /u
       ),
       "3 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("warns about a source commit authored before the record but committed after it", () => {
+    // Given - a record generated between its cited file's commit's author
+    // time and its committer time, as a rebase-merged commit lands
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the records");
+    repo.write("src/a.ts", "a2\n");
+    repo.git("add", "--all");
+    execFileSync("git", ["commit", "--quiet", "-m", "edit a"], {
+      cwd: repo.root,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: "2026-09-30T15:00:00Z",
+        GIT_COMMITTER_DATE: "2026-10-02T15:00:00Z",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    // When - checking it
+    const code = check({});
+
+    // Then - a warning dated by when the commit landed
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        /^kb\/a\.md:4: warning T007 source-changed: source \.\.\/src\/a\.ts changed in [\da-f]+, at 2026-10-02T15:00:00Z, /u
+      ),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
     ]);
   });
 
