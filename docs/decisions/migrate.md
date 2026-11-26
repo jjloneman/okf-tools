@@ -20,8 +20,8 @@ sources:
   - id: okf-spec-v02
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification, v0.2
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:55:38Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T21:38:47Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -58,12 +58,13 @@ As of 2026-11-25, from `src/migrate-plan.ts`, `src/migrate.ts`, `src/options.ts`
 
 ## Consequences
 
-- Migrating this repo's own `docs/decisions`, and the owner's other bundles, is a rollout after this ships.
+- This repo's own `docs/decisions` moved to v0.3 with it in #132, changing only its root `index.md`; the owner's other bundles are a rollout after.
 - Every rewritten path resolves to the same file before and after, which a property test checks over generated bundles.
 
 ## Links
 
 - [#59](https://github.com/jjloneman/okf-tools/issues/59) — the migration, and the v0.3 pin.
+- [#132](https://github.com/jjloneman/okf-tools/issues/132) — migrating this repo's own `docs/decisions`.
 - [Which OKF spec okf-tools follows](spec-pin.md) — the pin this follows.
 
 [^okf-spec]: OKF v0.3 §5.2, a trivial edit such as link repair doesn't change `generated.at`; §6 and §6.2, one resolution rule for links and the path fields; and §12.1, the root fallback for bundles that declare 0.2 or earlier.

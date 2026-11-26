@@ -1,5 +1,7 @@
 ---
-okf_version: "0.2"
+okf_version: "0.3"
+title: "Decisions"
+description: okf-tools' design decisions, one record per decision, each saying what was chosen, why, and the options it rejected.
 ---
 
 # Decisions
@@ -35,7 +37,7 @@ okf_version: "0.2"
 
 # About this bundle
 
-This directory is an [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) bundle, still declared `okf_version: "0.2"`, of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case. `pnpm okf:index` rewrites those lines from each record's frontmatter.
+This directory is an [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) bundle, declared `okf_version: "0.3"`, of okf-tools' design decisions — one Markdown file per decision, listed above as `- [Title](file.md) - one-line description`, sorted by title, ignoring case. `pnpm okf:index` rewrites those lines from each record's frontmatter.
 
 Each decision opens with YAML frontmatter:
 

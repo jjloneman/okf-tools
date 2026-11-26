@@ -210,7 +210,7 @@ Releases use [changesets](https://github.com/changesets/changesets), and the pac
 
 ## 📚 Design decisions
 
-Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) bundle, still declared `okf_version: "0.2"`, that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
+Why the package works the way it does is recorded in [docs/decisions/](docs/decisions/index.md), an [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) bundle, declared `okf_version: "0.3"`, that this repo signs off with its own `okf-verify` (`okf.bundles` and `okf.verifiedBy` in `package.json`).
 
 - One Markdown file per decision, listed in [docs/decisions/index.md](docs/decisions/index.md), with tags from its vocabulary; after adding, removing or retitling one, run `pnpm okf:index` to rewrite its line.
 - **Base a record on the code and the closed threads**, not on memory: re-read the code before stating a flag, an exit code, or a fallback order, and date-stamp facts that can drift ("as of 2026-11-11").
