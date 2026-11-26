@@ -26,9 +26,9 @@ sources:
   - id: migrate
     resource: ../../src/migrate.ts
     title: src/migrate.ts, the okf migrate command
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T21:42:38Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf migrate moves a bundle to OKF v0.3

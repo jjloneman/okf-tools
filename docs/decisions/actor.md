@@ -24,9 +24,9 @@ sources:
   - id: frontmatter-edit
     resource: ../../src/frontmatter/edit.ts
     title: src/frontmatter/edit.ts, verifyRecord's position-based edits
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # Which actors can sign a record

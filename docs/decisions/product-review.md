@@ -18,9 +18,9 @@ sources:
   - id: product-review-reminder
     resource: ../../.github/workflows/product-review-reminder.yml
     title: .github/workflows/product-review-reminder.yml, the review reminder
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How product ideas are found and decided

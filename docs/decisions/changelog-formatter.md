@@ -24,9 +24,9 @@ sources:
   - id: changeset-config
     resource: ../../.changeset/config.json
     title: .changeset/config.json, which names the changelog formatter
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How changelog lines are built

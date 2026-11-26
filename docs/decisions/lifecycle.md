@@ -29,9 +29,9 @@ sources:
   - id: frontmatter-fields
     resource: ../../src/frontmatter/fields.ts
     title: src/frontmatter/fields.ts, writeFields' single-value edits
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:22:42Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # How okf deprecate and --stale-in write a record's lifecycle

@@ -25,9 +25,9 @@ sources:
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:55:26Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # Which skills okf-tools ships, and how okf init installs them

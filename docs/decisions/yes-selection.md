@@ -24,9 +24,9 @@ sources:
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
 # What `--yes` verifies, and how it exits
