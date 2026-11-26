@@ -26,9 +26,9 @@ sources:
   - id: house-rules
     resource: ../../src/house-rules.ts
     title: src/house-rules.ts, the opt-in house rules
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:40:43Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+verified: { by: human:jjloneman, at: 2026-11-26T23:46:52Z }
 ---
 
 # What okf check --fix fixes, and how it writes
