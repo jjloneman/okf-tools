@@ -10,6 +10,8 @@
  *   record skill points there rather than restating it.
  */
 
+import { TAG_RULES } from "./tag-rules.ts";
+
 /** A skill `okf init` installs, as the `SKILL.md` it writes. */
 export type Skill = {
   /**
@@ -77,7 +79,7 @@ const RECORD_BODY = [
   "   - okf-generate differs here: it records a `human:<id>` verification once the person confirms the content. In this repo, tell them to run `okf verify` instead.",
   "   - Run `okf verify --yes <record>...` only when the person asks you to verify, naming the records they approved; pass `--changed` instead only when they asked for every changed record. Never verify a record as a side effect of writing it.",
   "2. **The CLI owns the clock.** Never type `generated.at`, or any other timestamp: a wrong time makes a record look changed, or signed off, when it isn't. `okf new` and `okf touch` take the time from the clock.",
-  "3. **A record you write or edit stays `status: draft`** until the person signs it off.",
+  "3. **A record you write or edit stays `status: draft`** until the person signs it off, unless you changed only its `tags`, which keeps its status.",
   "4. **Record yourself in `generated.by`** with `--by <producer>/<version>`, such as `--by claude-code/2.1.316`; never the person, whose actor `okf.verifiedBy` in `package.json` holds for signing off.",
   "",
   "## Start a record",
@@ -90,20 +92,29 @@ const RECORD_BODY = [
   "",
   "1. Run `okf status <record>` first, for a record that existed before this change. One with a `verified` entry describes something the person signed off, so tell them what you're changing and why.",
   "2. Make the edit, keeping its `verified` history and the text you don't mean to change.",
-  "3. Run `okf touch <record>... --by <producer>/<version> --draft` after every edit, a link-only one included. It re-stamps `generated` from the clock and sets a `stable` record back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.",
-  "4. After a change to a record's title or description, or a new or removed record, run `okf index` in the same change.",
+  "3. Run `okf touch <record>... --by <producer>/<version> --draft` after every edit, a link-only one included, unless it changed only `tags`. It re-stamps `generated` from the clock and sets a `stable` record back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.",
+  "4. After a change to a record's title, description, or tags, or a new or removed record, run `okf index` in the same change.",
   "",
   "## Tags",
   "",
-  "- **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case, even where okf-generate's examples show a one-line list.",
-  "- Give each record 5 to 10 specific tags: its topic, the tools and products it names, the problem it solves, and the words someone searching for it would type.",
-  "- Reuse a tag `okf tags` lists whenever one fits, and prefer specific tags to broad ones.",
+  TAG_RULES,
+  "",
+  "## Audit a bundle's tags",
+  "",
+  "When the person asks you to audit a bundle's tags, or to fill out sparse ones:",
+  "",
+  "1. Find the records to retag. When `okf.rules` in `package.json` turns `tags-count` on, run `okf check --format json` and take the `path` of each finding whose `rule` is `tags-count`. `okf check` exits 1 when any finding is an error, but still prints the report, so read it either way. Otherwise read each record's `tags`, in whichever layout it's written, and take each with fewer than 5 or more than 10.",
+  "2. Run `okf tags` for the bundle's vocabulary, then read each record you took.",
+  "3. Propose a list for each, by the rules above, in one table for the person: the record, its tags now, and the tags you propose, with each new tag marked. Write nothing yet.",
+  "   - Name each near-duplicate pair the bundle already has, such as `brew` and `homebrew`, so the person picks one name.",
+  "4. Write only the lists the person approves, in the layout the rules above give, changing nothing else in each record. Don't run `okf touch`: a change to `tags` alone keeps `generated` and `status`, so a signed-off record stays signed off.",
+  "5. Run `okf index`, which syncs each tag index, then `okf check`, and tell the person which records you retagged; `okf diff <record>` shows each one's change.",
   "",
   "## Hand it over",
   "",
   "Run `okf index --check`, then tell the person:",
   "",
-  "- each record you created or changed, all of them drafts awaiting their sign-off;",
+  "- each record you created or changed, all of them drafts awaiting their sign-off, apart from the ones you only retagged, which keep their status;",
   "- that `okf diff <record>` shows what changed since they last signed one off;",
   "- that they sign records off with `okf verify`, or by asking you to.",
 ].join("\n");
@@ -297,7 +308,7 @@ export const SKILLS: readonly Skill[] = [
   buildSkill({
     body: RECORD_BODY,
     description:
-      "Draft or edit an Open Knowledge Format (OKF) record in a repo that uses okf-tools, keeping its trust state honest: start it with okf new, re-stamp it with okf touch, leave it a draft, and never write verified. Use this skill whenever you create, rewrite, retitle, or retag a record in a bundle that okf.bundles in package.json lists, alongside upstream's okf-generate skill for what to write.",
+      "Draft or edit an Open Knowledge Format (OKF) record in a repo that uses okf-tools, keeping its trust state honest: start it with okf new, re-stamp it with okf touch, leave it a draft, and never write verified. Use this skill whenever you create, rewrite, retitle, or retag a record, or audit sparse tags, in a bundle that okf.bundles in package.json lists, alongside upstream's okf-generate skill for what to write.",
     name: "okf-record",
   }),
   buildSkill({

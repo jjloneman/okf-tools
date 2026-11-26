@@ -253,6 +253,18 @@ describe("T006 unstamped-change", () => {
       text: signed,
     },
     {
+      baseText: concept(["status: stable", "tags: [cli]", GENERATED, SIGNED]),
+      description: "a change to tags alone, which keeps generated",
+      text: concept([
+        "status: stable",
+        "tags:",
+        "  - cache",
+        "  - cli",
+        GENERATED,
+        SIGNED,
+      ]),
+    },
+    {
       baseText: signed,
       description: "a change re-stamped with a new generated.at",
       text: concept([
