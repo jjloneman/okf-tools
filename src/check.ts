@@ -15,8 +15,11 @@
  * - Each path a record's `sources` cite in the repo has its history read
  *   once, with the record's own, for the source rules.
  *
- * - It never writes. It exits `1` on an error-level finding, a file it
- *   couldn't read, or under `--strict` a warning; otherwise `0`.
+ * - It writes nothing, unless `--fix` (or `okf format`) asks it to fix what
+ *   it found that has one obvious fix, then report what's left. It exits `1`
+ *   on an error-level finding, a file it couldn't read, a write that failed,
+ *   or under `--strict` a warning; otherwise `0`, so a fix it refused counts
+ *   by the findings it leaves.
  */
 import { DateTime } from "luxon";
 import { existsSync, realpathSync } from "node:fs";
@@ -40,6 +43,7 @@ import type { BundleContext } from "./run-context.ts";
 
 import { buildCheckReport, readCheckedFile } from "./check-engine.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
+import { applyFixes } from "./fix.ts";
 import {
   listBranchCommits,
   listPathChanges,
@@ -137,6 +141,14 @@ export function runCheck(params: {
   isChanged: boolean;
 
   /**
+   * Whether `--fix` asked to fix what has one obvious fix first, then report
+   * what's left.
+   *
+   * @example true
+   */
+  isFix: boolean;
+
+  /**
    * Whether it runs in GitHub Actions, where text findings print as
    * annotations.
    *
@@ -157,6 +169,7 @@ export function runCheck(params: {
     format,
     houseRules,
     isChanged,
+    isFix,
     isGitHubActions,
     isStrict,
   } = params;
@@ -169,14 +182,7 @@ export function runCheck(params: {
     return EXIT_CODES.failure;
   }
 
-  const {
-    bundles,
-    changedKeys,
-    citingKeys,
-    hasBase,
-    historyFailures,
-    skipped,
-  } = read.value;
+  const { bundles, hasBase, historyFailures } = read.value;
 
   // A history git can't read, such as a path in a submodule, only leaves
   // the source rules without it, so it's said but doesn't fail the run.
@@ -192,21 +198,86 @@ export function runCheck(params: {
     );
   }
 
-  const report = buildCheckReport({
-    bundles,
-    isInScope: isChanged
-      ? (filePath) =>
-          changedKeys.has(toPathKey(filePath)) ||
-          citingKeys.has(toPathKey(filePath))
-      : undefined,
-    rules: [
-      ...SPEC_RULES,
-      ...buildTrustRules(drafts),
-      ...SOURCE_RULES,
-      ...buildHouseRules(houseRules),
-    ],
-    skipped,
-  });
+  const rules = [
+    ...SPEC_RULES,
+    ...buildTrustRules(drafts),
+    ...SOURCE_RULES,
+    ...buildHouseRules(houseRules),
+  ];
+  const buildReport = (checked: typeof read.value): CheckReport =>
+    buildCheckReport({
+      bundles: checked.bundles,
+      isInScope: isChanged
+        ? (filePath) =>
+            checked.changedKeys.has(toPathKey(filePath)) ||
+            checked.citingKeys.has(toPathKey(filePath))
+        : undefined,
+      rules,
+      skipped: checked.skipped,
+    });
+
+  let report = buildReport(read.value);
+
+  if (isFix) {
+    // Under `--changed`, a record in scope only for citing a changed file
+    // is left as it is, so the fix doesn't hide a source change from `T007`.
+    const fixed = applyFixes({
+      bundles,
+      context,
+      findings: isChanged
+        ? report.findings.filter(({ path: filePath }) =>
+            read.value.changedKeys.has(toPathKey(filePath))
+          )
+        : report.findings,
+      houseRules,
+    });
+
+    if (!fixed.isOk) {
+      // A reason can quote a record's own text, such as a YAML error.
+      output.error(
+        fixed.reason
+          .split("\n")
+          .map((line) => toTerminalLine(line))
+          .join("\n")
+      );
+
+      return EXIT_CODES.failure;
+    }
+
+    // A JSON reader takes stdout whole, so the fixes print beside it.
+    const say = format === "json" ? output.error : output.info;
+
+    for (const reason of fixed.value.refusals) {
+      output.error(toTerminalLine(`Not fixed: ${reason}`));
+    }
+
+    for (const { filePath } of fixed.value.written) {
+      say(toTerminalLine(`Fixed ${filePath}.`));
+    }
+
+    // The report that follows reads each fixed file as written, so it says
+    // what the fixes left, with nothing read twice.
+    const texts = new Map(
+      fixed.value.written.map(({ filePath, text }) => [filePath, text])
+    );
+
+    report =
+      texts.size === 0
+        ? report
+        : buildReport({
+            ...read.value,
+            bundles: bundles.map((bundle) => ({
+              ...bundle,
+              files: bundle.files.map((file) => {
+                const text = texts.get(file.filePath);
+
+                return text === undefined
+                  ? file
+                  : readCheckedFile({ ...file, text });
+              }),
+            })),
+          });
+  }
 
   if (format === "json") {
     output.data(JSON.stringify(report, undefined, 2));

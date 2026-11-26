@@ -30,6 +30,7 @@ import {
   CHECK_USAGE,
   DEPRECATE_USAGE,
   DIFF_USAGE,
+  FORMAT_USAGE,
   formatVerifyUsage,
   INDEX_USAGE,
   MIGRATE_USAGE,
@@ -40,6 +41,7 @@ import {
   parseCommand,
   parseDeprecateArgs,
   parseDiffArgs,
+  parseFormatArgs,
   parseIndexArgs,
   parseMigrateArgs,
   parseNewArgs,
@@ -159,8 +161,13 @@ export async function run(params: RunParams): Promise<ExitCode> {
     return runTagsCommand({ args: parsed.args, cwd, output });
   }
 
-  if (parsed.kind === "check") {
-    return runCheckCommand({ args: parsed.args, cwd, output });
+  if (parsed.kind === "check" || parsed.kind === "format") {
+    return runCheckCommand({
+      args: parsed.args,
+      cwd,
+      isFormat: parsed.kind === "format",
+      output,
+    });
   }
 
   if (parsed.kind === "new") {
@@ -314,25 +321,28 @@ function readRepo(
 }
 
 /**
- * Run `okf check`: read its arguments and config, then report what the spec
- * rules find in the bundles.
+ * Run `okf check`, or `okf format` as `okf check --fix`: read its arguments
+ * and config, then report what the rules find in the bundles, fixing first
+ * what has one obvious fix when asked.
  */
 function runCheckCommand(params: {
   args: readonly string[];
   cwd: string;
+  isFormat: boolean;
   output: Output;
 }): ExitCode {
-  const { args, cwd, output } = params;
-  const parsed = parseCheckArgs(args);
+  const { args, cwd, isFormat, output } = params;
+  const parsed = isFormat ? parseFormatArgs(args) : parseCheckArgs(args);
+  const usage = isFormat ? FORMAT_USAGE : CHECK_USAGE;
 
   if (parsed.kind === "help") {
-    output.info(CHECK_USAGE);
+    output.info(usage);
 
     return EXIT_CODES.ok;
   }
 
   if (parsed.kind === "invalid") {
-    output.error(`${parsed.message}\n\n${CHECK_USAGE}`);
+    output.error(`${parsed.message}\n\n${usage}`);
 
     return EXIT_CODES.failure;
   }
@@ -358,6 +368,7 @@ function runCheckCommand(params: {
       format: options.format,
       houseRules: context.value.rules,
       isChanged: options.isChanged,
+      isFix: isFormat || options.isFix,
       isGitHubActions: process.env.GITHUB_ACTIONS === "true",
       isStrict: options.isStrict,
     });

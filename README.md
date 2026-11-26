@@ -1,6 +1,6 @@
 # ✅ okf-tools
 
-Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions and the okf skills current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3; and `okf check`, which reports problems against the spec's rules. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
+Tools for [Open Knowledge Format](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (OKF) bundles, run as `okf <command>`. Today that's `okf verify`, which signs records off; `okf diff`, which shows what changed since a sign-off; `okf init`, which writes a repo's config and keeps a block of agent instructions and the okf skills current; `okf status`, which reports where every record stands; `okf index`, which keeps each `index.md` in step with its records; `okf tags`, which lists every tag with its record count; `okf migrate`, which moves a v0.1 or v0.2 bundle to v0.3; `okf check`, which reports problems against the spec's rules; and `okf format`, which fixes the ones with one obvious fix. `okf-verify` is the alias for `okf verify`, and prints its lines under its own name.
 
 It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md) (2026-11-18) of the spec's home, `open-knowledge-format/open-knowledge-format`, and every spec link in this repo points to that commit. `okf --version` prints the installed version and the OKF version it follows.
 
@@ -445,9 +445,12 @@ pnpm okf check --strict
 
 # On a pull request: report only what the branch changed
 pnpm okf check --changed
+
+# Fix what has one obvious fix, then report the rest
+pnpm okf format
 ```
 
-`okf check` reads every Markdown file in the bundles that git would track, records, `index.md` and `log.md` alike, and reports what breaks the [spec](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)'s rules, and whether each record's sign-off still holds. It writes nothing.
+`okf check` reads every Markdown file in the bundles that git would track, records, `index.md` and `log.md` alike, and reports what breaks the [spec](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)'s rules, and whether each record's sign-off still holds. It writes nothing unless `--fix` (see [Fixes](#-fixes)).
 
 ```text
 [okf] docs/decisions/log.md:5: error E005 log-date-heading: a log.md date heading must be YYYY-MM-DD (§9); found "May 1"
@@ -482,6 +485,7 @@ pnpm okf check --changed
 | ------------------- | ----------------------------------------------------------------- |
 | `--bundle <dir>`    | A bundle to check, relative to where you run it; repeat for more. |
 | `--changed`         | Report only on what changed since the base branch.                |
+| `--fix`             | Fix what has one obvious fix first, then report the rest.         |
 | `--format <format>` | `text`, the default, or `json`.                                   |
 | `--strict`          | Exit `1` on a warning too.                                        |
 | `--help`, `-h`      | Print the usage.                                                  |
@@ -583,19 +587,20 @@ Conventions the spec leaves open, which a repo turns on in `okf.rules`; their `H
 }
 ```
 
-| Code | Rule                  | Options                                  | Finds                                                                             |
-| ---- | --------------------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
-| H001 | `tags-required`       |                                          | A record with no tags.                                                            |
-| H002 | `tags-sorted`         |                                          | Tags out of alphabetical order, at the first out of place.                        |
-| H003 | `tags-kebab-case`     |                                          | A tag that isn't lower-case words of letters and digits joined by `-`.            |
-| H004 | `tags-vocabulary`     | `tags`, the vocabulary; required         | A tag the vocabulary doesn't list.                                                |
-| H005 | `tags-layout`         | `layout`: `block`, `flow`, or `any`      | `tags` written in the other layout; `any`, the default, finds nothing.            |
-| H006 | `tags-count`          | `min` and `max`, by default `5` and `10` | A record with fewer or more tags.                                                 |
-| H007 | `index-entry-missing` |                                          | A record no line in its nearest `index.md` links to.                              |
-| H008 | `index-entry-stale`   |                                          | A record whose index line differs from the title and description it now has.      |
-| H009 | `index-entry-order`   |                                          | A record whose index line sorts before the line above it, by title ignoring case. |
-| H010 | `source-uncited`      |                                          | A `sources` entry no footnote in the body cites by its `id`.                      |
-| H011 | `wikilink`            |                                          | A `[[wikilink]]` in a record's body, which OKF doesn't read as a link (§6.1).     |
+| Code | Rule                  | Options                                  | Finds                                                                                  |
+| ---- | --------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| H001 | `tags-required`       |                                          | A record with no tags.                                                                 |
+| H002 | `tags-sorted`         |                                          | Tags out of alphabetical order, at the first out of place.                             |
+| H003 | `tags-kebab-case`     |                                          | A tag that isn't lower-case words of letters and digits joined by `-`.                 |
+| H004 | `tags-vocabulary`     | `tags`, the vocabulary; required         | A tag the vocabulary doesn't list.                                                     |
+| H005 | `tags-layout`         | `layout`: `block`, `flow`, or `any`      | `tags` written in the other layout; `any`, the default, finds nothing.                 |
+| H006 | `tags-count`          | `min` and `max`, by default `5` and `10` | A record with fewer or more tags.                                                      |
+| H007 | `index-entry-missing` |                                          | A record no line in its nearest `index.md` links to.                                   |
+| H008 | `index-entry-stale`   |                                          | A record whose index line differs from the title and description it now has.           |
+| H009 | `index-entry-order`   |                                          | A record whose index line sorts before the line above it, by title ignoring case.      |
+| H010 | `source-uncited`      |                                          | A `sources` entry no footnote in the body cites by its `id`.                           |
+| H011 | `wikilink`            |                                          | A `[[wikilink]]` in a record's body, which OKF doesn't read as a link (§6.1).          |
+| H012 | `key-order`           | `order`, the keys to put first; required | A top-level key out of that order; keys it doesn't list belong after it, as they were. |
 
 - **`warn` reports a warning, and `error` an error,** which fails the run.
 - **A name, level, or option `okf check` doesn't know is refused**, so a typo can't turn a rule off unnoticed.
@@ -604,6 +609,47 @@ Conventions the spec leaves open, which a repo turns on in `okf.rules`; their `H
   - An index `okf index` can't read is reported under each index rule turned on.
   - A line linking to a record that's gone is `W115`'s.
 - **A footnote with no source and a broken link are spec rules**, `W108` and `W115`, since upstream checks both.
+
+### 🧹 Fixes
+
+```sh
+# Fix what has one obvious fix, then report the rest
+pnpm okf check --fix
+
+# The same
+pnpm okf format --changed
+```
+
+`okf check --fix`, or `okf format`, fixes the house-rule findings that have one obvious fix, then reports what's left, with the exit code `okf check` would give.
+
+```text
+[okf] Fixed docs/decisions/a.md.
+[okf] Fixed docs/decisions/index.md.
+[okf] 12 files checked: 0 errors, 0 warnings, 0 info.
+```
+
+| Rule                  | Fix                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `tags-sorted`         | Sorts `tags` in place, flow or block, keeping each tag's quotes.                         |
+| `tags-layout`         | With `block`, rewrites a flow list as a block list; a comment after it moves to `tags:`. |
+| `key-order`           | Moves each top-level key, with its lines, into the order `order` lists.                  |
+| `index-entry-missing` | Writes the record's nearest `index.md` as `okf index` would.                             |
+| `index-entry-stale`   | The same.                                                                                |
+| `index-entry-order`   | The same.                                                                                |
+
+- **It fixes only what `okf check` reported**, so `okf.rules` and `okf.exclude` decide what it touches.
+  - Under `--changed`, it fixes only the files the branch changed, and the indexes that list them, not a record reported only for citing a changed file.
+  - It never fixes a record with a `T007` finding, so the fix doesn't hide that source change.
+  - An index fix writes the index as `okf index` would, so its other stale lines and its tag index are synced too.
+- **It never edits `generated` or `verified`**, so a sign-off still holds after a fix, and it commits nothing.
+- **It moves text as written**, with no YAML round-trip, so a fixed record's diff shows only the fix, and every key is kept, unknown and `x-` keys included.
+- **It refuses what it can't move safely**, naming the file and why on stderr, and keeps its findings, which decide the exit code:
+  - frontmatter `okf verify` would refuse, such as YAML that isn't valid;
+  - a `tags` list that's an alias, has an anchor, a tag or a comment among its tags, or holds anything but single values on one line each;
+  - keys with a comment line between two of them.
+- **It writes as `okf verify` does:** never through a symlink, only over a file still holding the text it checked, and all or nothing.
+- **Prettier leaves its output alone,** at Prettier's defaults, so a repo can run both.
+- **Under `--format json`**, the fixes print on stderr and the report of what's left on stdout.
 
 ## 🧭 Agents
 

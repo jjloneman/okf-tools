@@ -57,6 +57,13 @@ export type ParsedFile = {
   get: (key: string) => unknown;
 
   /**
+   * The top-level keys' nodes, in the order they're written.
+   *
+   * @example `[typeKey, titleKey]`
+   */
+  keys: readonly unknown[];
+
+  /**
    * Read a key of a mapping, an alias resolved for either, or `undefined`
    * when the value isn't a mapping.
    *
@@ -666,6 +673,7 @@ export function readParsed(file: CheckedFile): ParsedFile | undefined {
   return {
     file,
     get: (key) => read(map, key),
+    keys: (map?.items ?? []).map(({ key }) => key),
     read,
     resolve: (node) => resolveAlias({ doc, node }),
   };

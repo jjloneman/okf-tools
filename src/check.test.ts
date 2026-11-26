@@ -1,4 +1,4 @@
-import { rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -95,6 +95,13 @@ function check(params: {
   isChanged?: boolean;
 
   /**
+   * Whether `--fix` fixes what it can first.
+   *
+   * @example true
+   */
+  isFix?: boolean;
+
+  /**
    * Whether it runs in GitHub Actions.
    *
    * @example false
@@ -115,6 +122,7 @@ function check(params: {
     format = "text",
     houseRules = {},
     isChanged = false,
+    isFix = false,
     isGitHubActions = false,
     isStrict = false,
   } = params;
@@ -136,6 +144,7 @@ function check(params: {
     format,
     houseRules,
     isChanged,
+    isFix,
     isGitHubActions,
     isStrict,
   });
@@ -652,4 +661,186 @@ describe("runCheck", () => {
     ]);
     expect(infos).toStrictEqual([]);
   });
+});
+
+describe("runCheck --fix", () => {
+  /** Every fixable house rule, turned on. */
+  const FIXABLE: HouseRules = {
+    "index-entry-missing": "error",
+    "key-order": { level: "warn", order: ["type", "title", "tags"] },
+    "tags-layout": { layout: "block", level: "warn" },
+    "tags-sorted": "error",
+  };
+
+  test("fixes what has one obvious fix, then reports what's left", () => {
+    // Given - a record out of order in every fixable way, missing from its index
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write(
+      "kb/z.md",
+      record([
+        "tags: [c, a, b] # kept",
+        "title: A",
+        "type: Decision",
+        "x-acme-owner: data-team",
+        "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+      ])
+    );
+
+    // When - checking with --fix
+    const code = check({ houseRules: FIXABLE, isFix: true });
+
+    // Then - both files fixed, generated untouched, nothing left to report
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([]);
+    expect(infos).toStrictEqual([
+      "Fixed kb/z.md.",
+      "Fixed kb/index.md.",
+      "2 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+    expect(repo.read("kb/z.md")).toBe(
+      record([
+        "type: Decision",
+        "title: A",
+        "tags: # kept",
+        "  - a",
+        "  - b",
+        "  - c",
+        "x-acme-owner: data-team",
+        "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+      ])
+    );
+    expect(repo.read("kb/index.md")).toContain("[A](z.md)");
+  });
+
+  test("prints the fixes on stderr beside a JSON report", () => {
+    // Given - a record with unsorted tags
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("kb/a.md", record(["type: Decision", "tags: [b, a]"]));
+
+    // When - checking with --fix, as JSON
+    const code = check({
+      format: "json",
+      houseRules: { "tags-sorted": "error" },
+      isFix: true,
+    });
+
+    // Then - stdout holds only the report, which finds nothing left
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual(["Fixed kb/a.md."]);
+    expect(infos).toStrictEqual([]);
+    expect((JSON.parse(data.join("")) as CheckReport).findings).toStrictEqual(
+      []
+    );
+  });
+
+  test("names what it can't fix, and keeps its findings", () => {
+    // Given - unsorted tags with an anchor, a flow list under the flow layout,
+    // and an index okf index can't read
+    repo.write("kb/index.md", `${ROOT_INDEX}\n<!-- tag-index:start -->\n`);
+    repo.write("kb/a.md", record(["type: Decision", "tags: &t [b, a]"]));
+    repo.write("kb/b.md", record(["type: Decision", "tags:", "  - a"]));
+
+    // When - checking with --fix
+    const code = check({
+      houseRules: {
+        "index-entry-missing": "warn",
+        "tags-layout": { layout: "flow", level: "warn" },
+        "tags-sorted": "error",
+      },
+      isFix: true,
+    });
+
+    // Then - each named, nothing written, the findings kept
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors).toStrictEqual([
+      "Not fixed: kb/a.md: `tags` has an anchor or a tag; fix the record by hand",
+      expect.stringMatching(/^Not fixed: kb\/index\.md can't be synced: /u),
+    ]);
+    expect(infos.filter((line) => line.startsWith("Fixed"))).toStrictEqual([]);
+    expect(infos.at(-1)).toBe("3 files checked: 1 error, 2 warnings, 0 info.");
+  });
+
+  test("fixes only what changed under --changed", () => {
+    // Given - two records with unsorted tags, one changed since the commit
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("kb/a.md", record(["type: Decision", "tags: [b, a]"]));
+    repo.write("kb/b.md", record(["type: Decision", "tags: [d, c]"]));
+    repo.commitAll("add the records");
+    repo.write("kb/b.md", record(["type: Decision", "tags: [f, e]"]));
+
+    // When - checking with --fix under --changed
+    check({
+      houseRules: { "tags-sorted": "error" },
+      isChanged: true,
+      isFix: true,
+    });
+
+    // Then - only the changed record is fixed
+    expect(repo.read("kb/a.md")).toBe(
+      record(["type: Decision", "tags: [b, a]"])
+    );
+    expect(repo.read("kb/b.md")).toBe(
+      record(["type: Decision", "tags: [e, f]"])
+    );
+  });
+
+  test("leaves a record in scope only for citing a changed file under --changed", () => {
+    // Given - a committed record citing a source, its tags out of order,
+    // and the source changed since
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "export {};\n");
+    repo.write(
+      "kb/a.md",
+      record([
+        "type: Decision",
+        "tags: [b, a]",
+        "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+        "sources: [{ resource: ../src/a.ts }]",
+      ])
+    );
+    repo.commitAll("add the record");
+    repo.write("src/a.ts", "export const a = 1;\n");
+
+    // When - checking with --fix under --changed
+    check({
+      houseRules: { "tags-sorted": "error" },
+      isChanged: true,
+      isFix: true,
+    });
+
+    // Then - the record left as it was, its finding still reported
+    expect(repo.read("kb/a.md")).toContain("tags: [b, a]");
+    expect(infos.some((line) => line.includes("H002 tags-sorted"))).toBe(true);
+  });
+
+  test.skipIf(process.getuid?.() === 0)(
+    "fails, writing nothing, when a write fails",
+    () => {
+      // Given - two records to fix, the second read-only
+      repo.write("kb/index.md", ROOT_INDEX);
+      repo.write("kb/a.md", record(["type: Decision", "tags: [b, a]"]));
+      repo.write("kb/b.md", record(["type: Decision", "tags: [d, c]"]));
+      chmodSync(path.join(repo.root, "kb/b.md"), 0o444);
+
+      // When - checking with --fix
+      let code: number;
+
+      try {
+        code = check({ houseRules: { "tags-sorted": "error" }, isFix: true });
+      } finally {
+        chmodSync(path.join(repo.root, "kb/b.md"), 0o644);
+      }
+
+      // Then - a failure naming the file, the first restored
+      expect(code).toBe(EXIT_CODES.failure);
+      expect(errors).toStrictEqual([
+        expect.stringMatching(
+          /^Couldn't write kb\/b\.md: .*\nNo files changed\.$/su
+        ),
+      ]);
+      expect(repo.read("kb/a.md")).toBe(
+        record(["type: Decision", "tags: [b, a]"])
+      );
+    }
+  );
 });

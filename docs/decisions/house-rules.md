@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: Which house rules okf check runs, and how a repo turns them on
-description: "`okf check` runs okf-tools' own `H` rules on conventions the spec leaves open, tags, index lines, uncited sources and wikilinks, each off until `okf.rules` names it at `warn` or `error`, as ESLint takes rules; a convention upstream's validate.py checks, such as a footnote with no source or a broken link, is a spec rule instead."
+description: "`okf check` runs okf-tools' own `H` rules on conventions the spec leaves open, tags, key order, index lines, uncited sources and wikilinks, each off until `okf.rules` names it at `warn` or `error`, as ESLint takes rules; a convention upstream's validate.py checks, such as a footnote with no source or a broken link, is a spec rule instead."
 tags:
   - checks
   - config
@@ -19,7 +19,7 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:51:12Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:20:10Z }
 ---
 
 # Which house rules okf check runs, and how a repo turns them on
@@ -38,6 +38,7 @@ As of 2026-11-26, from `src/house-rules.ts`, `src/spec-rules.ts`, `src/index-syn
 - **Codes start with `H`**, a range `validate.py` doesn't use, like the trust rules' `T`.
 - **The rules, as of 2026-11-26:**
   - tags: `tags-required`, `tags-sorted`, `tags-kebab-case`, `tags-vocabulary` with its `tags`, `tags-layout` with `block`, `flow` or `any` (the default; see [How a record's tags are laid out](tags-layout.md)), and `tags-count` with `min` and `max`, by default 5 and 10, from #66;
+  - keys: `key-order` with its `order`, from #47 (see [What okf check --fix fixes, and how it writes](fixes.md));
   - index: `index-entry-missing`, `index-entry-stale` and `index-entry-order`;
   - sources: `source-uncited`, a `sources` entry no footnote cites;
   - links: `wikilink`, a `[[wikilink]]`, which §6.1 says isn't a link[^okf-spec].
@@ -67,13 +68,14 @@ As of 2026-11-26, from `src/house-rules.ts`, `src/spec-rules.ts`, `src/index-syn
 
 ## Consequences
 
-- #47's planned `okf check --fix` is to fix what these rules find where the fix is mechanical, such as sorted tags and `tags-layout: block`.
+- `okf check --fix` fixes what these rules find where the fix is mechanical, such as sorted tags and `tags-layout: block` (see [What okf check --fix fixes, and how it writes](fixes.md)).
 - #66's planned audit is to read `tags-count`'s findings to find sparse records.
 - The other path fields `validate.py` checks, `resource`, `computation`, `executor.resource` and `attester.resource`, wait; `T008` already fails a missing `sources[].resource` in the repo.
 
 ## Links
 
 - [#46](https://github.com/jjloneman/okf-tools/issues/46) — the house rules, with the comment that aligned them with v0.3.
+- [#47](https://github.com/jjloneman/okf-tools/issues/47) — `key-order`, and the fixes.
 - [#65](https://github.com/jjloneman/okf-tools/issues/65) — `tags-layout`.
 - [#66](https://github.com/jjloneman/okf-tools/issues/66) — `tags-count`, and the tag audit that reads it.
 

@@ -448,6 +448,59 @@ describe("run as okf check", () => {
     ]);
   });
 
+  test.each([
+    { args: ["check", "--fix"], description: "okf check --fix" },
+    { args: ["format"], description: "okf format" },
+  ])("fixes what it can under $description", async ({ args }) => {
+    // Given - a record whose tags are out of order, and the rule on
+    repo.write(
+      "package.json",
+      `${JSON.stringify({
+        okf: { bundles: ["kb"], rules: { "tags-sorted": "error" } },
+      })}\n`
+    );
+    repo.write("kb/index.md", rootIndex);
+    repo.write("kb/a.md", record(["type: Decision", "tags: [b, a]"]));
+
+    // When - fixing
+    const code = await run({
+      args,
+      cwd: repo.root,
+      isInteractive: false,
+      program: "okf",
+    });
+
+    // Then - fixed, and nothing left
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      "[okf] Fixed kb/a.md.",
+      "[okf] 2 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+    expect(repo.read("kb/a.md")).toBe(
+      record(["type: Decision", "tags: [a, b]"])
+    );
+  });
+
+  test.each([
+    { args: ["--help"], channel: "info", code: EXIT_CODES.ok },
+    { args: ["--yes"], channel: "error", code: EXIT_CODES.failure },
+    { args: ["kb/a.md"], channel: "error", code: EXIT_CODES.failure },
+  ])("prints okf format's usage for $args", async ({ args, channel, code }) => {
+    // When - asking okf format for help, or passing a verify flag
+    const exitCode = await run({
+      args: ["format", ...args],
+      cwd: repo.root,
+      isInteractive: false,
+      program: "okf",
+    });
+
+    // Then - its own usage
+    expect(exitCode).toBe(code);
+    expect((channel === "info" ? infos : errors).join("\n")).toContain(
+      "usage: okf format [options]"
+    );
+  });
+
   test("prints annotations in GitHub Actions", async () => {
     // Given - a bundle named with --bundle, with a bad log heading
     repo.write("notes/index.md", rootIndex);

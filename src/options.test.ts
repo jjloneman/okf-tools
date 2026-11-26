@@ -6,6 +6,7 @@ import {
   parseCommand,
   parseDeprecateArgs,
   parseDiffArgs,
+  parseFormatArgs,
   parseGuideArgs,
   parseIndexArgs,
   parseInitArgs,
@@ -640,6 +641,26 @@ describe("parseMigrateArgs", () => {
   });
 });
 
+describe("parseFormatArgs", () => {
+  test("reads okf check's flags, naming itself in a usage error", () => {
+    // When/Then - the options, and a path refused as okf format's
+    expect(parseFormatArgs(["--changed"])).toStrictEqual({
+      kind: "options",
+      options: {
+        bundles: [],
+        format: "text",
+        isChanged: true,
+        isFix: false,
+        isStrict: false,
+      },
+    });
+    expect(parseFormatArgs(["kb/a.md"])).toStrictEqual({
+      kind: "invalid",
+      message: "okf format takes no paths, but was given kb/a.md.",
+    });
+  });
+});
+
 describe("parseCheckArgs", () => {
   test.each([
     {
@@ -649,6 +670,7 @@ describe("parseCheckArgs", () => {
         bundles: [],
         format: "text",
         isChanged: false,
+        isFix: false,
         isStrict: false,
       },
     },
@@ -659,15 +681,17 @@ describe("parseCheckArgs", () => {
         "--bundle",
         "b",
         "--changed",
+        "--fix",
         "--format",
         "json",
         "--strict",
       ],
-      description: "bundles, --changed, --format json, and --strict",
+      description: "bundles, --changed, --fix, --format json, and --strict",
       options: {
         bundles: ["a", "b"],
         format: "json",
         isChanged: true,
+        isFix: true,
         isStrict: true,
       },
     },

@@ -141,6 +141,73 @@ export function findNearestIndex(params: {
 }
 
 /**
+ * Work out each named index's synced text, as `okf index` would write it,
+ * writing nothing, for `okf check --fix`.
+ *
+ * @returns an edit for each index that differs, and why each that can't be
+ * synced can't, naming it.
+ */
+export function planIndexSyncs(params: {
+  context: BundleContext;
+  indexPaths: readonly string[];
+}): Outcome<{ edits: RecordEdit[]; refusals: string[] }> {
+  const { context, indexPaths } = params;
+  const { bundleDirs, excludeGlobs, repoRoot } = context;
+
+  const loaded = loadCandidates({
+    bundleDirs,
+    excludeGlobs,
+    isReadOnly: true,
+    repoRoot,
+    verifiedBy: NO_SIGNER,
+  });
+
+  if (!loaded.isOk) {
+    return loaded;
+  }
+
+  const records = loaded.value.candidates.map((candidate) =>
+    toIndexRecord(candidate)
+  );
+  const scopes = groupByIndex({
+    bundleDirs,
+    excludeGlobs,
+    records,
+    repoRoot,
+    skipped: loaded.value.skipped,
+  });
+  const edits: RecordEdit[] = [];
+  const refusals: string[] = [];
+
+  for (const indexPath of indexPaths) {
+    const planned = planSync({
+      indexPath,
+      records,
+      repoRoot,
+      scope: scopes.get(indexPath) ?? { records: [], skipped: [] },
+    });
+
+    if (planned.kind === "refused") {
+      refusals.push(`${indexPath} can't be synced: ${planned.reason}`);
+    } else if (planned.text === planned.originalText) {
+      // The rule and `okf index` disagree on which index lists a record,
+      // such as one `okf.exclude` leaves out, so say why nothing changed.
+      refusals.push(
+        `${indexPath} is as okf index would write it, which lists the record in another index, such as one okf.exclude leaves out`
+      );
+    } else {
+      edits.push({
+        filePath: indexPath,
+        originalText: planned.originalText,
+        text: planned.text,
+      });
+    }
+  }
+
+  return { isOk: true, value: { edits, refusals } };
+}
+
+/**
  * Work out the index a new record would be listed in, synced with it as
  * `okf index` syncs it, before the record is written.
  *
