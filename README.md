@@ -710,7 +710,7 @@ The agent signs as the person (the configured `okf.verifiedBy`), since the appro
 
 - **okf-tools never writes `verified`, and neither does any skill.** The person signs a record off with `okf verify`, or an agent runs `okf verify --yes` when they ask it to, naming the records.
 - **No skill types a timestamp:** `okf new` and `okf touch` stamp `generated` from the clock.
-- **For what goes in a record**, such as sources, footnotes, and types, `okf-record` points at upstream's [okf-generate](https://github.com/open-knowledge-format/open-knowledge-format/tree/527e81aff55992be21507e97004286789126f88c/skills/okf-generate) skill. The one difference: okf-generate records a `human:<id>` verification when the person confirms the content, while okf-tools leaves every sign-off to `okf verify`.
+- **For what goes in a record**, such as sources, footnotes, and types, `okf-record` points at upstream's [okf-generate](https://github.com/open-knowledge-format/open-knowledge-format/tree/527e81aff55992be21507e97004286789126f88c/skills/okf-generate) skill. It also says to cite in `sources` the repo files a record was written from, so `okf check` warns when one changes. Where okf-generate records a `human:<id>` verification when the person confirms the content, okf-tools leaves every sign-off to `okf verify`.
 - `okf guide` lists each skill and when to load it.
 - A skill is rewritten whole on every `okf init`, so to change one, copy it to a folder with another name, set its `name` to match, and delete its `Written by` line.
 

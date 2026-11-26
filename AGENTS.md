@@ -214,6 +214,7 @@ Why the package works the way it does is recorded in [docs/decisions/](docs/deci
 
 - One Markdown file per decision, listed in [docs/decisions/index.md](docs/decisions/index.md), with tags from its vocabulary; after adding, removing or retitling one, run `pnpm okf:index` to rewrite its line.
 - **Base a record on the code and the closed threads**, not on memory: re-read the code before stating a flag, an exit code, or a fallback order, and date-stamp facts that can drift ("as of 2026-11-11").
+- **Cite each code or config file a record was written from in its `sources`**, with `resource` relative to the record's folder (`../../src/git.ts`) and a footnote on the claim it supports, so `okf check` warns (`T007`) when one changes after the record was written or signed off. Cite files, or a folder only when the record covers all of it; not `README.md`, `AGENTS.md` or `package.json`, which change in most PRs or in every release, and not `src/options.ts` or `src/cli.ts`, which nearly every feature touches.
 - **An agent writes a record as `status: draft`** and records itself in `generated`, as `<producer>/<version>` (`claude-code/<claude --version>` or `claude-code/<model-id>`); it never adds a `verified` entry on its own.
 - **An agent verifies only when the owner asks**, with `pnpm okf:verify --yes <paths>`, naming the files rather than passing `--changed` unless the owner asked for every changed record.
 - **Check a record's `verified` before changing the behavior it describes:**

@@ -92,6 +92,20 @@ describe("okf-record", () => {
     expect(section).toContain("Don't run `okf touch`");
     expect(section).toContain("tags-count");
   });
+
+  test("cites the repo files a record was written from", () => {
+    // Given - the record skill's text
+    const { text } = RECORD_SKILL;
+
+    // When/Then - it says to list them in sources, footnoted by id
+    expect(text).toContain(
+      "List in `sources` each repo file or folder the record was written from"
+    );
+    expect(text).toContain("whose label is the source's `id`");
+    expect(text).toContain(
+      "Add a `sources` entry for each repo file or folder"
+    );
+  });
 });
 
 describe("judgeSkill", () => {
