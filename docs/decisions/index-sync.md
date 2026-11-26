@@ -11,8 +11,18 @@ tags:
   - refusals
   - safety
   - tags
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:24:40Z }
+sources:
+  - id: index-sync
+    resource: ../../src/index-sync.ts
+    title: src/index-sync.ts, the rewrite of one index.md
+  - id: index-command
+    resource: ../../src/index-command.ts
+    title: src/index-command.ts, the okf index command
+  - id: tags
+    resource: ../../src/tags.ts
+    title: src/tags.ts, the okf tags command
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -22,7 +32,7 @@ A bundle's `index.md` repeats each record's title and description on one line, s
 
 ## Decision
 
-As of 2026-11-25, from `src/index-sync.ts`, `src/index-command.ts`, `src/tags.ts`, `src/options.ts`, and `src/cli.ts`:
+As of 2026-11-25, from `src/index-sync.ts`[^index-sync], `src/index-command.ts`[^index-command], `src/tags.ts`[^tags], `src/options.ts`, and `src/cli.ts`:
 
 - **Only record lines are rewritten:** a top-level list item that opens with a link to a record. Its link text becomes the `title`, escaped, or the file name with none; what follows becomes the `description` on one line, after the separator the line already uses.
   - The target, anything indented under the line, the frontmatter (such as a root index's `okf_version`), headings, prose, fenced code, and every other line are kept as written.
@@ -56,3 +66,9 @@ As of 2026-11-25, from `src/index-sync.ts`, `src/index-command.ts`, `src/tags.ts
 - [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which asked for `okf tags`
 - [How a record's tags are laid out](tags-layout.md)
 - [What `okf init` writes, and how it keeps the agent block current](init.md)
+
+[^index-sync]: `src/index-sync.ts`, the rewrite of one `index.md`.
+
+[^index-command]: `src/index-command.ts`, the `okf index` command.
+
+[^tags]: `src/tags.ts`, the `okf tags` command.

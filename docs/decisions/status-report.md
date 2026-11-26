@@ -16,8 +16,20 @@ sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:48:12Z }
+  - id: status
+    resource: ../../src/status.ts
+    title: src/status.ts, the okf status command
+  - id: repo
+    resource: ../../src/repo.ts
+    title: src/repo.ts, the file-system work on records
+  - id: frontmatter-read
+    resource: ../../src/frontmatter/read.ts
+    title: src/frontmatter/read.ts, the record state and trust tier reads
+  - id: frontmatter-types
+    resource: ../../src/frontmatter/types.ts
+    title: src/frontmatter/types.ts, the public types and constants
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -27,7 +39,7 @@ Repos tell agents to check a record's `verified` before changing the behavior it
 
 ## Decision
 
-As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/repo.ts`, `src/frontmatter/read.ts`, and `src/frontmatter/types.ts`:
+As of 2026-11-25, from `src/status.ts`[^status], `src/options.ts`, `src/cli.ts`, `src/repo.ts`[^repo], `src/frontmatter/read.ts`[^frontmatter-read], and `src/frontmatter/types.ts`[^frontmatter-types]:
 
 - **Each record is listed under one group, the first that fits**, in this order:
   - `changed`: signed off, then regenerated since, whatever its `status`; a sign-off ahead of the clock counts, as it does for `okf verify`;
@@ -72,3 +84,11 @@ As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/rep
 - [Which actors can sign a record](actor.md)
 
 [^okf-spec]: OKF v0.3: §5.5, `stale_after`, an absolute instant, stale when `now >= stale_after`; §5.3, Trust tiers; and §7, which gives only the `human:` scheme the human-reviewed tier.
+
+[^status]: `src/status.ts`, the `okf status` command.
+
+[^repo]: `src/repo.ts`, the file-system work on records.
+
+[^frontmatter-read]: `src/frontmatter/read.ts`, the record state and trust tier reads.
+
+[^frontmatter-types]: `src/frontmatter/types.ts`, the public types and constants.

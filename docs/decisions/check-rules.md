@@ -19,8 +19,17 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:42:51Z }
+  - id: check
+    resource: ../../src/check.ts
+    title: src/check.ts, the okf check command
+  - id: check-engine
+    resource: ../../src/check-engine.ts
+    title: src/check-engine.ts, the check engine
+  - id: spec-rules
+    resource: ../../src/spec-rules.ts
+    title: src/spec-rules.ts, the rules the spec states
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -30,7 +39,7 @@ verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 
 ## Decision
 
-As of 2026-11-25, from `src/check.ts`, `src/check-engine.ts`, `src/spec-rules.ts`, and `src/options.ts`:
+As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engine], `src/spec-rules.ts`[^spec-rules], and `src/options.ts`:
 
 - **Rules run on a pure engine.** A rule gets one file, read once with the frontmatter parser `okf verify` uses, or a whole bundle, and returns lines and messages; the engine adds its code, name, severity, and path. Later rule sets, such as #45's trust rules, add to a list.
 - **Each rule takes the code, severity, and wording of upstream's `validate.py`** at the pinned commit, and a kebab-case name beside it, so the two tools report a finding the same way.
@@ -73,3 +82,9 @@ As of 2026-11-25, from `src/check.ts`, `src/check-engine.ts`, `src/spec-rules.ts
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 
 [^validate-py]: The checker in the spec repo's `okf-generate` skill, Python and PyYAML.
+
+[^check]: `src/check.ts`, the `okf check` command.
+
+[^check-engine]: `src/check-engine.ts`, the check engine.
+
+[^spec-rules]: `src/spec-rules.ts`, the rules the spec states.

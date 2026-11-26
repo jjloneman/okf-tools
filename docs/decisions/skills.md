@@ -12,8 +12,21 @@ tags:
   - timestamps
   - upstream
   - verification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:39:09Z }
+sources:
+  - id: skills
+    resource: ../../src/skills.ts
+    title: src/skills.ts, the skills okf init installs
+  - id: init
+    resource: ../../src/init.ts
+    title: src/init.ts, the okf init command
+  - id: guide
+    resource: ../../src/guide.ts
+    title: src/guide.ts, the okf guide text and record rules
+  - id: tag-rules
+    resource: ../../src/tag-rules.ts
+    title: src/tag-rules.ts, how an agent chooses a record's tags
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:55:26Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -23,10 +36,10 @@ A CLI can't write a record's prose; an agent can, but it needs to be told how, a
 
 ## Decision
 
-As of 2026-11-25, from `src/skills.ts`, `src/init.ts`, `src/guide.ts`, and the README:
+As of 2026-11-25, from `src/skills.ts`[^skills], `src/init.ts`[^init], `src/guide.ts`[^guide], and the README:
 
 - **Three skills ship, one constant each in `src/skills.ts`:**
-  - **`okf-record`** is the trust workflow around a record: start it with `okf new`, re-stamp it with `okf touch --draft` after every edit apart from a change to `tags` alone, keep it `status: draft`, write `tags` by the shared rules in `src/tag-rules.ts`, which `okf guide` prints too, and leave sign-off to `okf verify`.
+  - **`okf-record`** is the trust workflow around a record: start it with `okf new`, re-stamp it with `okf touch --draft` after every edit apart from a change to `tags` alone, keep it `status: draft`, write `tags` by the shared rules in `src/tag-rules.ts`[^tag-rules], which `okf guide` prints too, and leave sign-off to `okf verify`.
     - Its tag audit finds records with too few or too many tags, proposes every new list in one table, and writes only the lists the person approves, without re-stamping them (see [How okf new and okf touch stamp generated](new-and-touch.md)).
   - **`okf-review`** reads `okf status --format json` and `okf diff`, and summarizes for the person what changed in meaning in each record since their last sign-off, and what to check; it writes nothing.
   - **`okf-architecture`** creates, updates, or audits a `type: Architecture` record written from the code it lists in `sources`, from a fixed outline, with every claim footnoted to a source. Each version of the record names the commit it was written from, and an update rewrites only the sections whose cited sources changed since that commit; an audit reports one verdict per claim and edits nothing.
@@ -34,6 +47,7 @@ As of 2026-11-25, from `src/skills.ts`, `src/init.ts`, `src/guide.ts`, and the R
   - **Rejected:** a record skill that restates the content rules.
   - Where the two differ, okf-record wins in a repo that uses okf-tools. **okf-generate records a `human:<id>` verification once the person confirms the content; okf-tools never writes `verified`**, and neither does any of its skills: the person signs off with `okf verify`, or an agent runs `okf verify --yes` only when asked, naming the records.
   - okf-generate's examples write `tags` as a one-line list; okf-record says to write a block list, per [How a record's tags are laid out](tags-layout.md).
+  - okf-record also says to cite in `sources` each repo file a record was written from, since that's what lets `okf check`'s source rules warn when the code moves after a sign-off (issue #133).
 - **No skill writes a timestamp or tells an agent how to type one.** A new record comes from `okf new` and an edited one is re-stamped by `okf touch`, per [How okf new and okf touch stamp generated](new-and-touch.md).
 - **`okf init` writes each skill to `.claude/skills/<name>/SKILL.md`, whole,** where Claude Code finds a repo's skills, and `--check` fails when one is missing or out of date.
   - Each file carries a marker line after its frontmatter, so a refresh rewrites only a file an earlier `okf init` wrote. A file there without the marker is someone's own skill, and is refused, writing nothing.
@@ -59,3 +73,11 @@ As of 2026-11-25, from `src/skills.ts`, `src/init.ts`, `src/guide.ts`, and the R
 - [What `okf init` writes, and how it keeps the agent block current](init.md)
 - [What `okf guide` prints, and where the agent rules are written](guide.md)
 - [Who verifies a record](who-verifies.md)
+
+[^skills]: `src/skills.ts`, the skills `okf init` installs.
+
+[^init]: `src/init.ts`, the `okf init` command.
+
+[^guide]: `src/guide.ts`, the `okf guide` text and record rules.
+
+[^tag-rules]: `src/tag-rules.ts`, how an agent chooses a record's tags.

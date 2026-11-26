@@ -22,8 +22,11 @@ sources:
   - id: okf-kit
     resource: https://www.npmjs.com/package/okf-kit/v/0.22.0
     title: okf-kit 0.22.0 on npm
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:25:28Z }
+  - id: spec-rules
+    resource: ../../src/spec-rules.ts
+    title: src/spec-rules.ts, the rules the spec states
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-25T21:48:46Z }
 ---
 
@@ -35,7 +38,7 @@ verified: { by: human:jjloneman, at: 2026-11-25T21:48:46Z }
 
 As of 2026-11-25, from the trial in #40:
 
-- **okf-tools builds the spec rules into `okf check` itself**, on the engine #44 adds and the frontmatter reader `okf verify` already uses.
+- **okf-tools builds the spec rules into `okf check` itself**[^spec-rules], on the engine #44 adds and the frontmatter reader `okf verify` already uses.
   - **Rejected:** calling okf-lint[^okf-lint] as a library inside `okf check`. It has a `lint()` export and per-rule severities, but it reads YAML with the default schema rather than okf-tools' failsafe one, so `check` and `verify` could disagree about a record; it has one maintainer and no stated plan for v0.3.
   - **Rejected:** recommending okf-kit[^okf-kit] beside `okf check`. It's a command with no library export, so users would run two tools, one per bundle; it assumes v0.1 unless a bundle declares `okf_version`, and it misjudges a repo with several bundles when run from the root.
   - **Rejected:** okfit[^okfit]. It needs Node 24.11 and 77 packages, errors on two cases #44 keeps as warnings, and its `sync` and `verify` overlap okf-tools' own sign-off.
@@ -81,3 +84,5 @@ As of 2026-11-25, on one fabricated git repo with two bundles, every file hashed
 [^okf-lint]: An opinionated OKF linter with a programmatic API, the version tried; MIT, one maintainer, released 2026-10-31.
 
 [^okf-kit]: A command that checks OKF v0.1 and v0.2 bundles, part of a larger project, the version tried; MIT.
+
+[^spec-rules]: `src/spec-rules.ts`, the rules the spec states.

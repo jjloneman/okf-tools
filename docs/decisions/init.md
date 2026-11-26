@@ -13,8 +13,21 @@ tags:
   - safety
   - skills
   - tags
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
+sources:
+  - id: init
+    resource: ../../src/init.ts
+    title: src/init.ts, the okf init command
+  - id: agent-block
+    resource: ../../src/agent-block.ts
+    title: src/agent-block.ts, the agent block's text and markers
+  - id: guide
+    resource: ../../src/guide.ts
+    title: src/guide.ts, the okf guide text and record rules
+  - id: tag-rules
+    resource: ../../src/tag-rules.ts
+    title: src/tag-rules.ts, how an agent chooses a record's tags
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -24,7 +37,7 @@ Each repo that uses okf-tools hand-wrote its OKF rules for agents, and the copie
 
 ## Decision
 
-As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, and the README:
+As of 2026-11-25, from `src/init.ts`[^init], `src/agent-block.ts`[^agent-block], `src/options.ts`, and the README:
 
 - **The block sits between two whole lines, `<!-- okf:start -->` and `<!-- okf:end -->`,** and only the text between them is ever rewritten. A marker must start its line, so one quoted in an indented code block isn't taken for one; one quoted in a ``` fence still is, and is then refused as a repeat. A byte order mark before the first line is kept and skipped.
   - **Rejected:** owning the whole file, which would overwrite a repo's own rules.
@@ -43,9 +56,9 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
 - **It writes the okf skills to `.claude/skills/<name>/SKILL.md`,** whole, refreshing only a file an earlier `okf init` wrote, and refusing one it didn't, writing nothing (#51); see [Which skills okf-tools ships, and how okf init installs them](skills.md).
 - **`okf init --check` writes nothing,** and exits `1` when a target is missing, has no block, has a stale one, or has malformed markers, or when a skill is missing, stale, or not its own; it checks the blocks and the skills, not the config. `--check` takes no `--bundle` or `--by`.
 - **The block's text is one constant, `AGENT_BLOCK`,** which the README's Agents section quotes, and a test keeps the two the same, so the rules are written once.
-  - Its intro and rules come from `src/guide.ts`, which `okf guide` prints too, and it ends with a line pointing at `okf guide` for the commands (#50); see [What `okf guide` prints](guide.md).
+  - Its intro and rules come from `src/guide.ts`[^guide], which `okf guide` prints too, and it ends with a line pointing at `okf guide` for the commands (#50); see [What `okf guide` prints](guide.md).
   - It names only commands that exist: `okf tags` (#53) is how its tag rules list the bundles' tags, and `okf init` then brings every repo up to date.
-  - It ends with the tag rules from `src/tag-rules.ts` (#66), which the okf-record skill quotes too: 5 to 10 specific tags that reuse the bundle's own, a block list per [How a record's tags are laid out](tags-layout.md), no re-stamp for a change to `tags` alone, and the repo's tag house rules winning where `okf.rules` turns one on.
+  - It ends with the tag rules from `src/tag-rules.ts`[^tag-rules] (#66), which the okf-record skill quotes too: 5 to 10 specific tags that reuse the bundle's own, a block list per [How a record's tags are laid out](tags-layout.md), no re-stamp for a change to `tags` alone, and the repo's tag house rules winning where `okf.rules` turns one on.
 
 ## Why
 
@@ -63,3 +76,11 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
 - [Which skills okf-tools ships, and how okf init installs them](skills.md)
 - [How a record's tags are laid out](tags-layout.md)
 - [Who verifies a record](who-verifies.md)
+
+[^init]: `src/init.ts`, the `okf init` command.
+
+[^agent-block]: `src/agent-block.ts`, the agent block's text and markers.
+
+[^guide]: `src/guide.ts`, the `okf guide` text and record rules.
+
+[^tag-rules]: `src/tag-rules.ts`, how an agent chooses a record's tags.

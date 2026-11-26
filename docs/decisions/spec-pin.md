@@ -20,8 +20,14 @@ sources:
   - id: gcp-deprecated
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:39:09Z }
+  - id: upstream-pin
+    resource: ../../spec/upstream.json
+    title: spec/upstream.json, the pin of the spec okf-tools follows
+  - id: version
+    resource: ../../src/version.ts
+    title: src/version.ts, the spec version okf-tools supports
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -31,12 +37,12 @@ As of 2026-11-25, the spec has no releases or tags and has moved homes twice, so
 
 ## Decision
 
-As of 2026-11-25, from `spec/upstream.json` and issues #89 and #59:
+As of 2026-11-25, from `spec/upstream.json`[^upstream-pin] and issues #89 and #59:
 
 - **okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`**, at `SPEC.md`.
   - **Rejected:** staying on `GoogleCloudPlatform/knowledge-catalog`'s `okf/SPEC.md`, which that repo now calls a frozen snapshot[^catalog-frozen].
   - **Rejected:** `GoogleCloudPlatform/open-knowledge-format`, marked deprecated on 2026-11-18[^gcp-deprecated].
-- **The pin is the v0.3 text, at commit `527e81a`**[^okf-spec], the last commit to `SPEC.md` as of 2026-11-25, released 2026-11-18. `SUPPORTED_SPEC_VERSION` in `src/version.ts` names the same version, for `okf --version` and `okf migrate`.
+- **The pin is the v0.3 text, at commit `527e81a`**[^okf-spec], the last commit to `SPEC.md` as of 2026-11-25, released 2026-11-18. `SUPPORTED_SPEC_VERSION` in `src/version.ts`[^version] names the same version, for `okf --version` and `okf migrate`.
   - Before it, the pin was the v0.2 text at `0b87c52`, byte-identical to the `62432a0` text okf-tools was written against; moving the home first and the version second kept each change reviewable on its own (#89, #59).
   - **Rejected:** pinning v0.3 in the same change as the move; v0.3 has breaking changes, so adopting it was a PR of its own, prompted by the spec watch.
 - **Adopting v0.3 ships with `okf migrate`**, so a bundle can follow the pin without its paths quietly changing meaning (see [How okf migrate moves a bundle to OKF v0.3](migrate.md)).
@@ -70,3 +76,7 @@ As of 2026-11-25, from `spec/upstream.json` and issues #89 and #59:
 [^catalog-frozen]: knowledge-catalog's `okf/README.md` calls the `okf/` folder a frozen snapshot and points to `GoogleCloudPlatform/open-knowledge-format`.
 
 [^gcp-deprecated]: The commit that marks `GoogleCloudPlatform/open-knowledge-format` deprecated and points to `open-knowledge-format/open-knowledge-format`.
+
+[^upstream-pin]: `spec/upstream.json`, the pin of the spec okf-tools follows.
+
+[^version]: `src/version.ts`, the spec version okf-tools supports.

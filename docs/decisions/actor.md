@@ -18,18 +18,24 @@ sources:
   - id: yaml-spec
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
+  - id: config
+    resource: ../../src/config.ts
+    title: src/config.ts, which reads the okf block of package.json
+  - id: frontmatter-edit
+    resource: ../../src/frontmatter/edit.ts
+    title: src/frontmatter/edit.ts, verifyRecord's position-based edits
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # Which actors can sign a record
 
-`okf-verify` writes the signer into an inline entry, `verified: { by: <actor>, at: <timestamp> }`, editing only the characters that change. As of 2026-11-25, the entry itself is written by the `yaml` package (`formatEntry` in `src/frontmatter/edit.ts`), which would quote an actor that needed it. The rule below keeps every actor one YAML reads back as the same string unquoted, so the entries it writes keep the unquoted shape people and agents write by hand.
+`okf-verify` writes the signer into an inline entry, `verified: { by: <actor>, at: <timestamp> }`, editing only the characters that change. As of 2026-11-25, the entry itself is written by the `yaml` package (`formatEntry` in `src/frontmatter/edit.ts`[^frontmatter-edit]), which would quote an actor that needed it. The rule below keeps every actor one YAML reads back as the same string unquoted, so the entries it writes keep the unquoted shape people and agents write by hand.
 
 ## Decision
 
-As of 2026-11-11, from `src/config.ts`:
+As of 2026-11-11, from `src/config.ts`[^config]:
 
 - **Who signs** comes from `--by <actor>`, else `okf.verifiedBy` in `package.json`. With neither, the run stops with exit `1` and, as of 2026-11-25, an error naming the `package.json` it read; there's no default actor.
 - **An actor must:**
@@ -54,3 +60,7 @@ As of 2026-11-11, from `src/config.ts`:
 [^okf-spec]: OKF v0.3 §7's actor convention: `<producer>/<version>` for agents and tools, and `<scheme>:<id>` for other actors, such as `human:<id>` for people, `team:<id>` for groups, and `process:<id>` for automated processes.
 
 [^yaml-spec]: YAML 1.2.2 plain scalars, flow collections, and indicator characters.
+
+[^config]: `src/config.ts`, which reads the `okf` block of `package.json`.
+
+[^frontmatter-edit]: `src/frontmatter/edit.ts`, `verifyRecord`'s position-based edits.

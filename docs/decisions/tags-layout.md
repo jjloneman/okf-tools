@@ -15,8 +15,20 @@ sources:
   - id: prettier-print-width
     resource: https://prettier.io/docs/options#print-width
     title: Prettier options, print width
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T04:06:07Z }
+  - id: tags
+    resource: ../../src/tags.ts
+    title: src/tags.ts, the okf tags command
+  - id: house-rules
+    resource: ../../src/house-rules.ts
+    title: src/house-rules.ts, the opt-in house rules
+  - id: frontmatter-format
+    resource: ../../src/frontmatter/format.ts
+    title: src/frontmatter/format.ts, the --fix formatting edits
+  - id: tag-rules
+    resource: ../../src/tag-rules.ts
+    title: src/tag-rules.ts, how an agent chooses a record's tags
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
@@ -43,10 +55,10 @@ As of 2026-11-25:
 - **Records keep any valid layout.** okf-tools reads all of them; it recommends block only for new records and for records a fix rewrites.
 - **Agents list a bundle's tags with a command that reads frontmatter,** not with `grep '^tags:'`, which misses a block list.
 - **The tools follow it,** as of 2026-11-26:
-  - `okf tags` prints every tag with its record count, with `--format json` for scripts, as `okf status` takes it (issue #53);
-  - the opt-in `tags-layout` house rule (`H005`) takes `block`, `flow` or `any`, default `any` (issue #46);
-  - `check --fix`, with `tags-layout: block` on, rewrites a flow `tags` list as a block list: a flat list of plain scalars, `tags` only, keeping a comment on the `tags` line and refusing anchors, quoted keys or nested values (issue #47);
-  - the agent-instructions block `okf init` writes says to write `tags` as a block list and to list them with `okf tags` (issues #49 and #53);
+  - `okf tags` prints every tag with its record count, with `--format json` for scripts, as `okf status` takes it[^tags] (issue #53);
+  - the opt-in `tags-layout` house rule (`H005`) takes `block`, `flow` or `any`, default `any`[^house-rules] (issue #46);
+  - `check --fix`, with `tags-layout: block` on, rewrites a flow `tags` list as a block list: a flat list of plain scalars, `tags` only, keeping a comment on the `tags` line and refusing anchors, quoted keys or nested values[^frontmatter-format] (issue #47);
+  - the agent-instructions block `okf init` writes says to write `tags` as a block list and to list them with `okf tags`[^tag-rules] (issues #49 and #53);
   - the record skill drafts `tags` as a block list (issue #51).
 
 ## Why
@@ -63,7 +75,7 @@ So a block list is the only layout that holds at any length with no config in ea
 ## Consequences
 
 - Existing bundles keep their one-line flow lists; nothing forces a change, and the #47 fix converts them only when a bundle turns the rule on.
-- This bundle's own records keep one-line flow lists, which are all short enough today.
+- As of 2026-11-26, this bundle's own records use block lists.
 - Another OKF tool that reads `tags` with a regex would miss a block list; any YAML parser reads both, as the spec requires.
 
 ## Links
@@ -71,3 +83,11 @@ So a block list is the only layout that holds at any length with no config in ea
 - Issue #65, which chose the layout.
 
 [^prettier-print-width]: Prettier's `printWidth` defaults to 80, the line length it wraps at.
+
+[^tags]: `src/tags.ts`, the `okf tags` command.
+
+[^house-rules]: `src/house-rules.ts`, the opt-in house rules.
+
+[^frontmatter-format]: `src/frontmatter/format.ts`, the `--fix` formatting edits.
+
+[^tag-rules]: `src/tag-rules.ts`, how an agent chooses a record's tags.
