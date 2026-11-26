@@ -22,6 +22,7 @@ It follows OKF v0.3 as of commit [`527e81a`](https://github.com/open-knowledge-f
 - [🪦 Deprecate](#-deprecate)
 - [🚚 Migrate](#-migrate)
 - [🩺 Check](#-check)
+  - [🤖 In GitHub Actions](#-in-github-actions)
   - [📏 Rules](#-rules)
 - [🧭 Agents](#-agents)
   - [🧩 Skills](#-skills)
@@ -476,6 +477,37 @@ pnpm okf check --changed
 | `--strict`          | Exit `1` on a warning too.                                        |
 | `--help`, `-h`      | Print the usage.                                                  |
 
+### 🤖 In GitHub Actions
+
+This repo publishes a reusable workflow that runs `okf check` on another repo's bundles, so each repo needn't copy the same job:
+
+```yaml
+jobs:
+  okf:
+    name: 📚 OKF records
+    permissions:
+      contents: read
+    uses: jjloneman/okf-tools/.github/workflows/okf-check.yml@<commit SHA> # <release tag>
+```
+
+- **Pin it by a full commit SHA**, with the release tag in a comment, so Renovate can update both.
+- **It checks out the full history**, and diffs against the branch a pull request targets, or the default branch on a push, so the `--changed` gate sees every change the branch made.
+  - On a push to the default branch itself, `--changed` has nothing to compare, so it checks no files; set `changed: false` to check them all.
+- **By default it runs the `okf` the repo's own pnpm lockfile installs**, so the version that checks CI is the one that signs records off locally.
+  - It reads the pnpm version from `packageManager` in `package.json`, which that path needs.
+  - Set `okf-version` to run a version from npm instead, for a repo without pnpm or without okf-tools in its dependencies.
+- **Grant the calling job `contents: read`;** the workflow asks for nothing more.
+- **Its status check is named `<calling job's name> / 🩺 OKF check`**, such as `📚 OKF records / 🩺 OKF check`; a required check names it that way.
+- **Findings print as annotations** on the pull request's diff, as `okf check` does in any GitHub Actions run.
+
+| Input          | Does                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `bundles`      | Bundle directories to check, one per line. Empty, the default, reads `okf.bundles` from `package.json`. |
+| `changed`      | Report only on the files the branch changed, as `--changed` does. `true` by default.                    |
+| `node-version` | The Node version to run on, as `actions/setup-node` reads it. `lts/*` by default.                       |
+| `okf-version`  | A version of `@jjloneman/okf-tools` to run from npm. Empty, the default, runs the repo's own.           |
+| `strict`       | Fail on warnings too, as `--strict` does. `false` by default.                                           |
+
 ### 📏 Rules
 
 | Code | Rule                          | Severity | Finds                                                                                                              |
@@ -649,6 +681,7 @@ import {
 | `pnpm test`              | Run the tests.                                          |
 | `pnpm test:coverage`     | Run them with the 100% coverage gate.                   |
 | `pnpm lint:package`      | Build, then run publint and Are the Types Wrong.        |
+| `pnpm okf <command>`     | Run `okf` from source.                                  |
 | `pnpm okf:verify`        | Run the CLI from source.                                |
 | `pnpm changeset`         | Add a changeset for the next release.                   |
 | `pnpm changeset --empty` | Add an empty changeset, for a PR that releases nothing. |

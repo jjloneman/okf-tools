@@ -51,6 +51,7 @@
     "lint": "eslint . --cache --cache-strategy content",
     "lint:fix": "eslint . --fix",
     "lint:package": "pnpm build && publint && attw --pack --profile esm-only",
+    "okf": "node src/okf-bin.ts",
     "okf:index": "node src/okf-bin.ts index",
     "okf:verify": "node src/bin.ts",
     "prepare": "git config core.hooksPath .githooks || true",
