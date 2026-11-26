@@ -26,8 +26,8 @@ sources:
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:38:03Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 

@@ -25,8 +25,8 @@ sources:
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:55:26Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:38:03Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
@@ -47,7 +47,7 @@ As of 2026-11-25, from `src/skills.ts`[^skills], `src/init.ts`[^init], `src/guid
   - **Rejected:** a record skill that restates the content rules.
   - Where the two differ, okf-record wins in a repo that uses okf-tools. **okf-generate records a `human:<id>` verification once the person confirms the content; okf-tools never writes `verified`**, and neither does any of its skills: the person signs off with `okf verify`, or an agent runs `okf verify --yes` only when asked, naming the records.
   - okf-generate's examples write `tags` as a one-line list; okf-record says to write a block list, per [How a record's tags are laid out](tags-layout.md).
-  - okf-record also says to cite in `sources` each repo file a record was written from, since that's what lets `okf check`'s source rules warn when the code moves after a sign-off (issue #133).
+  - okf-record also says to cite in `sources` each repo file a record was written from, since that's what lets `okf check`'s source rules warn when the code moves after a sign-off (issue #133). The record rules in `src/guide.ts`[^guide] say it too, so a repo that reads `okf guide` or the agent block without the skill learns it (issue #135).
 - **No skill writes a timestamp or tells an agent how to type one.** A new record comes from `okf new` and an edited one is re-stamped by `okf touch`, per [How okf new and okf touch stamp generated](new-and-touch.md).
 - **`okf init` writes each skill to `.claude/skills/<name>/SKILL.md`, whole,** where Claude Code finds a repo's skills, and `--check` fails when one is missing or out of date.
   - Each file carries a marker line after its frontmatter, so a refresh rewrites only a file an earlier `okf init` wrote. A file there without the marker is someone's own skill, and is refused, writing nothing.
