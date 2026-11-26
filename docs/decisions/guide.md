@@ -18,9 +18,9 @@ sources:
   - id: agent-block
     resource: ../../src/agent-block.ts
     title: src/agent-block.ts, the agent block's text and markers
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:38:03Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+verified: { by: human:jjloneman, at: 2026-11-26T23:48:39Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written
