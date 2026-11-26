@@ -112,7 +112,8 @@
   },
   "okf": {
     "bundles": [
-      "docs/decisions"
+      "docs/decisions",
+      "docs/references"
     ],
     "verifiedBy": "human:jjloneman"
   }

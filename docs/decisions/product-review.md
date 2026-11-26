@@ -6,8 +6,9 @@ tags:
   - agents
   - github-actions
   - roadmap
+  - staleness
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:40:05Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:08:34Z }
 ---
 
 # How product ideas are found and decided
@@ -41,7 +42,7 @@ As of 2026-11-25, from `.claude/skills/product-review/SKILL.md` and `.github/wor
 
 - The cadence is a guess: revisit it after three reviews.
 - GitHub disables the reminder after 60 days without repo activity, like the spec watch.
-- Until the landscape record exists ([#62](https://github.com/jjloneman/okf-tools/issues/62)), each review says it's missing rather than researching other tools itself.
+- The landscape record, [docs/references/landscape.md](../references/landscape.md) ([#62](https://github.com/jjloneman/okf-tools/issues/62)), carries a `stale_after`; a review that finds it missing or past that date says so rather than researching other tools itself.
 
 ## Links
 
