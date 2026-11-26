@@ -4,6 +4,7 @@ title: Which OKF spec okf-tools follows
 description: okf-tools follows the spec at its home, `open-knowledge-format/open-knowledge-format`, pinned in `spec/upstream.json` to the v0.3 text at `527e81a`; every spec link points to the pin, and `okf migrate` moves a v0.1 or v0.2 bundle to it.
 tags:
   - links
+  - pinning
   - spec
   - spec-watch
   - status
@@ -19,9 +20,9 @@ sources:
   - id: gcp-deprecated
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:39:09Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # Which OKF spec okf-tools follows

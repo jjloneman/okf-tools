@@ -28,6 +28,7 @@ This directory is an [Open Knowledge Format](https://github.com/open-knowledge-f
 - `ci` — Pull request gates and CI actions.
 - `landscape` — Other OKF tools, and how okf-tools compares.
 - `npm` — Packages on the npm registry.
-- `sign-off` — Commands that write `verified`, or sign a bundle another way.
+- `pypi` — Packages on the Python Package Index.
 - `upstream` — The OKF spec's repository and its own tools.
-- `validators` — Tools that check a bundle against the spec or their own rules.
+- `validation` — Tools that check a bundle against the spec or their own rules.
+- `verification` — Commands that write `verified`, or sign a bundle another way.

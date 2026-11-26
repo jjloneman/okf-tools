@@ -4,10 +4,10 @@ title: Which actors can sign a record
 description: "`okf.verifiedBy` or `--by` must be an OKF actor YAML reads back as a plain string: it starts with a letter, has a `:` or `/` after it, and holds no whitespace, quotes, `#`, or flow indicators; there is no default."
 tags:
   - actors
-  - cli
   - config
   - exit-codes
   - frontmatter
+  - okf-verify
   - validation
   - verification
   - yaml
@@ -18,9 +18,9 @@ sources:
   - id: yaml-spec
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # Which actors can sign a record

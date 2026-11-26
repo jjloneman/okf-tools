@@ -3,9 +3,11 @@ type: Decision
 title: Which files in a bundle are records
 description: "Every `.md` file at any depth under a configured bundle is a record, other than `index.md` and `log.md` at every level and the paths `okf.exclude` matches; a bundle inside another counts each record once, and a symlink to a folder is never followed."
 tags:
+  - bundles
   - config
   - dependencies
   - git
+  - globs
   - node
   - paths
   - selection
@@ -15,8 +17,9 @@ sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # Which files in a bundle are records

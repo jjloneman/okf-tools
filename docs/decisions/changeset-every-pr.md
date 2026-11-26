@@ -3,6 +3,7 @@ type: Decision
 title: Why every PR adds a changeset
 description: CI's required `🦋 Changeset` check fails a PR without one; a PR that ships nothing adds `pnpm changeset --empty`, and the version PR, which is exempt, has its CI run approved by hand before it merges.
 tags:
+  - changelog
   - changesets
   - ci
   - github-actions

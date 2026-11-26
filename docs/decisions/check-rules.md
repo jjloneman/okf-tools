@@ -5,10 +5,10 @@ description: "`okf check` runs the spec rules on a pure engine, with upstream va
 tags:
   - checks
   - ci
-  - cli
   - exit-codes
   - github-actions
   - json
+  - okf-check
   - spec
   - upstream
   - validation
@@ -19,8 +19,9 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:42:51Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf check numbers, ranks and reports its rules

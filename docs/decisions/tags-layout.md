@@ -6,15 +6,18 @@ tags:
   - agents
   - formatting
   - frontmatter
+  - okf-format
+  - okf-tags
+  - prettier
   - tags
   - yaml
 sources:
   - id: prettier-print-width
     resource: https://prettier.io/docs/options#print-width
     title: Prettier options, print width
-status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:55:47Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+status: stable
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T04:06:07Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How a record's tags are laid out
@@ -39,12 +42,12 @@ As of 2026-11-25:
 
 - **Records keep any valid layout.** okf-tools reads all of them; it recommends block only for new records and for records a fix rewrites.
 - **Agents list a bundle's tags with a command that reads frontmatter,** not with `grep '^tags:'`, which misses a block list.
-- **Planned work follows it:**
-  - issue #53 adds `okf tags`, printing every tag with its record count, with `--format json` for scripts, as `okf status` takes it;
-  - issue #46 adds an opt-in `tags-layout` rule, `block`, `flow` or `any`, default `any`;
-  - issue #47's `check --fix`, with `tags-layout: block` on, rewrites a flow `tags` list as a block list: a flat list of plain scalars, `tags` only, keeping a comment on the `tags` line and refusing anchors, quoted keys or nested values;
-  - issue #49's agent-instructions block, written by `okf init`, says to write `tags` as a block list, and #53 adds to it the line that lists them with `okf tags`;
-  - issue #51's record skill drafts `tags` as a block list.
+- **The tools follow it,** as of 2026-11-26:
+  - `okf tags` prints every tag with its record count, with `--format json` for scripts, as `okf status` takes it (issue #53);
+  - the opt-in `tags-layout` house rule (`H005`) takes `block`, `flow` or `any`, default `any` (issue #46);
+  - `check --fix`, with `tags-layout: block` on, rewrites a flow `tags` list as a block list: a flat list of plain scalars, `tags` only, keeping a comment on the `tags` line and refusing anchors, quoted keys or nested values (issue #47);
+  - the agent-instructions block `okf init` writes says to write `tags` as a block list and to list them with `okf tags` (issues #49 and #53);
+  - the record skill drafts `tags` as a block list (issue #51).
 
 ## Why
 

@@ -6,8 +6,10 @@ tags:
   - changelog
   - changesets
   - commits
+  - gitmoji
   - node
   - releases
+  - scripts
   - typescript
 sources:
   - id: changesets-changelog

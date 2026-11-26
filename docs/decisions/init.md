@@ -4,14 +4,18 @@ title: What `okf init` writes, and how it keeps the agent block current
 description: "`okf init` writes the `okf` block of `package.json`, a block of agent rules between two marker lines in `AGENTS.md`, rewriting only the text between them, and the okf skills in `.claude/skills`; malformed markers and skills it didn't write are refused, and `--check` fails when a block or a skill is missing or stale."
 tags:
   - agents
-  - cli
   - config
+  - copilot
   - instructions
+  - okf-init
+  - package-json
   - refusals
   - safety
+  - skills
   - tags
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # What `okf init` writes, and how it keeps the agent block current

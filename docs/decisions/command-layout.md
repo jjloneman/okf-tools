@@ -6,9 +6,13 @@ tags:
   - aliases
   - cli
   - commands
+  - exit-codes
+  - help
+  - okf-verify
   - output
-status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T18:41:48Z }
+status: stable
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:12:05Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf-tools lays out its commands
@@ -21,7 +25,7 @@ As of 2026-11-25, from `package.json`, `src/okf-bin.ts`, `src/bin.ts`, `src/cli.
 
 - **One binary, `okf`, takes the command as its first argument.** `verify` is the first command; each new tool is another.
   - **Rejected:** a binary per tool (`okf-verify`, `okf-lint`, …), which has no command that lists them and grows `.bin` with every tool.
-- **Options follow the command.** `okf` reads only its first argument: `--help` or `-h` prints the command list and exits `0`; no command, one it doesn't know, or a flag in its place prints why and the command list and exits `1`.
+- **Options follow the command.** `okf` reads only its first argument: `--help` or `-h` prints the command list and `--version` prints the installed version and the OKF version it follows (issue #59), both exiting `0`; no command, one it doesn't know, or any other flag in its place prints why and the command list and exits `1`.
   - **Rejected:** flags shared across commands before the command (`okf --by <actor> verify`), which no command needs yet.
 - **`okf-verify` stays as an alias.** `okf-verify <args>` runs exactly as `okf verify <args>`, with the same flags, selection rules, and exit codes, so no consumer's script or agent instruction breaks.
   - The library's `run` takes the same choice as its `program`, `okf` or `okf-verify`, and runs as `okf-verify` when it's left out, so an in-process caller from before `okf` existed works as it did.

@@ -4,14 +4,13 @@ title: How okf check judges whether a sign-off still holds
 description: "`okf check` runs okf-tools' own `T` trust rules beside the spec rules: a draft is a notice unless `okf.drafts` says allow, warn or block, a sign-off counts only while current as OKF v0.3 defines it, a body changed since the base branch under a sign-off the base already held that still counts is an error, and a file in the repo that a record's `sources` cite warns when it changed after the record was written or signed off, and fails when it's gone; `--changed` reports only on what the branch changed."
 tags:
   - change-detection
-  - checks
   - ci
-  - cli
   - config
   - git
+  - okf-check
+  - pull-requests
   - sources
   - staleness
-  - status
   - timestamps
   - verification
 sources:
@@ -21,8 +20,9 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:03:37Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf check judges whether a sign-off still holds

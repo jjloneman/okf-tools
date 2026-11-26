@@ -3,10 +3,10 @@ type: Decision
 title: How okf migrate moves a bundle to OKF v0.3
 description: "`okf migrate` declares v0.3 in the root `index.md`, fills a missing `title` and `description`, and rewrites each bare path that names a file only from the bundle root to the relative path v0.3 reads, by position; it never touches `generated` or `verified`, refuses a bundle whose paths are ambiguous, and is a dry run unless `--write`."
 tags:
-  - cli
   - exit-codes
   - frontmatter
   - links
+  - okf-migrate
   - paths
   - refusals
   - safety
@@ -20,8 +20,9 @@ sources:
   - id: okf-spec-v02
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification, v0.2
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:55:38Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf migrate moves a bundle to OKF v0.3

@@ -81,40 +81,78 @@ verified: { by: human:jjloneman, at: 2026-11-12T09:00:00Z }
 
 - `actors` — Who can sign or write a record: OKF actor strings such as `human:<id>`.
 - `agents` — How coding agents use the tool.
+- `aliases` — Other names a command runs under, such as `okf-verify`.
 - `api` — The library's exported functions and types.
+- `branches` — Which branch a change is judged against.
+- `bundles` — What a bundle holds, and which of its files are records.
+- `case-sensitivity` — Paths that differ only in case or Unicode form.
 - `change-detection` — How the tool decides which records changed.
 - `changelog` — How `CHANGELOG.md` lines are built.
 - `changesets` — Changeset files and the `changeset` commands.
 - `checks` — The rules `okf check` runs, and who owns them.
 - `ci` — CI jobs and required checks.
+- `claude-code` — Claude Code, where the installed skills are found.
 - `cli` — The command line: flags, selections, and output.
+- `commands` — How the tool's commands are laid out and named.
 - `commits` — The git commits the tool or the release flow makes.
 - `config` — The `okf` block in `package.json`.
+- `copilot` — GitHub Copilot's instruction file.
 - `dependencies` — How consumers depend on the package.
+- `deprecation` — Retiring a record as `status: deprecated`, and what replaces it.
 - `distribution` — How the package is published and installed.
 - `encoding` — How record bytes are read and written, such as UTF-8 and line endings.
+- `eslint` — ESLint, whose rule config the house rules follow.
 - `exit-codes` — What each exit code means.
 - `formatting` — How formatters such as Prettier treat records.
 - `frontmatter` — What the tool reads from and writes into a record's frontmatter.
+- `generated` — A record's `generated` field, and who stamps it.
 - `git` — How the tool reads and changes the repo through git.
-- `json` — Output for programs to read, and how its shape is versioned.
 - `github-actions` — Workflows and how their runs are approved.
+- `gitmoji` — The gitmoji in commit subjects and changelog lines.
+- `globs` — Glob patterns, such as `okf.exclude`'s.
 - `guidance` — What `okf guide` prints for agents, and where its text comes from.
+- `help` — Usage text and `--help`.
+- `history` — What a record's git history says about its sign-offs.
+- `ideas` — Product ideas, and how each is decided.
 - `index` — How a bundle's `index.md` lists its records and tags.
 - `instructions` — The block of agent rules `okf init` keeps in a repo's instruction files.
+- `interactive` — The prompts a person answers in a terminal.
+- `issues` — GitHub issues the tool or its workflows open and close.
+- `json` — Output for programs to read, and how its shape is versioned.
+- `landscape` — Other OKF tools, and how okf-tools compares.
 - `links` — How docs and records link to the spec and to each other.
 - `node` — Node.js versions and features the tool relies on.
 - `npm` — The npm registry and package metadata.
+- `ntfy` — Push notifications sent through ntfy.
+- `okf-check` — `okf check`, its rules and its exit codes.
+- `okf-deprecate` — `okf deprecate`.
+- `okf-diff` — `okf diff`.
+- `okf-format` — `okf format`, the same as `okf check --fix`.
+- `okf-guide` — `okf guide`.
+- `okf-index` — `okf index`.
+- `okf-init` — `okf init`.
+- `okf-migrate` — `okf migrate`.
+- `okf-new` — `okf new`.
+- `okf-status` — `okf status`.
+- `okf-tags` — `okf tags`.
+- `okf-touch` — `okf touch`.
+- `okf-verify` — `okf verify`, also run as `okf-verify`.
+- `output` — What the tool prints, and its `[okf]` prefix.
+- `package-json` — How the tool reads and writes `package.json`.
 - `paths` — How record paths are resolved and matched.
+- `pinning` — Pinning the spec to one commit.
+- `prettier` — Prettier, and keeping records stable under it.
 - `pull-requests` — What every pull request must carry.
 - `refusals` — When the tool refuses a record or a value, and how it says so.
 - `releases` — Versioning and publishing.
-- `rollback` — Undoing a partial write.
 - `roadmap` — How ideas for the package are found, ranked, and decided.
+- `rollback` — Undoing a partial write.
 - `rulesets` — The branch rules that protect `main`.
 - `safety` — Guards against half-written records or unintended commits.
+- `scripts` — Repo scripts that are tested but never published.
 - `selection` — Which records a run acts on.
 - `skills` — The Agent Skills `okf init` installs, and what each may do.
+- `sources` — A record's `sources`, and what they cite.
 - `spec` — Which OKF spec text the tool follows.
 - `spec-watch` — How the tool watches the upstream spec for changes.
 - `staleness` — When a record goes stale, from its `stale_after`.

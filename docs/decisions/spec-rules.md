@@ -5,7 +5,9 @@ description: okf-tools builds the spec rules into `okf check` itself, on the fro
 tags:
   - checks
   - frontmatter
+  - landscape
   - node
+  - okf-check
   - spec
   - upstream
   - validation

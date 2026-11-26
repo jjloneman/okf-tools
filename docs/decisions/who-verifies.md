@@ -5,16 +5,18 @@ description: Verification is the person's call, but not only a terminal prompt m
 tags:
   - actors
   - agents
-  - cli
+  - guidance
+  - okf-verify
+  - safety
   - selection
   - verification
 sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
-verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # Who verifies a record

@@ -3,10 +3,12 @@ type: Decision
 title: What a record counts as changed against
 description: The branch diff against `origin/HEAD`, else `origin/main`, else the local `main`, plus whatever `git status` reports, untracked files included; if the diff can't be read, uncommitted changes alone.
 tags:
+  - branches
   - change-detection
-  - cli
   - exit-codes
   - git
+  - okf-check
+  - okf-verify
   - paths
   - selection
 status: stable

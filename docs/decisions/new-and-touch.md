@@ -4,17 +4,18 @@ title: How okf new and okf touch stamp generated
 description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses; a change to `tags` alone isn't re-stamped."
 tags:
   - agents
-  - cli
   - frontmatter
   - generated
   - index
+  - okf-new
+  - okf-touch
   - refusals
-  - safety
   - tags
   - timestamps
   - verification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf new and okf touch stamp generated

@@ -3,15 +3,17 @@ type: Decision
 title: How okf index keeps an index.md in step with its records
 description: "`okf index` rewrites each top-level list line that links to a record from its title and description, sorted by title within its run, adds missing records, drops gone ones, and keeps a tag index between markers; everything else in the file stays as written, and `--check` fails when an index differs."
 tags:
-  - cli
   - exit-codes
   - index
   - links
+  - okf-index
+  - okf-tags
   - refusals
   - safety
   - tags
-status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:24:51Z }
+status: stable
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:24:40Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf index keeps an index.md in step with its records
@@ -51,6 +53,6 @@ As of 2026-11-25, from `src/index-sync.ts`, `src/index-command.ts`, `src/tags.ts
 ## Links
 
 - [Issue #53](https://github.com/jjloneman/okf-tools/issues/53)
-- [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which added `okf tags`
+- [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which asked for `okf tags`
 - [How a record's tags are laid out](tags-layout.md)
 - [What `okf init` writes, and how it keeps the agent block current](init.md)

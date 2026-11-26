@@ -4,14 +4,17 @@ title: Which skills okf-tools ships, and how okf init installs them
 description: "`okf init` installs three Agent Skills in `.claude/skills`, okf-record, okf-review and okf-architecture, written whole from the installed version; they cover the trust workflow and point at upstream's okf-generate for content, never write `verified`, and stamp only through the CLI."
 tags:
   - agents
+  - claude-code
   - guidance
   - instructions
+  - okf-init
   - skills
   - timestamps
   - upstream
   - verification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:39:09Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # Which skills okf-tools ships, and how okf init installs them
