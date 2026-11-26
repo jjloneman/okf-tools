@@ -26,9 +26,10 @@ sources:
   - id: pypistats
     resource: https://pypistats.org/api/
     title: pypistats' API
-status: draft
-stale_after: 2027-01-26T00:00:00Z
+status: stable
+stale_after: 2027-01-26T20:51:28Z
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:09:40Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:28Z }
 ---
 
 # Other OKF tools, and what okf-tools does differently
