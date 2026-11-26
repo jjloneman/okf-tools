@@ -8,8 +8,9 @@ tags:
   - git
   - timestamps
   - verification
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T20:12:12Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # What a re-verification shows as changed

@@ -12,8 +12,9 @@ tags:
   - safety
   - tags
   - yaml
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:52:01Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # What okf check --fix fixes, and how it writes

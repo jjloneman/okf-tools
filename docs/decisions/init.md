@@ -10,8 +10,9 @@ tags:
   - refusals
   - safety
   - tags
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # What `okf init` writes, and how it keeps the agent block current

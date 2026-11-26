@@ -7,8 +7,9 @@ tags:
   - github-actions
   - roadmap
   - staleness
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:08:34Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How product ideas are found and decided

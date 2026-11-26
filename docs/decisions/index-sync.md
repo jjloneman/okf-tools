@@ -10,8 +10,9 @@ tags:
   - refusals
   - safety
   - tags
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:24:40Z }
+verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
 ---
 
 # How okf index keeps an index.md in step with its records
