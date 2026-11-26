@@ -108,6 +108,15 @@ export type CheckedFile = {
   kind: FileKind;
 
   /**
+   * The changes git knows to a path from the repo root, a file or a folder:
+   * its commits, and its uncommitted changes when it has any; empty for a
+   * path no record here cites.
+   *
+   * @example `(filePath) => changes.get(filePath) ?? []`
+   */
+  readChanges: (filePath: string) => readonly FileChange[];
+
+  /**
    * Its text, as read.
    *
    * @example `"---\ntype: Decision\n---\n"`
@@ -268,6 +277,24 @@ export type CheckSkipped = {
    * @example "docs/decisions/b.md can't be read: EACCES: permission denied"
    */
   reason: string;
+};
+
+/** A change git knows to a path: a commit, or its uncommitted changes. */
+export type FileChange = {
+  /**
+   * When it was made, in whole seconds since the epoch: the commit's author
+   * time, or now for uncommitted changes.
+   *
+   * @example 1790000000
+   */
+  at: number;
+
+  /**
+   * The commit, or `undefined` for uncommitted changes.
+   *
+   * @example `{ hash: "1a2b3c4d…", shortHash: "1a2b3c4" }`
+   */
+  commit: { hash: string; shortHash: string } | undefined;
 };
 
 /** What OKF makes of a Markdown file by its name. */
@@ -459,9 +486,10 @@ export function readCheckedFile(params: {
   bundleDir: string;
   doesExist: (filePath: string) => boolean;
   filePath: string;
+  readChanges?: ((filePath: string) => readonly FileChange[]) | undefined;
   text: string;
 }): CheckedFile {
-  const { bundleDir, filePath, text } = params;
+  const { bundleDir, filePath, readChanges = () => [], text } = params;
   const name = filePath.slice(filePath.lastIndexOf("/") + 1);
   const folder = filePath.includes("/")
     ? filePath.slice(0, filePath.lastIndexOf("/"))
@@ -480,6 +508,7 @@ export function readCheckedFile(params: {
     }),
     isAtBundleRoot: folder === bundleDir,
     kind: readKind(name),
+    readChanges,
   };
 }
 
