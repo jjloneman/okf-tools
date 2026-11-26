@@ -702,6 +702,59 @@ describe("W105 status-value", () => {
   });
 });
 
+describe("W108 footnote-source", () => {
+  test.each([
+    {
+      description: "a footnote with its source",
+      expected: [],
+      text:
+        record([
+          "type: Decision",
+          "sources:",
+          "  - id: spec",
+          "    resource: https://example.com",
+        ]) + "\nA claim.[^spec]\n\n[^spec]: The spec.\n",
+    },
+    {
+      description: "a bare mapping as the one source",
+      expected: [],
+      text:
+        record(["type: Decision", "sources: { id: spec }"]) +
+        "\nA claim.[^spec]\n",
+    },
+    {
+      description: "a footnote with no source, once",
+      expected: ["kb/a.md:11"],
+      text:
+        record([
+          "type: Decision",
+          "sources:",
+          "  - resource: https://example.com",
+        ]) + "\nA claim.[^gone]\n\n[^gone]: Gone.\n",
+    },
+    {
+      description: "a footnote and no sources",
+      expected: ["kb/a.md:9"],
+      text: record(["type: Decision"]) + "\nA claim.[^gone]\n",
+    },
+    {
+      description: "a footnote in code",
+      expected: [],
+      text: record(["type: Decision"]) + "\n`[^gone]`\n\n```\n[^gone]\n```\n",
+    },
+    {
+      description: "a file that isn't a concept",
+      expected: [],
+      text: "# A\n\nA claim.[^gone]\n",
+    },
+  ])("checks $description", ({ expected, text }) => {
+    // When/Then - the lines it reports
+    expect(
+      findLines({ code: "W108", files: { "kb/a.md": text } })
+    ).toStrictEqual(expected);
+  });
+});
+
 describe("W110 tags-list", () => {
   test.each([
     { description: "a list", expected: [], lines: ["tags: [cli]"] },
@@ -734,7 +787,7 @@ describe("W110 tags-list", () => {
   });
 });
 
-describe("W115 index-link-target", () => {
+describe("W115 link-target", () => {
   test("reports each link to a path the bundle doesn't hold", () => {
     // Given - a root index linking every kind of target
     const index = [
@@ -805,9 +858,19 @@ describe("W115 index-link-target", () => {
       files: { "kb/sub/index.md": "# Sub\n- [B](b.md)\n" },
     },
     {
-      description: "a concept, which isn't an index",
-      expected: [],
+      description: "a concept to a missing file",
+      expected: ["kb/a.md:9"],
       files: { "kb/a.md": `${concept([])}\n[Missing](missing.md)\n` },
+    },
+    {
+      description: "a file that isn't a concept",
+      expected: [],
+      files: { "kb/a.md": "# A\n\n[Missing](missing.md)\n" },
+    },
+    {
+      description: "a log.md",
+      expected: [],
+      files: { "kb/log.md": "---\n---\n[Missing](missing.md)\n" },
     },
   ])("checks links in $description", ({ expected, files }) => {
     // When/Then - the lines it reports
@@ -815,7 +878,84 @@ describe("W115 index-link-target", () => {
   });
 });
 
-describe("W116 license-value", () => {
+describe("W115 link-target from the bundle root", () => {
+  test.each([
+    { description: "an undeclared bundle", expected: [], version: undefined },
+    { description: "a v0.1 bundle", expected: [], version: '"0.1"' },
+    { description: "a v0.2 bundle", expected: [], version: '"0.2"' },
+    { description: "a version that isn't one", expected: [], version: "next" },
+    {
+      description: "a v0.2.1 bundle",
+      expected: ["kb/sub/a.md:9"],
+      version: '"0.2.1"',
+    },
+    {
+      description: "a v0.3 bundle",
+      expected: ["kb/sub/a.md:9"],
+      version: '"0.3"',
+    },
+    { description: "a v1 bundle", expected: ["kb/sub/a.md:9"], version: '"1"' },
+  ])(
+    "reads a bare link from the root only in $description",
+    ({ expected, version }) => {
+      // Given - a subfolder concept linking to a root file by a bare path
+      const files = {
+        "kb/b.md": concept([]),
+        "kb/index.md":
+          version === undefined
+            ? "# KB\n"
+            : `---\nokf_version: ${version}\n---\n# KB\n`,
+        "kb/sub/a.md": `${concept([])}\n[B](b.md)\n`,
+      };
+
+      // When/Then - the lines it reports
+      expect(findLines({ code: "W115", files })).toStrictEqual(expected);
+    }
+  );
+
+  test.each([
+    {
+      description: "a bundle with no root index.md",
+      files: {
+        "kb/b.md": concept([]),
+        "kb/sub/a.md": `${concept([])}\n[B](b.md)\n`,
+      },
+    },
+    {
+      description: "a climb out of the bundle from the root",
+      files: {
+        "kb/sub/a.md": `${concept([])}\n[Out](../../x.md)\n`,
+        "kb/x.md": concept([]),
+      },
+    },
+  ])("handles $description", ({ files }) => {
+    // When/Then - nothing to report: the fallback finds it, or it's external
+    expect(findLines({ code: "W115", files })).toStrictEqual([]);
+  });
+
+  test("doesn't fall back for a link that starts with /", () => {
+    // Given - an undeclared bundle and a rooted link to nothing
+    const files = {
+      "kb/sub/a.md": `${concept([])}\n[Gone](/sub/b.md)\n`,
+      "kb/sub/b.md/x.md": concept([]),
+    };
+
+    // When/Then - missing
+    expect(findLines({ code: "W115", files })).toStrictEqual(["kb/sub/a.md:9"]);
+  });
+
+  test("doesn't fall back for a path that climbs out from the root", () => {
+    // Given - an undeclared bundle, and a link that resolves nowhere
+    const files = { "kb/sub/a.md": `${concept([])}\n[Up](../b.md)\n` };
+
+    // When/Then - missing
+    expect(
+      findLines({ code: "W115", existing: ["b.md"], files })
+    ).toStrictEqual(["kb/sub/a.md:9"]);
+  });
+});
+
+describe("W116 path-target", () => {
   test.each([
     {
       description: "an SPDX expression",
@@ -866,6 +1006,79 @@ describe("W116 license-value", () => {
     // Then - the value, quoted
     expect(hits.map(({ message }) => message)).toStrictEqual([
       'license "mine, all mine" is not an SPDX expression or a file in the bundle (§8.1)',
+    ]);
+  });
+});
+
+describe("W116 path-target and W119 path-root-fallback on superseded_by", () => {
+  test.each([
+    {
+      description: "a target that exists",
+      expected: { W116: [], W119: [] },
+      value: "/b.md",
+      version: '"0.3"',
+    },
+    {
+      description: "a URL",
+      expected: { W116: [], W119: [] },
+      value: "https://example.com/b.md",
+      version: '"0.3"',
+    },
+    {
+      description: "a target that doesn't exist",
+      expected: { W116: ["kb/sub/a.md:4"], W119: [] },
+      value: "/gone.md",
+      version: '"0.3"',
+    },
+    {
+      description: "a bare root path in a v0.3 bundle",
+      expected: { W116: ["kb/sub/a.md:4"], W119: [] },
+      value: "b.md",
+      version: '"0.3"',
+    },
+    {
+      description: "a bare root path in a v0.2 bundle",
+      expected: { W116: [], W119: ["kb/sub/a.md:4"] },
+      value: "b.md",
+      version: '"0.2"',
+    },
+    {
+      description: "a value that isn't text",
+      expected: { W116: [], W119: [] },
+      value: "[a, b]",
+      version: '"0.3"',
+    },
+  ])("checks $description", ({ expected, value, version }) => {
+    // Given - a deprecated subfolder concept and a root concept
+    const files = {
+      "kb/b.md": concept([]),
+      "kb/index.md": `---\nokf_version: ${version}\n---\n`,
+      "kb/sub/a.md": concept(["status: deprecated", `superseded_by: ${value}`]),
+    };
+
+    // When/Then - what each rule reports
+    expect({
+      W116: findLines({ code: "W116", files }),
+      W119: findLines({ code: "W119", files }),
+    }).toStrictEqual(expected);
+  });
+
+  test("names the field and the fix", () => {
+    // Given - a bare root path in a v0.2 bundle
+    const files = {
+      "kb/b.md": concept([]),
+      "kb/index.md": '---\nokf_version: "0.2"\n---\n',
+      "kb/sub/a.md": concept(["status: deprecated", "superseded_by: b.md"]),
+    };
+
+    // When/Then - the message
+    expect(findHits({ code: "W119", files })).toStrictEqual([
+      {
+        line: 4,
+        message:
+          'superseded_by "b.md" resolves only from the bundle root, through the v0.2 fallback; write it as /b.md (§6.2)',
+        path: "kb/sub/a.md",
+      },
     ]);
   });
 });
@@ -1080,6 +1293,40 @@ describe("W122 date-only-trust-time", () => {
       findHits({ code: "W122", files: { "kb/a.md": concept(lines) } }).map(
         ({ message }) => message
       )
+    ).toStrictEqual(expected);
+  });
+});
+
+describe("W123 superseded-by-status", () => {
+  test.each([
+    {
+      description: "superseded_by on a deprecated concept",
+      expected: [],
+      lines: ["status: deprecated", "superseded_by: /b.md"],
+    },
+    {
+      description: "superseded_by on a draft",
+      expected: ["kb/a.md:4"],
+      lines: ["status: draft", "superseded_by: /b.md"],
+    },
+    {
+      description: "superseded_by with no status",
+      expected: ["kb/a.md:3"],
+      lines: ["superseded_by: /b.md"],
+    },
+    {
+      description: "no superseded_by",
+      expected: [],
+      lines: ["status: draft"],
+    },
+  ])("checks $description", ({ expected, lines }) => {
+    // When/Then - the lines it reports
+    expect(
+      findLines({
+        code: "W123",
+        existing: ["kb/b.md"],
+        files: { "kb/a.md": concept(lines) },
+      })
     ).toStrictEqual(expected);
   });
 });

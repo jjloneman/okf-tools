@@ -2,7 +2,12 @@ import { describe, expect, test } from "vitest";
 
 import type { IndexRecord, SyncIndexParams } from "./index-sync.ts";
 
-import { syncIndex, TAG_INDEX_END, TAG_INDEX_START } from "./index-sync.ts";
+import {
+  findIndexDrift,
+  syncIndex,
+  TAG_INDEX_END,
+  TAG_INDEX_START,
+} from "./index-sync.ts";
 
 /** The index every test syncs, unless it names another. */
 const INDEX_PATH = "docs/decisions/index.md";
@@ -928,6 +933,87 @@ describe("syncIndex", () => {
 
       // Then - refused, saying why
       expect(result).toStrictEqual({ isOk: false, problem });
+    });
+  });
+});
+
+describe("findIndexDrift", () => {
+  test("says why it can't read an index okf index refuses", () => {
+    // Given - a tag index that never closes, over a stale line
+    const text = `- [Old](a.md)\n${TAG_INDEX_START}\n`;
+
+    // When/Then - the problem, as syncIndex gives it
+    expect(
+      findIndexDrift({
+        doesExist: () => false,
+        indexPath: INDEX_PATH,
+        records: [A],
+        scoped: [A],
+        text,
+      })
+    ).toStrictEqual({
+      isOk: false,
+      problem: expect.stringContaining("tag-index:end") as string,
+    });
+  });
+
+  test("leaves a record linked twice in a row in order", () => {
+    // Given - B listed twice, then C
+    const text =
+      "- [B](b.md) - The second.\n- [B](b.md) - The second.\n- [C](c.md) - The third.\n";
+
+    // When/Then - nothing out of order
+    expect(
+      findIndexDrift({
+        doesExist: () => false,
+        indexPath: INDEX_PATH,
+        records: [B, C],
+        scoped: [B, C],
+        text,
+      })
+    ).toStrictEqual({ drift: [], isOk: true });
+  });
+
+  test("names the line that sorts before the line above it", () => {
+    // Given - a run written as B, C, A
+    const text = sync("", { records: [B, C], scoped: [B, C] }).replace(
+      /$/u,
+      "- [A](a.md) - The first.\n"
+    );
+
+    // When/Then - A, on line 3, not B, which is in order with C
+    expect(
+      findIndexDrift({
+        doesExist: () => false,
+        indexPath: INDEX_PATH,
+        records: [A, B, C],
+        scoped: [A, B, C],
+        text,
+      })
+    ).toStrictEqual({
+      drift: [{ kind: "order", line: 3, recordPath: A.path }],
+      isOk: true,
+    });
+  });
+
+  test("reports a missing record that sorts first, and no line out of order", () => {
+    // Given - a root index listing B then C, with A, which sorts first, missing
+    const records = [A, B, C];
+    const text = `---\nokf_version: "0.3"\n---\n${sync("", { records: [B, C], scoped: [B, C] })}`;
+
+    // When - finding the drift with every record in scope
+    const drift = findIndexDrift({
+      doesExist: () => false,
+      indexPath: INDEX_PATH,
+      records,
+      scoped: records,
+      text,
+    });
+
+    // Then - only the missing record
+    expect(drift).toStrictEqual({
+      drift: [{ kind: "missing", line: undefined, recordPath: A.path }],
+      isOk: true,
     });
   });
 });

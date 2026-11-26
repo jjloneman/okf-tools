@@ -17,7 +17,7 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:39Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:48:12Z }
 ---
 
 # How okf status reports a bundle's trust state
@@ -37,7 +37,7 @@ As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/rep
   - `changed` comes first, since a sign-off that no longer holds is the one an agent could mistake for agreement; a draft regenerated after its sign-off is both, and lists there.
   - **Rejected:** listing a record under every group it fits, which repeats it, and a separate flag per fact in the text, which buries the one that matters.
 - **The JSON keeps every fact beside the group**: `state`, `status`, `isStale`, and the times, so a program needn't rely on the order.
-- **Each JSON record also carries `tier`, OKF v0.3's trust tier by its own names**, `unverified`, `machine-confirmed`, or `human-reviewed`, so a tool that reads v0.3's tiers, such as upstream's `okf-consume` skill, needn't translate okf-tools' states[^okf-v03].
+- **Each JSON record also carries `tier`, OKF v0.3's trust tier by its own names**, `unverified`, `machine-confirmed`, or `human-reviewed`, so a tool that reads v0.3's tiers, such as upstream's `okf-consume` skill, needn't translate okf-tools' states[^okf-spec].
   - It follows v0.3's rule: only `verified` events at or after `generated.at` count, from any actor, not only the signer; one from a `human:<id>` actor makes it `human-reviewed`, and others only, `team:` included, `machine-confirmed`.
   - Each actor's latest event counts, as the signer's does for `state`, so the two agree about the signer's own entry whenever each of its events has an `at`.
   - Where v0.3 leaves it open, it judges as `state` does, through the same check: times compare to the whole second, an `at` that can't be read or is ahead of the clock doesn't count, and a missing or unreadable `generated.at` lets every event count.
@@ -70,6 +70,4 @@ As of 2026-11-25, from `src/status.ts`, `src/options.ts`, `src/cli.ts`, `src/rep
 - [Who verifies a record](who-verifies.md)
 - [Which actors can sign a record](actor.md)
 
-[^okf-spec]: OKF v0.3 §5.5, `stale_after`: an absolute instant, stale when `now >= stale_after`.
-
-[^okf-v03]: OKF v0.3 §5.3, Trust tiers, and §7, which gives only the `human:` scheme the human-reviewed tier.
+[^okf-spec]: OKF v0.3: §5.5, `stale_after`, an absolute instant, stale when `now >= stale_after`; §5.3, Trust tiers; and §7, which gives only the `human:` scheme the human-reviewed tier.

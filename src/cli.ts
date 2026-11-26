@@ -191,7 +191,7 @@ function buildBundleContext(params: {
   bundles: readonly string[];
   cwd: string;
   output: Output;
-}): Outcome<BundleContext & Pick<OkfConfig, "drafts">> {
+}): Outcome<BundleContext & Pick<OkfConfig, "drafts" | "rules">> {
   const { bundles, output } = params;
   const repo = readRepo(params.cwd);
 
@@ -229,6 +229,7 @@ function buildBundleContext(params: {
       excludeGlobs: config.exclude ?? [],
       output,
       repoRoot,
+      rules: config.rules,
     },
   };
 }
@@ -355,6 +356,7 @@ function runCheckCommand(params: {
       context: context.value,
       drafts: context.value.drafts,
       format: options.format,
+      houseRules: context.value.rules,
       isChanged: options.isChanged,
       isGitHubActions: process.env.GITHUB_ACTIONS === "true",
       isStrict: options.isStrict,

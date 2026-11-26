@@ -25,6 +25,32 @@ import {
   splitLines,
 } from "./markdown.ts";
 
+/** Where an index differs from what `okf index` would write. */
+export type IndexDrift = {
+  /**
+   * How: a scoped record no line links to, a line whose title or
+   * description differs from its record's, or a line out of order in its
+   * run.
+   *
+   * @example "stale"
+   */
+  kind: "missing" | "order" | "stale";
+
+  /**
+   * The 1-based line in the index, or `undefined` for a missing record.
+   *
+   * @example 7
+   */
+  line: number | undefined;
+
+  /**
+   * The record's path from the repo root.
+   *
+   * @example "docs/decisions/a.md"
+   */
+  recordPath: string;
+};
+
 /** A record as an index lists it, read from its frontmatter. */
 export type IndexRecord = {
   /**
@@ -247,6 +273,14 @@ type RecordItem = {
   indent: string;
 
   /**
+   * The line as written, and where it starts in the body, or `undefined`
+   * for a record a sync adds.
+   *
+   * @example `{ line: { content: "- [A](a.md)", ending: "\n" }, offset: 9 }`
+   */
+  read: { line: BodyLine; offset: number } | undefined;
+
+  /**
    * The record it links to.
    *
    * @example `{ path: "docs/decisions/a.md", title: "A", … }`
@@ -302,6 +336,73 @@ const TAG_LINE =
   /^[*+-] `(?<tag>[^`]+)`(?:[\t ]+[–—-][\t ]+(?<meaning>.*\S))?[\t ]*$/u;
 
 /**
+ * Find where an index differs from what `syncIndex` would write: each
+ * missing record, each stale line, and in each run the first line that
+ * sorts before the line above it; or why it can't be synced.
+ */
+export function findIndexDrift(
+  params: SyncIndexParams
+): { drift: IndexDrift[]; isOk: true } | { isOk: false; problem: string } {
+  const read = readIndex(params);
+
+  if (!read.isOk) {
+    return read;
+  }
+
+  const { bodyStart, pieces } = read;
+  const body = params.text.slice(bodyStart);
+  const headLines = params.text.slice(0, bodyStart).split("\n").length - 1;
+  const toLine = (offset: number): number =>
+    headLines + body.slice(0, offset).split("\n").length;
+
+  const drift = pieces.flatMap((piece) => {
+    if (piece.kind !== "run") {
+      return [];
+    }
+
+    // The line that sorts before the one above it is the one that moved, so
+    // it's the one named; a missing record is reported as missing instead,
+    // and a record linked twice stays where okf index leaves it.
+    let above: IndexRecord | undefined;
+    let firstOut: RecordItem | undefined;
+
+    for (const item of piece.items.filter(({ read }) => read !== undefined)) {
+      if (
+        firstOut === undefined &&
+        above !== undefined &&
+        above.path !== item.record.path &&
+        compareRecords(above, item.record) > 0
+      ) {
+        firstOut = item;
+      }
+
+      above = item.record;
+    }
+
+    return piece.items.flatMap((item): IndexDrift[] => {
+      const recordPath = item.record.path;
+
+      if (item.read === undefined) {
+        return [{ kind: "missing", line: undefined, recordPath }];
+      }
+
+      const line = toLine(item.read.offset);
+
+      return [
+        ...(writeItemLine(item) === item.read.line.content
+          ? []
+          : [{ kind: "stale" as const, line, recordPath }]),
+        ...(item === firstOut
+          ? [{ kind: "order" as const, line, recordPath }]
+          : []),
+      ];
+    });
+  });
+
+  return { drift, isOk: true };
+}
+
+/**
  * Rewrite one index from its records' frontmatter.
  *
  * - Each record line is rewritten from the record it links to: its title,
@@ -319,45 +420,14 @@ const TAG_LINE =
  *   refuse the whole index.
  */
 export function syncIndex(params: SyncIndexParams): IndexSync {
-  const { indexPath, text } = params;
-  const bodyStart = findBodyStart(text);
-  const body = text.slice(bodyStart);
-  const lineBreak = /^[^\n]*\r\n/u.test(text) ? "\r\n" : "\n";
+  const read = readIndex(params);
 
-  // Marker lines quoted in fenced code, such as a README's example, aren't
-  // the tag index's own.
-  const masked = maskFences(body);
-  const region = findMarkedBlock({
-    endMarker: TAG_INDEX_END,
-    startMarker: TAG_INDEX_START,
-    text: masked,
-  });
-
-  if (region.kind === "malformed") {
-    return { isOk: false, problem: region.problem };
+  if (!read.isOk) {
+    return read;
   }
 
-  const pieces = readPieces({
-    ...params,
-    body,
-    indexDir: path.posix.dirname(indexPath),
-    lineBreak,
-    masked,
-    region: region.kind === "found" ? region : undefined,
-  });
-
-  addMissingRecords({
-    ...params,
-    lineBreak,
-    linked: listLinkedKeys({
-      ...params,
-      indexDir: path.posix.dirname(indexPath),
-      masked,
-      region: region.kind === "found" ? region : undefined,
-    }),
-    pieces,
-  });
-
+  const { bodyStart, lineBreak, pieces } = read;
+  const { text } = params;
   const head = text.slice(0, bodyStart);
   const written = writePieces({ lineBreak, pieces });
 
@@ -397,6 +467,7 @@ function addMissingRecords(params: {
     bullet: style.bullet,
     children: [],
     indent: style.indent,
+    read: undefined,
     record,
     separator: style.separator,
     target: toTarget({ indexPath, recordPath: record.path }),
@@ -447,6 +518,18 @@ function addMissingRecords(params: {
   }
 
   pieces.push(run);
+}
+
+/** Order two records by title, ignoring case, then by path. */
+function compareRecords(left: IndexRecord, right: IndexRecord): number {
+  const leftLabel = readLabel(left).toLowerCase();
+  const rightLabel = readLabel(right).toLowerCase();
+
+  if (leftLabel !== rightLabel) {
+    return leftLabel < rightLabel ? -1 : 1;
+  }
+
+  return left.path < right.path ? -1 : 1;
 }
 
 /** Give a line that ends the file a line break, so a line can follow it. */
@@ -506,6 +589,60 @@ function listLinkedKeys(params: {
 }
 
 /**
+ * Read an index into pieces, with each scoped record no line links to
+ * added, or say why it can't be synced.
+ */
+function readIndex(params: SyncIndexParams):
+  | {
+      bodyStart: number;
+      isOk: true;
+      lineBreak: string;
+      pieces: BodyPiece[];
+    }
+  | { isOk: false; problem: string } {
+  const { indexPath, text } = params;
+  const bodyStart = findBodyStart(text);
+  const body = text.slice(bodyStart);
+  const lineBreak = /^[^\n]*\r\n/u.test(text) ? "\r\n" : "\n";
+
+  // Marker lines quoted in fenced code, such as a README's example, aren't
+  // the tag index's own.
+  const masked = maskFences(body);
+  const region = findMarkedBlock({
+    endMarker: TAG_INDEX_END,
+    startMarker: TAG_INDEX_START,
+    text: masked,
+  });
+
+  if (region.kind === "malformed") {
+    return { isOk: false, problem: region.problem };
+  }
+
+  const pieces = readPieces({
+    ...params,
+    body,
+    indexDir: path.posix.dirname(indexPath),
+    lineBreak,
+    masked,
+    region: region.kind === "found" ? region : undefined,
+  });
+
+  addMissingRecords({
+    ...params,
+    lineBreak,
+    linked: listLinkedKeys({
+      ...params,
+      indexDir: path.posix.dirname(indexPath),
+      masked,
+      region: region.kind === "found" ? region : undefined,
+    }),
+    pieces,
+  });
+
+  return { bodyStart, isOk: true, lineBreak, pieces };
+}
+
+/**
  * Read a line as a record line: a top-level list item opening with a link to
  * a record, or to a Markdown file in the index's folder that's gone.
  *
@@ -520,7 +657,7 @@ function readItem(params: {
 }):
   | ({
       record: IndexRecord | undefined;
-    } & Omit<RecordItem, "children" | "record">)
+    } & Omit<RecordItem, "children" | "read" | "record">)
   | undefined {
   const { byPath, doesExist, indexDir, line } = params;
   const groups = ITEM_LINE.exec(line.content)?.groups;
@@ -654,7 +791,12 @@ function readPieces(params: {
     run.ending = (children.at(-1) ?? line).ending;
 
     if (item.record !== undefined) {
-      run.items.push({ ...item, children, record: item.record });
+      run.items.push({
+        ...item,
+        children,
+        read: { line, offset: lineStart },
+        record: item.record,
+      });
     }
   }
 
@@ -699,18 +841,9 @@ function sortRecords<T>(params: {
 }): T[] {
   const { items, toRecord } = params;
 
-  return [...items].sort((left, right) => {
-    const leftRecord = toRecord(left);
-    const rightRecord = toRecord(right);
-    const leftLabel = readLabel(leftRecord).toLowerCase();
-    const rightLabel = readLabel(rightRecord).toLowerCase();
-
-    if (leftLabel !== rightLabel) {
-      return leftLabel < rightLabel ? -1 : 1;
-    }
-
-    return leftRecord.path < rightRecord.path ? -1 : 1;
-  });
+  return [...items].sort((left, right) =>
+    compareRecords(toRecord(left), toRecord(right))
+  );
 }
 
 /**

@@ -33,6 +33,7 @@ import type {
 } from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
 import type { ExitCode } from "./exit-codes.ts";
+import type { HouseRules } from "./house-rules.ts";
 import type { CheckFormat } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
 import type { BundleContext } from "./run-context.ts";
@@ -47,6 +48,7 @@ import {
   readWorkingPaths,
   toPathKey,
 } from "./git.ts";
+import { buildHouseRules } from "./house-rules.ts";
 import { describeError, toTerminalLine } from "./output.ts";
 import {
   findOwningBundle,
@@ -120,6 +122,13 @@ export function runCheck(params: {
   format: CheckFormat;
 
   /**
+   * The house rules the repo turned on, from `okf.rules`.
+   *
+   * @example `{ "tags-sorted": "error" }`
+   */
+  houseRules: HouseRules;
+
+  /**
    * Whether `--changed` asked to report only on the files changed since the
    * base branch.
    *
@@ -142,8 +151,15 @@ export function runCheck(params: {
    */
   isStrict: boolean;
 }): ExitCode {
-  const { context, drafts, format, isChanged, isGitHubActions, isStrict } =
-    params;
+  const {
+    context,
+    drafts,
+    format,
+    houseRules,
+    isChanged,
+    isGitHubActions,
+    isStrict,
+  } = params;
   const { output } = context;
   const read = readBundles({ context, isChanged });
 
@@ -183,7 +199,12 @@ export function runCheck(params: {
           changedKeys.has(toPathKey(filePath)) ||
           citingKeys.has(toPathKey(filePath))
       : undefined,
-    rules: [...SPEC_RULES, ...buildTrustRules(drafts), ...SOURCE_RULES],
+    rules: [
+      ...SPEC_RULES,
+      ...buildTrustRules(drafts),
+      ...SOURCE_RULES,
+      ...buildHouseRules(houseRules),
+    ],
     skipped,
   });
 
