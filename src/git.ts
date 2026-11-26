@@ -127,15 +127,16 @@ export type GitFailure = {
   stdout: string | undefined;
 };
 
-/** A commit that changed a path, with when it was authored. */
+/** A commit that changed a path, with when it was committed. */
 export type PathCommit = {
   /**
-   * When it was authored, in whole seconds since the epoch, which a rebase,
-   * a cherry-pick, or an amend keeps.
+   * When it was committed, in whole seconds since the epoch, which a rebase,
+   * a cherry-pick, or an amend resets to when it ran, so a commit that
+   * landed late reads as late.
    *
    * @example 1790000000
    */
-  authoredAt: number;
+  committedAt: number;
 
   /**
    * The commit's full hash.
@@ -572,7 +573,7 @@ export function listIndexPaths(repoRoot: string): string[] {
 
 /**
  * List the changes git knows to a file or anything in a folder: its commits,
- * newest first, each with when it was authored, and whether it has
+ * newest first, each with when it was committed, and whether it has
  * uncommitted changes, untracked files included.
  *
  * - `--no-follow`, since `log.follow` would refuse a folder, and
@@ -601,7 +602,7 @@ export function listPathChanges(params: {
           "log",
           "--no-follow",
           "--no-show-signature",
-          "--format=%H %h %at",
+          "--format=%H %h %ct",
           "--",
           filePath,
         ],
@@ -626,7 +627,7 @@ export function listPathChanges(params: {
           const shortHashEnd = line.indexOf(" ", hashEnd + 1);
 
           return {
-            authoredAt: Number(line.slice(shortHashEnd + 1)),
+            committedAt: Number(line.slice(shortHashEnd + 1)),
             hash: line.slice(0, hashEnd),
             shortHash: line.slice(hashEnd + 1, shortHashEnd),
           };

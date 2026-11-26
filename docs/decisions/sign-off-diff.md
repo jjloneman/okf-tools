@@ -25,8 +25,8 @@ sources:
     resource: ../../src/diff.ts
     title: src/diff.ts, the okf diff command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:40:43Z }
+verified: { by: human:jjloneman, at: 2026-11-26T23:46:52Z }
 ---
 
 # What a re-verification shows as changed

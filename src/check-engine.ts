@@ -282,8 +282,8 @@ export type CheckSkipped = {
 /** A change git knows to a path: a commit, or its uncommitted changes. */
 export type FileChange = {
   /**
-   * When it was made, in whole seconds since the epoch: the commit's author
-   * time, or now for uncommitted changes.
+   * When it was made, in whole seconds since the epoch: the commit's
+   * committer time, or now for uncommitted changes.
    *
    * @example 1790000000
    */

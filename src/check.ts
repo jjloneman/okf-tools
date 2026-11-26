@@ -533,8 +533,8 @@ function readHistory(params: {
 
     history.set(filePath, [
       ...(isDirty ? [{ at: now, commit: undefined }] : []),
-      ...commits.map(({ authoredAt, hash, shortHash }) => ({
-        at: authoredAt,
+      ...commits.map(({ committedAt, hash, shortHash }) => ({
+        at: committedAt,
         commit: { hash, shortHash },
       })),
     ]);
