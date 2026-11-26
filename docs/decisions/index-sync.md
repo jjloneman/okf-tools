@@ -11,7 +11,7 @@ tags:
   - safety
   - tags
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T21:24:51Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:24:40Z }
 ---
 
 # How okf index keeps an index.md in step with its records
@@ -51,6 +51,6 @@ As of 2026-11-25, from `src/index-sync.ts`, `src/index-command.ts`, `src/tags.ts
 ## Links
 
 - [Issue #53](https://github.com/jjloneman/okf-tools/issues/53)
-- [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which added `okf tags`
+- [Issue #65](https://github.com/jjloneman/okf-tools/issues/65), which asked for `okf tags`
 - [How a record's tags are laid out](tags-layout.md)
 - [What `okf init` writes, and how it keeps the agent block current](init.md)

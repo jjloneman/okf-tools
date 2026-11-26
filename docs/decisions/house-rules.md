@@ -19,7 +19,7 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:20:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T19:23:21Z }
 ---
 
 # Which house rules okf check runs, and how a repo turns them on
@@ -69,7 +69,7 @@ As of 2026-11-26, from `src/house-rules.ts`, `src/spec-rules.ts`, `src/index-syn
 ## Consequences
 
 - `okf check --fix` fixes what these rules find where the fix is mechanical, such as sorted tags and `tags-layout: block` (see [What okf check --fix fixes, and how it writes](fixes.md)).
-- #66's planned audit is to read `tags-count`'s findings to find sparse records.
+- The okf-record skill's tag audit reads `tags-count`'s findings to find sparse records when the rule is on, and otherwise counts each record's tags itself (#66).
 - The other path fields `validate.py` checks, `resource`, `computation`, `executor.resource` and `attester.resource`, wait; `T008` already fails a missing `sources[].resource` in the repo.
 
 ## Links
