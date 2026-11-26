@@ -607,6 +607,36 @@ export function readGitFailure(error: unknown): GitFailure {
 }
 
 /**
+ * Read the commit a branch's changes are judged against: where `HEAD` left
+ * the base ref, else `HEAD` itself.
+ *
+ * - `HEAD`, when the base can't be read, such as in a shallow clone or a
+ *   repo with no remote, so uncommitted changes are still judged.
+ *
+ * @returns the commit and whether it's the branch's base, or `undefined` in
+ * a repo with no commits.
+ */
+export function readMergeBase(
+  repoRoot: string
+): { commit: string; isBranchBase: boolean } | undefined {
+  const mergeBase = tryGit({
+    args: ["merge-base", readBaseRef(repoRoot), "HEAD"],
+    repoRoot,
+  });
+
+  if (mergeBase !== undefined) {
+    return { commit: mergeBase, isBranchBase: true };
+  }
+
+  const head = tryGit({
+    args: ["rev-parse", "--verify", "--quiet", "HEAD"],
+    repoRoot,
+  });
+
+  return head === undefined ? undefined : { commit: head, isBranchBase: false };
+}
+
+/**
  * Read a file as a commit holds it.
  *
  * - `git ls-tree` prints nothing for a path the commit doesn't have, so a

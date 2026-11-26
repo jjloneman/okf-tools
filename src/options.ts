@@ -26,6 +26,14 @@ export type CheckOptions = {
   format: CheckFormat;
 
   /**
+   * Whether `--changed` asked to report only on the files changed since the
+   * base branch.
+   *
+   * @example true
+   */
+  isChanged: boolean;
+
+  /**
    * Whether a warning fails the run too, from `--strict`.
    *
    * @example true
@@ -386,7 +394,7 @@ export const OKF_USAGE = `usage: okf <command> [options]
 
 commands:
   check   report problems in the bundles against OKF's spec rules,
-          writing nothing
+          and whether each sign-off still holds, writing nothing
   deprecate
           mark records \`status: deprecated\`, naming what replaces them
   diff    print what changed in records since their last sign-off
@@ -607,10 +615,16 @@ options:
 /** How to call `okf check`, printed for `--help` and after a usage error. */
 export const CHECK_USAGE = `usage: okf check [options]
 
-Reports problems in the bundles against the rules OKF's spec states: every
-Markdown file git would track, records, index.md and log.md alike. Each
-finding names its file, line, severity, and rule. It writes nothing. In
-GitHub Actions, text findings also print as annotations on the files.
+Reports problems in the bundles against the rules OKF's spec states, and
+whether each record's sign-off still holds: every Markdown file git would
+track, records, index.md and log.md alike. Each finding names its file,
+line, severity, and rule. It writes nothing. In GitHub Actions, text
+findings also print as annotations on the files.
+
+A record whose body changed since the base branch is an error while a
+sign-off from before the change still counts, as when generated.at wasn't
+re-stamped. A draft is a notice, or as \`okf.drafts\` in package.json says:
+allow, warn, or block.
 
 It exits 1 on an error-level finding or a file it can't read, and under
 --strict on a warning too; otherwise 0.
@@ -618,6 +632,7 @@ It exits 1 on an error-level finding or a file it can't read, and under
 options:
   --bundle <dir>     a bundle directory to check; repeat for more
                      (default: \`okf.bundles\` in package.json)
+  --changed          report only on files changed since the base branch
   --format <format>  text (the default) or json
   --strict           fail on warnings too
   --help, -h         print this help`;
@@ -699,7 +714,12 @@ export function parseCheckArgs(
   return isStatusFormat(format)
     ? {
         kind: "options",
-        options: { bundles, format, isStrict: values.strict === true },
+        options: {
+          bundles,
+          format,
+          isChanged: values.changed === true,
+          isStrict: values.strict === true,
+        },
       }
     : {
         kind: "invalid",
@@ -1397,6 +1417,7 @@ function parseCheckLine(args: readonly string[]) {
     args: [...args],
     options: {
       bundle: { multiple: true, type: "string" },
+      changed: { type: "boolean" },
       format: { type: "string" },
       help: { short: "h", type: "boolean" },
       strict: { type: "boolean" },

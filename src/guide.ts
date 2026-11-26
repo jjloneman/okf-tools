@@ -40,7 +40,7 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
   - It signs as the configured \`okf.verifiedBy\`, the person, since the approval is theirs; never pass \`--by\` with your own name.
   - Pass \`--stale-in <duration>\`, such as \`P90D\`, only when the person says how long the sign-off holds; it sets each record's \`stale_after\` that long after the sign-off.
 - **\`okf verify\`** without \`--yes\` asks in a terminal which records to sign off. It's for the person, not for you.
-- **\`okf check\`** reports problems in the bundles against OKF's spec rules, and writes nothing. Run it whenever you like, and after editing records, before you hand back; fix each error it reports in the files you touched. \`--format json\` prints it for a program.
+- **\`okf check\`** reports problems in the bundles against OKF's spec rules, and whether each record's sign-off still holds, and writes nothing. Run it whenever you like, and after editing records, before you hand back; fix each error it reports in the files you touched, such as a body changed without a re-stamped \`generated\`. \`--changed\` reports only on what the branch changed, and \`--format json\` prints it for a program.
 - **\`okf tags\`** lists every tag in the bundles with its record count, and writes nothing. Run it whenever you choose a record's tags; \`--format json\` prints it for a program.
 - **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, or retitle a record, in the same change.
   - \`okf index --check\` writes nothing, so run it whenever you like.

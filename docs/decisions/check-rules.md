@@ -20,7 +20,7 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T23:42:57Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T00:42:43Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
@@ -44,7 +44,7 @@ As of 2026-11-25, from `src/check.ts`, `src/check-engine.ts`, `src/spec-rules.ts
   - **Rejected:** upstream's `I203`, which notes every extension key without an `x-` prefix.
 - **`W115` goes past `validate.py`:** it checks the links in every `index.md`, so a line left behind by a deleted record is reported; upstream checks links only in concepts' bodies.
 - **v0.3's root `index.md` rules are in:** a bundle with no root `index.md`, or one without `okf_version` (`W125`), a `license` that's neither an SPDX expression nor a file in the bundle (`W116`), and an unquoted `okf_version` (`W117`).
-- **The rest of `validate.py` waits:** the `sources`, path-field, footnote, body-link, and attested-computation rules, and the `I` findings. The gaps in the codes are those rules.
+- **The rest of `validate.py` waits:** the `sources`, path-field, footnote, body-link, and attested-computation rules, and the `I` findings other than `I201` and `I204`, which #45 brought in with the trust rules (see [How okf check judges whether a sign-off still holds](trust-rules.md)). The gaps in the codes are those rules.
 - **It reads every Markdown file git would track in the bundles**, records, `index.md` and `log.md` alike, skipping dot-paths, `okf.exclude`, and symlinks that lead out of the bundle (§3.2).
 - **Exit codes:** `1` on an error, or a file it can't read, and under `--strict` on a warning too; otherwise `0`. `--strict` is upstream's flag name.
 - **Output:** a line a finding, `path:line: severity code rule: message`, then a summary; `--format json` prints a versioned report; in GitHub Actions, text findings print as workflow annotations too, `info` as a notice, and still as lines, since GitHub shows only so many annotations.

@@ -302,6 +302,99 @@ describe("E007 frontmatter-unique-keys", () => {
   });
 });
 
+describe("I201 stale", () => {
+  test.each([
+    {
+      description: "a stale_after that has passed",
+      expected: [
+        "kb/a.md:3: the concept is stale: stale_after 2026-01-01 has passed (§5.5)",
+      ],
+      lines: ["stale_after: 2026-01-01"],
+    },
+    {
+      description: "a stale_after still to come",
+      expected: [],
+      lines: ["stale_after: 2999-01-01T00:00:00Z"],
+    },
+    {
+      description: "a stale_after that W101 reports",
+      expected: [],
+      lines: ["stale_after: 2026-01-01 10:00:00"],
+    },
+    {
+      description: "no stale_after",
+      expected: [],
+      lines: [],
+    },
+  ])("checks $description", ({ expected, lines }) => {
+    // When/Then - where and what it reports
+    expect(
+      findHits({ code: "I201", files: { "kb/a.md": concept(lines) } }).map(
+        ({ line, message, path }) => `${path}:${String(line)}: ${message}`
+      )
+    ).toStrictEqual(expected);
+  });
+});
+
+describe("I204 no-current-verification", () => {
+  const generated =
+    "generated: { by: claude-code/1.0, at: 2026-10-02T15:00:00Z }";
+
+  test.each([
+    {
+      description: "sign-offs all older than generated.at",
+      expected: ["kb/a.md:5"],
+      lines: [
+        generated,
+        "verified:",
+        "  - { by: human:a, at: 2026-10-01T15:00:00Z }",
+        "  - { by: human:b, at: 2026-10-02T14:59:59Z }",
+      ],
+    },
+    {
+      description: "one sign-off at generated.at, to the second",
+      expected: [],
+      lines: [
+        generated,
+        "verified:",
+        "  - { by: human:a, at: 2026-10-01T15:00:00Z }",
+        "  - { by: human:b, at: 2026-10-02T15:00:00.5Z }",
+      ],
+    },
+    {
+      description: "no sign-off",
+      expected: [],
+      lines: [generated],
+    },
+    {
+      description: "sign-offs whose at can't be read",
+      expected: [],
+      lines: [
+        generated,
+        "verified: [{ by: human:a, at: { day: 1 } }, { by: human:b, at: soon }]",
+      ],
+    },
+    {
+      description: "a generated.at that can't be read",
+      expected: [],
+      lines: [
+        "generated: { by: claude-code/1.0, at: soon }",
+        "verified: [{ by: human:a, at: 2026-10-01T15:00:00Z }]",
+      ],
+    },
+    {
+      description: "no generated",
+      expected: [],
+      lines: ["verified: [{ by: human:a, at: 2026-10-01T15:00:00Z }]"],
+    },
+  ])("checks $description", ({ expected, lines }) => {
+    // When/Then - the lines it reports
+    expect(
+      findLines({ code: "I204", files: { "kb/a.md": concept(lines) } })
+    ).toStrictEqual(expected);
+  });
+});
+
 describe("W101 timestamp-format", () => {
   test.each([
     {

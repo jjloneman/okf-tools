@@ -4,6 +4,7 @@ import { readOkfConfig, resolveSettings } from "./config.ts";
 
 const EMPTY = {
   bundles: undefined,
+  drafts: undefined,
   exclude: undefined,
   style: undefined,
   verifiedBy: undefined,
@@ -23,10 +24,11 @@ describe("readOkfConfig", () => {
     expect(readOkfConfig(text)).toStrictEqual({ config: EMPTY, isOk: true });
   });
 
-  test("reads the bundles, the exclusions, the style, and the actor", () => {
+  test("reads the bundles, the drafts policy, the exclusions, the style, and the actor", () => {
     // Given - a full okf block
     const okf = {
       bundles: ["docs/decisions"],
+      drafts: "block",
       exclude: ["docs/decisions/README.md"],
       style: "block",
       verifiedBy: "human:jjloneman",
@@ -47,6 +49,7 @@ describe("readOkfConfig", () => {
     expect(readOkfConfig(text)).toStrictEqual({
       config: {
         bundles: undefined,
+        drafts: undefined,
         exclude: ["!(docs)/**"],
         style: undefined,
         verifiedBy: undefined,
@@ -101,6 +104,11 @@ describe("readOkfConfig", () => {
         "`okf.style` in package.json must be one of block, inline, match.",
       text: JSON.stringify({ okf: { style } }),
     })),
+    ...["Block", "notice", true].map((drafts) => ({
+      description: `the drafts policy ${JSON.stringify(drafts)}`,
+      reason: "`okf.drafts` in package.json must be one of allow, block, warn.",
+      text: JSON.stringify({ okf: { drafts } }),
+    })),
     {
       description: "an actor that isn't a string",
       reason: "`okf.verifiedBy` in package.json must be a string.",
@@ -115,6 +123,7 @@ describe("readOkfConfig", () => {
 describe("resolveSettings", () => {
   const configured = {
     bundles: ["docs/decisions"],
+    drafts: undefined,
     exclude: undefined,
     style: undefined,
     verifiedBy: "human:jjloneman",
@@ -208,6 +217,7 @@ describe("resolveSettings", () => {
       by: undefined,
       config: {
         bundles: ["docs"],
+        drafts: undefined,
         exclude: undefined,
         style: undefined,
         verifiedBy: undefined,
@@ -220,6 +230,7 @@ describe("resolveSettings", () => {
       by: "human:jj loneman",
       config: {
         bundles: ["docs"],
+        drafts: undefined,
         exclude: undefined,
         style: undefined,
         verifiedBy: undefined,
@@ -244,6 +255,7 @@ describe("resolveSettings", () => {
       by,
       config: {
         bundles: ["docs"],
+        drafts: undefined,
         exclude: undefined,
         style: undefined,
         verifiedBy: undefined,

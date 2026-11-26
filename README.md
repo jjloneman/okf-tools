@@ -80,12 +80,13 @@ Then configure it in `package.json`:
 - **`okf.bundles`** lists the bundle directories, relative to the repo root. Records are the `.md` files at any depth inside each, other than `index.md` and `log.md` at every level, which [OKF reserves](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md#31-reserved-filenames). A bundle inside another counts each record once; a folder git ignores or that holds only ignored files, `.git`, a folder holding another clone, and a symlink to a folder are never read.
 - **`okf.verifiedBy`** is the OKF actor each `verified` entry names.
 - **`okf.exclude`** (optional) lists globs, relative to the repo root, of Markdown in a bundle that isn't a record, such as `["**/README.md", "docs/decisions/drafts"]`. A glob that matches a folder excludes everything in it, `*` matches dot files too, and a glob can't start with `!` (other than an extglob such as `!(drafts)`) or `/`, or end with `/`.
+- **`okf.drafts`** (optional) is how `okf check` reports a record still `status: draft`: `allow` says nothing, `warn` makes it a warning, and `block` an error, for a branch that must not merge drafts. Unset, it's a notice.
 - **`okf.style`** is how a new `verified` entry is laid out, and is optional:
   - `match`, the default, writes it as the record writes `generated`: a block when `generated` is a block mapping, else inline;
   - `inline` always writes `{ by, at }` on one line;
   - `block` always writes `by` and `at` on lines of their own.
 
-`okf init --bundle docs/decisions --by human:jjloneman` writes `okf.bundles` and `okf.verifiedBy` for you (see [Setting up](#-setting-up)). Both can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.exclude` and `okf.style` have no flag, and `okf.exclude` applies to `--bundle` too.
+`okf init --bundle docs/decisions --by human:jjloneman` writes `okf.bundles` and `okf.verifiedBy` for you (see [Setting up](#-setting-up)). Both can be given on the command line instead (`--bundle`, `--by`); there is no default for either. `okf.drafts`, `okf.exclude` and `okf.style` have no flag, and `okf.exclude` applies to `--bundle` too.
 
 A block entry goes in a `-` list, even when it's the only one, since a bare block mapping can't take a second signer's entry (see the layouts above):
 
@@ -436,9 +437,12 @@ pnpm okf check
 
 # In CI: fail on warnings too
 pnpm okf check --strict
+
+# On a pull request: report only what the branch changed
+pnpm okf check --changed
 ```
 
-`okf check` reads every Markdown file in the bundles that git would track, records, `index.md` and `log.md` alike, and reports what breaks the [spec](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)'s rules. It writes nothing.
+`okf check` reads every Markdown file in the bundles that git would track, records, `index.md` and `log.md` alike, and reports what breaks the [spec](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)'s rules, and whether each record's sign-off still holds. It writes nothing.
 
 ```text
 [okf] docs/decisions/log.md:5: error E005 log-date-heading: a log.md date heading must be YYYY-MM-DD (§9); found "May 1"
@@ -449,6 +453,14 @@ pnpm okf check --strict
   - The codes and severities are those of upstream's own checker, `validate.py` in the spec repo's `okf-generate` skill, so both tools report a finding the same way.
 - **An `error` breaks the bundle's conformance**, as §11.1 defines it: frontmatter that doesn't parse as a YAML mapping, and an `index.md` or `log.md` that breaks §8 or §9.
 - **A `warning` is a value the spec's other sections advise against**, such as a timestamp without an offset or an unknown `status`; the bundle still conforms.
+- **`info` needs no fix**, such as a record past its `stale_after`, and never fails the run.
+- **The trust rules judge each record's sign-off**, which no general OKF checker does (see [Trust rules](#-trust-rules)).
+  - A sign-off is current as OKF v0.3 counts one: at or after `generated.at`, to the whole second, and not ahead of the clock.
+- **A record whose body changed since the base branch under a sign-off from before the change that still counts is an error** (`T006`), as when `generated.at` wasn't re-stamped.
+  - The base is where the branch left `origin/HEAD`, else `origin/main`, else `main`, as for `okf verify --changed`; with none, uncommitted changes are compared with `HEAD`.
+  - In CI, fetch the base branch, such as with `actions/checkout`'s `fetch-depth: 0`: a shallow checkout has no base, so the gate sees no change.
+  - A sign-off made on the branch, after the change, covers it.
+- **`--changed` reports only on the files changed since the base branch**, from the branch diff and `git status`, for a pull request's check. Without a base to diff against, it says so on stderr and reports on uncommitted changes alone.
 - **It reads frontmatter as `okf verify` does**, so the two never disagree about a record.
 - **A key the spec doesn't define passes without a finding**, so a repo can use okf-tools beside a tool that adds its own keys.
 - **It skips what OKF leaves out of a bundle:** files and folders whose names start with `.`, and symlinks that lead out of the bundle; it skips what `okf.exclude` matches too.
@@ -459,34 +471,50 @@ pnpm okf check --strict
 | Flag                | Does                                                              |
 | ------------------- | ----------------------------------------------------------------- |
 | `--bundle <dir>`    | A bundle to check, relative to where you run it; repeat for more. |
+| `--changed`         | Report only on the files changed since the base branch.           |
 | `--format <format>` | `text`, the default, or `json`.                                   |
 | `--strict`          | Exit `1` on a warning too.                                        |
 | `--help`, `-h`      | Print the usage.                                                  |
 
 ### 📏 Rules
 
-| Code | Rule                          | Severity | Finds                                                                                                          |
-| ---- | ----------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
-| E002 | `frontmatter-parses`          | error    | Frontmatter that isn't valid YAML, isn't a mapping, or has a near-miss fence (§4).                             |
-| E004 | `subfolder-index-frontmatter` | error    | An `index.md` below the bundle root with frontmatter (§8).                                                     |
-| E005 | `log-date-heading`            | error    | A `log.md` `##` heading that isn't a real `YYYY-MM-DD` date (§9).                                              |
-| E006 | `log-frontmatter`             | error    | A `log.md` with frontmatter (§9).                                                                              |
-| E007 | `frontmatter-unique-keys`     | error    | A key given twice in one mapping (§4).                                                                         |
-| W101 | `timestamp-format`            | warning  | A `generated.at`, `verified[].at`, or `stale_after` that's neither a date-time with an offset nor a date (§5). |
-| W102 | `generated-shape`             | warning  | A `generated` that isn't a mapping with a `by` (§5.2).                                                         |
-| W103 | `actor-format`                | warning  | A `generated.by` or `verified[].by` in neither actor form (§7).                                                |
-| W104 | `verified-event-shape`        | warning  | A `verified` event without both `by` and `at`, which consumers ignore (§5.2).                                  |
-| W105 | `status-value`                | warning  | A `status` other than `draft`, `stable`, or `deprecated` (§5.4).                                               |
-| W110 | `tags-list`                   | warning  | `tags` written as one string or a mapping, not a list (§4.1).                                                  |
-| W115 | `index-link-target`           | warning  | An `index.md` link to a path in the bundle that doesn't exist, such as a deleted record's (§6.1).              |
-| W116 | `license-value`               | warning  | A root `index.md` `license` that's neither an SPDX expression nor a file in the bundle (§8.1).                 |
-| W117 | `string-quoted`               | warning  | A `type`, `title`, `description`, `status`, or `okf_version` YAML would read as a number or boolean (§4).      |
-| W118 | `log-date-order`              | warning  | A `log.md` date heading newer than the one before it (§9).                                                     |
-| W120 | `not-a-concept`               | warning  | Markdown with no frontmatter, or no `type`, which consumers skip (§3.2).                                       |
-| W122 | `date-only-trust-time`        | warning  | A `generated.at` or `verified[].at` with a date but no time (§5).                                              |
-| W125 | `bundle-version`              | warning  | A bundle with no root `index.md`, or one without `okf_version` (§8.1).                                         |
+| Code | Rule                          | Severity | Finds                                                                                                              |
+| ---- | ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| E002 | `frontmatter-parses`          | error    | Frontmatter that isn't valid YAML, isn't a mapping, or has a near-miss fence (§4).                                 |
+| E004 | `subfolder-index-frontmatter` | error    | An `index.md` below the bundle root with frontmatter (§8).                                                         |
+| E005 | `log-date-heading`            | error    | A `log.md` `##` heading that isn't a real `YYYY-MM-DD` date (§9).                                                  |
+| E006 | `log-frontmatter`             | error    | A `log.md` with frontmatter (§9).                                                                                  |
+| E007 | `frontmatter-unique-keys`     | error    | A key given twice in one mapping (§4).                                                                             |
+| I201 | `stale`                       | info     | A record past its `stale_after` (§5.5).                                                                            |
+| I204 | `no-current-verification`     | info     | A record whose every `verified` event is older than its `generated.at`, which consumers read as unverified (§5.3). |
+| W101 | `timestamp-format`            | warning  | A `generated.at`, `verified[].at`, or `stale_after` that's neither a date-time with an offset nor a date (§5).     |
+| W102 | `generated-shape`             | warning  | A `generated` that isn't a mapping with a `by` (§5.2).                                                             |
+| W103 | `actor-format`                | warning  | A `generated.by` or `verified[].by` in neither actor form (§7).                                                    |
+| W104 | `verified-event-shape`        | warning  | A `verified` event without both `by` and `at`, which consumers ignore (§5.2).                                      |
+| W105 | `status-value`                | warning  | A `status` other than `draft`, `stable`, or `deprecated` (§5.4).                                                   |
+| W110 | `tags-list`                   | warning  | `tags` written as one string or a mapping, not a list (§4.1).                                                      |
+| W115 | `index-link-target`           | warning  | An `index.md` link to a path in the bundle that doesn't exist, such as a deleted record's (§6.1).                  |
+| W116 | `license-value`               | warning  | A root `index.md` `license` that's neither an SPDX expression nor a file in the bundle (§8.1).                     |
+| W117 | `string-quoted`               | warning  | A `type`, `title`, `description`, `status`, or `okf_version` YAML would read as a number or boolean (§4).          |
+| W118 | `log-date-order`              | warning  | A `log.md` date heading newer than the one before it (§9).                                                         |
+| W120 | `not-a-concept`               | warning  | Markdown with no frontmatter, or no `type`, which consumers skip (§3.2).                                           |
+| W122 | `date-only-trust-time`        | warning  | A `generated.at` or `verified[].at` with a date but no time (§5).                                                  |
+| W125 | `bundle-version`              | warning  | A bundle with no root `index.md`, or one without `okf_version` (§8.1).                                             |
 
 The gaps in the numbering are upstream rules okf-tools doesn't run yet, such as those on `sources` and attested computations.
+
+### 🔏 Trust rules
+
+okf-tools' own rules, whose `T` codes upstream doesn't use:
+
+| Code | Rule               | Severity                 | Finds                                                                                               |
+| ---- | ------------------ | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`.                                                                     |
+| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.       |
+| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes. |
+| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                         |
+| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.           |
+| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.      |
 
 ## 🧭 Agents
 
