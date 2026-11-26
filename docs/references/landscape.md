@@ -28,12 +28,12 @@ sources:
     title: pypistats' API
 status: draft
 stale_after: 2027-01-26T00:00:00Z
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:08:34Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:09:40Z }
 ---
 
 # Other OKF tools, and what okf-tools does differently
 
-What other OKF tools do was first researched in chat, and goes out of date as they ship, several of them weekly. This record keeps it, and once its `stale_after` passes, `okf check` reports it (`I201`) whenever it runs; no CI job runs it yet. `/product-review` reads it, and treats it as missing once it's stale.
+What other OKF tools do was first researched in chat, and goes out of date as they ship, several of them weekly. This record keeps it, and once its `stale_after` passes, `pnpm okf check` reports it (`I201`) as a notice; CI checks only the files a pull request changes, so it shows there only when this record changes. `/product-review` reads it, and treats it as missing once it's stale.
 
 It recommends no tool. Each claim says how it was found:
 
