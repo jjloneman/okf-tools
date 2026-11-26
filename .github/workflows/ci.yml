@@ -57,6 +57,16 @@ jobs:
       # After ESLint, so the richer error surfaces first when both fail.
       - run: pnpm format:check
 
+  okf:
+    name: 📚 Decision records
+    # This repo's own reusable workflow, called on its decision records, so
+    # every change to it runs on this repo first. `./` pins it to this commit.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/okf-check.yml
+    with:
+      strict: true
+
   package:
     name: 📦 Package
     runs-on: ubuntu-latest

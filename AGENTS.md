@@ -61,7 +61,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `test/repo.ts` — scratch git repos, fabricated records, and the shared `VERIFIED_BY` for the tests, imported as `#test/repo`.
 - `test/spec-watch.ts` — a fake `fetch` that answers for GitHub and ntfy, and a fabricated upstream, for the spec watch's tests, imported as `#test/spec-watch`.
 - `.changeset/` — pending changesets (see [Versioning & releases](#-versioning--releases)).
-- `.github/workflows/` — `ci.yml`, `release.yml`, `spec-watch.yml`, and `product-review-reminder.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
+- `.github/workflows/` — `ci.yml`, `okf-check.yml`, `release.yml`, `spec-watch.yml`, and `product-review-reminder.yml`; `.github/actions/setup/` is the shared pnpm + Node + install prelude; `.github/rulesets/main.json` protects `main`.
 - `.claude/skills/product-review/` — the product review skill (see [Product review](#-product-review)).
 - `eslint-rules/` — the local `no-dotted-jsdoc-param` rule, loaded by `eslint.config.ts`.
 - `dist/` — build output (gitignored), the only directory published; `CHANGELOG.md` is published beside it.
@@ -122,9 +122,13 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 
 ## 🤖 CI
 
-- `ci.yml` runs on every PR and push to `main`: lint and format check, typecheck, tests on Node 22 and 26 (coverage on 26), and `pnpm lint:package`.
+- `ci.yml` runs on every PR and push to `main`: lint and format check, typecheck, tests on Node 22 and 26 (coverage on 26), `pnpm lint:package`, and `okf check --strict` on the decision records.
 - On a PR it also runs `pnpm changeset status --since=origin/main`, which fails when the PR adds no changeset.
   - It skips the version PR (`changeset-release/main`), which only consumes changesets.
+- **`okf-check.yml` is a reusable workflow** that other repos call, pinned by commit SHA, to run `okf check` on their bundles (see the README's "In GitHub Actions").
+  - It runs against the caller's checkout, so it never uses `./.github/actions/setup`, which would name a file in the caller's repo.
+  - `ci.yml`'s `okf` job calls it from this commit, so a change to it runs here first.
+  - Its job's name is part of every caller's status check, `<caller's job> / 🩺 OKF check`, so renaming it breaks their required checks: treat it as a breaking change.
 - `release.yml` runs on every push to `main` (see below).
 - `spec-watch.yml` runs daily and on demand, never on a PR (see [Spec watch](#-spec-watch)).
 - `product-review-reminder.yml` runs weekly and on demand, never on a PR (see [Product review](#-product-review)).

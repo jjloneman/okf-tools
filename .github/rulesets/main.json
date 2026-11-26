@@ -25,6 +25,10 @@
         "required_status_checks": [
           { "context": "🦋 Changeset", "integration_id": 15368 },
           { "context": "🧹 Lint & format", "integration_id": 15368 },
+          {
+            "context": "📚 Decision records / 🩺 OKF check",
+            "integration_id": 15368
+          },
           { "context": "📦 Package", "integration_id": 15368 },
           { "context": "🧪 Tests (Node 22)", "integration_id": 15368 },
           { "context": "🧪 Tests (Node 26)", "integration_id": 15368 },
