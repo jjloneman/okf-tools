@@ -85,6 +85,9 @@ const ACTOR = /^(?:[^\s/:]+\/\S+|[A-Za-z][\d+.A-Za-z-]*:\S+)$/u;
 /** An SPDX license expression, as upstream recognizes one. */
 const SPDX = /^[\d+.A-Za-z-]+(?: (?:AND|OR|WITH) [\d+.A-Za-z-]+)*$/u;
 
+/** A footnote reference or definition, and its label. */
+const FOOTNOTE = /\[\^(?<label>[^\s\]]+)\]/gu;
+
 /** An inline link, not an image, and its target. */
 const LINK =
   /(?<!!)\[[^\]]*\]\(\s*<?(?<target>[^\s)>]+)>?(?:\s+"[^"]*")?\s*\)/gu;
@@ -315,6 +318,12 @@ export const SPEC_RULES: readonly CheckRule[] = [
     severity: "warning",
   },
   {
+    checkFile: (file) => withConcept(file, (parsed) => checkFootnotes(parsed)),
+    code: "W108",
+    name: "footnote-source",
+    severity: "warning",
+  },
+  {
     checkFile: (file) =>
       withConcept(file, (parsed) => {
         const tags = parsed.get("tags");
@@ -340,12 +349,25 @@ export const SPEC_RULES: readonly CheckRule[] = [
     severity: "warning",
   },
   {
-    checkFile: (file) => (file.kind === "index" ? checkIndexLinks(file) : []),
+    checkBundle: (bundle) =>
+      withEachFile({
+        bundle,
+        check: (file, canFallBack) =>
+          file.kind === "index" || isConceptFile(file)
+            ? checkLinks({ canFallBack, file })
+            : [],
+      }),
     code: "W115",
-    name: "index-link-target",
+    name: "link-target",
     severity: "warning",
   },
   {
+    checkBundle: (bundle) =>
+      withEachFile({
+        bundle,
+        check: (file, canFallBack) =>
+          checkSupersededBy({ canFallBack, file, kind: "missing" }),
+      }),
     checkFile: (file) =>
       withRootIndex(file, (parsed) => {
         const license = parsed.get("license");
@@ -353,7 +375,7 @@ export const SPEC_RULES: readonly CheckRule[] = [
 
         return value === undefined ||
           SPDX.test(value) ||
-          doesPathResolve({ file, target: value })
+          resolvePath({ canFallBack: false, file, target: value }) !== "missing"
           ? []
           : [
               {
@@ -363,7 +385,7 @@ export const SPEC_RULES: readonly CheckRule[] = [
             ];
       }),
     code: "W116",
-    name: "license-value",
+    name: "path-target",
     severity: "warning",
   },
   {
@@ -405,6 +427,17 @@ export const SPEC_RULES: readonly CheckRule[] = [
     },
     code: "W118",
     name: "log-date-order",
+    severity: "warning",
+  },
+  {
+    checkBundle: (bundle) =>
+      withEachFile({
+        bundle,
+        check: (file, canFallBack) =>
+          checkSupersededBy({ canFallBack, file, kind: "fallback" }),
+      }),
+    code: "W119",
+    name: "path-root-fallback",
     severity: "warning",
   },
   {
@@ -465,6 +498,26 @@ export const SPEC_RULES: readonly CheckRule[] = [
     severity: "warning",
   },
   {
+    checkFile: (file) =>
+      withConcept(file, (parsed) => {
+        const supersededBy = parsed.get("superseded_by");
+
+        return isBlank(supersededBy) ||
+          readTimestamp(parsed.get("status")) === "deprecated"
+          ? []
+          : [
+              {
+                line: readNodeLine({ file, node: supersededBy }),
+                message:
+                  "superseded_by has a meaning only with status: deprecated (§5.4)",
+              },
+            ];
+      }),
+    code: "W123",
+    name: "superseded-by-status",
+    severity: "warning",
+  },
+  {
     checkBundle: checkBundleVersion,
     checkFile: (file) => {
       if (file.kind !== "index" || !file.isAtBundleRoot) {
@@ -499,6 +552,27 @@ export const SPEC_RULES: readonly CheckRule[] = [
 ];
 
 /**
+ * Whether a bundle reads a bare path field from its root too, v0.2's
+ * reading (§6.2): its root `index.md` declares `okf_version` 0.2 or earlier,
+ * or no version it can be read as.
+ */
+export function canFallBackToRoot(bundle: CheckedBundle): boolean {
+  const indexPath = path.posix.join(bundle.bundleDir, "index.md");
+  const index = bundle.files.find((file) => file.filePath === indexPath);
+  const parsed = index === undefined ? undefined : readParsed(index);
+  const declared = readTimestamp(parsed?.get("okf_version"))?.split(".");
+
+  if (!declared?.every((part) => /^\d+$/u.test(part))) {
+    return true;
+  }
+
+  // Compared as upstream compares tuples, so 0.2.1 is past 0.2.
+  const [major = 0, minor = 0, ...rest] = declared.map(Number);
+
+  return major === 0 && (minor < 2 || (minor === 2 && rest.length === 0));
+}
+
+/**
  * Decode a link's or path field's percent escapes, or keep it as written
  * when they're bad.
  */
@@ -508,6 +582,13 @@ export function decodePath(target: string): string {
   } catch {
     return target;
   }
+}
+
+/** Whether a file is a concept: Markdown whose `type` is non-empty (§3.2). */
+export function isConceptFile(file: CheckedFile): boolean {
+  const parsed = readParsed(file);
+
+  return file.kind === "markdown" && parsed !== undefined && isConcept(parsed);
 }
 
 /** Whether a timestamp is in one of §5's forms and names a real instant. */
@@ -549,6 +630,24 @@ export function readEvents(parsed: ParsedFile): {
   });
 }
 
+/**
+ * Read each footnote label in a body's prose, wherever it's used, and
+ * whether that use is the footnote's definition, `[^label]:` opening a line.
+ */
+export function readFootnotes(
+  file: CheckedFile
+): { isDefinition: boolean; label: string; line: number }[] {
+  return readProseLines(file).flatMap(({ content, line }) =>
+    [...content.matchAll(FOOTNOTE)].map((match) => ({
+      isDefinition:
+        /^ {0,3}$/u.test(content.slice(0, match.index)) &&
+        content.charAt(match.index + match[0].length) === ":",
+      label: match.slice(1).join(""),
+      line,
+    }))
+  );
+}
+
 /** Read a file's parsed frontmatter, or `undefined` when it has none. */
 export function readParsed(file: CheckedFile): ParsedFile | undefined {
   if (file.frontmatter.kind !== "parsed") {
@@ -572,6 +671,39 @@ export function readParsed(file: CheckedFile): ParsedFile | undefined {
   };
 }
 
+/**
+ * Read a body's lines with fenced code and inline code blanked out, each with
+ * its 1-based line in the file.
+ */
+export function readProseLines(
+  file: CheckedFile
+): { content: string; line: number }[] {
+  const bodyStart = findBodyStart(file.text);
+  const lineOffset = file.text.slice(0, bodyStart).split("\n").length - 1;
+
+  return splitLines(maskCode(file.text.slice(bodyStart))).map(
+    ({ content }, index) => ({ content, line: lineOffset + index + 1 })
+  );
+}
+
+/**
+ * Read the `id` of each `sources` entry that has one as text, a bare mapping
+ * as one entry (§11.2).
+ */
+export function readSourceIds(
+  parsed: ParsedFile
+): { id: string; node: unknown }[] {
+  const sources = parsed.get("sources");
+  const entries: unknown[] = isSeq(sources) ? sources.items : [sources];
+
+  return entries.flatMap((entry) => {
+    const node = parsed.read(parsed.resolve(entry), "id");
+    const id = readTimestamp(node);
+
+    return id === undefined ? [] : [{ id, node }];
+  });
+}
+
 /** Run a check over a concept's frontmatter, or find nothing in any other file. */
 export function withConcept(
   file: CheckedFile,
@@ -582,6 +714,22 @@ export function withConcept(
   return file.kind === "markdown" && parsed !== undefined && isConcept(parsed)
     ? check(parsed)
     : [];
+}
+
+/**
+ * Run a check over each file of a bundle, told whether the bundle reads a
+ * bare path from its root too, and name each finding's file.
+ */
+export function withEachFile(params: {
+  bundle: CheckedBundle;
+  check: (file: CheckedFile, canFallBack: boolean) => RuleHit[];
+}): BundleHit[] {
+  const { bundle, check } = params;
+  const canFallBack = canFallBackToRoot(bundle);
+
+  return bundle.files.flatMap((file) =>
+    check(file, canFallBack).map((hit) => ({ ...hit, path: file.filePath }))
+  );
 }
 
 /** Warn about an actor in neither of §7's forms. */
@@ -618,25 +766,56 @@ function checkBundleVersion(bundle: CheckedBundle): BundleHit[] {
       ];
 }
 
-/** Warn about each link in an `index.md` to a path the bundle doesn't hold. */
-function checkIndexLinks(file: CheckedFile): RuleHit[] {
-  const bodyStart = findBodyStart(file.text);
-  const lineOffset = file.text.slice(0, bodyStart).split("\n").length - 1;
+/** Warn about each footnote label no `sources` entry has as its `id` (§5.1). */
+function checkFootnotes(parsed: ParsedFile): RuleHit[] {
+  const ids = new Set(readSourceIds(parsed).map(({ id }) => id));
+  const reported = new Set<string>();
 
-  return splitLines(maskCode(file.text.slice(bodyStart))).flatMap(
-    (line, index) =>
-      [...line.content.matchAll(LINK)].flatMap((match) => {
-        const target = match.slice(1).join("");
+  // Each label once, at its first use, a definition counted as one, as
+  // upstream reports it.
+  return readFootnotes(parsed.file).flatMap(({ label, line }) => {
+    if (ids.has(label) || reported.has(label)) {
+      return [];
+    }
 
-        return doesPathResolve({ file, target })
-          ? []
-          : [
-              {
-                line: lineOffset + index + 1,
-                message: `link target "${target}" is not in the bundle (§6.1)`,
-              },
-            ];
-      })
+    reported.add(label);
+
+    return [
+      {
+        line,
+        message: `footnote [^${label}] has no sources entry with that id (§5.1)`,
+      },
+    ];
+  });
+}
+
+/**
+ * Warn about each link in a body to a path the bundle doesn't hold.
+ *
+ * - A link resolves from its file's folder, or from the bundle root with a
+ *   leading `/` (§6); in a bundle declared v0.2 or earlier, or undeclared, a
+ *   bare link that resolves only from the bundle root passes too, as v0.2
+ *   bundles wrote them.
+ */
+function checkLinks(params: {
+  canFallBack: boolean;
+  file: CheckedFile;
+}): RuleHit[] {
+  const { canFallBack, file } = params;
+
+  return readProseLines(file).flatMap(({ content, line }) =>
+    [...content.matchAll(LINK)].flatMap((match) => {
+      const target = match.slice(1).join("");
+
+      return resolvePath({ canFallBack, file, target }) === "missing"
+        ? [
+            {
+              line,
+              message: `link target "${target}" is not in the bundle (§6.1)`,
+            },
+          ]
+        : [];
+    })
   );
 }
 
@@ -678,6 +857,40 @@ function checkStaleAfter(params: {
       ];
 }
 
+/**
+ * Warn about a concept's `superseded_by` that resolves to no file in the
+ * bundle, or, apart, one that resolves only through v0.2's fallback.
+ */
+function checkSupersededBy(params: {
+  canFallBack: boolean;
+  file: CheckedFile;
+  kind: "fallback" | "missing";
+}): RuleHit[] {
+  const { canFallBack, file, kind } = params;
+
+  return withConcept(file, (parsed) => {
+    const node = parsed.get("superseded_by");
+    const value = readTimestamp(node);
+
+    if (
+      value === undefined ||
+      resolvePath({ canFallBack, file, target: value }) !== kind
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        line: readNodeLine({ file, node }),
+        message:
+          kind === "missing"
+            ? `superseded_by "${value}" does not resolve to a file in the bundle (§6.2)`
+            : `superseded_by "${value}" resolves only from the bundle root, through the v0.2 fallback; write it as /${value} (§6.2)`,
+      },
+    ];
+  });
+}
+
 /** Warn about a timestamp in neither of §5's forms. */
 function checkTimestamp(params: {
   field: string;
@@ -701,37 +914,6 @@ function describeValue(node: unknown): string {
   const value = readTimestamp(node);
 
   return value === undefined ? "a value that isn't text" : `"${value}"`;
-}
-
-/**
- * Whether a link target or path field resolves inside the bundle to a file
- * or folder that exists.
- *
- * - A URL, an in-page anchor, and a path that leaves the bundle are
- *   external, so they resolve as far as the bundle is concerned (§6).
- */
-function doesPathResolve(params: {
-  file: CheckedFile;
-  target: string;
-}): boolean {
-  const { file, target } = params;
-
-  if (hasScheme(target) || target.startsWith("//") || target.startsWith("#")) {
-    return true;
-  }
-
-  const clean = decodePath(target.replace(/[#?].*$/u, ""));
-  const base = clean.startsWith("/")
-    ? file.bundleDir
-    : path.posix.dirname(file.filePath);
-  const resolved = path.posix.join(base, clean);
-  const fromBundle = path.posix.relative(file.bundleDir, resolved);
-
-  return (
-    fromBundle === ".." ||
-    fromBundle.startsWith("../") ||
-    file.doesExist(resolved)
-  );
 }
 
 /**
@@ -809,6 +991,51 @@ function readsFrontmatter(file: CheckedFile): boolean {
   return (
     file.kind === "markdown" || (file.kind === "index" && file.isAtBundleRoot)
   );
+}
+
+/**
+ * Resolve a link target or path field by §6's rules.
+ *
+ * - A URL, an in-page anchor, and a path that leaves the bundle are
+ *   `external`, so they resolve as far as the bundle is concerned (§6).
+ *
+ * - With `canFallBack`, a bare path that resolves only from the bundle root
+ *   is `fallback`, v0.2's reading (§6.2).
+ */
+function resolvePath(params: {
+  canFallBack: boolean;
+  file: CheckedFile;
+  target: string;
+}): "external" | "fallback" | "found" | "missing" {
+  const { canFallBack, file, target } = params;
+
+  if (hasScheme(target) || target.startsWith("//") || target.startsWith("#")) {
+    return "external";
+  }
+
+  const clean = decodePath(target.replace(/[#?].*$/u, ""));
+  const base = clean.startsWith("/")
+    ? file.bundleDir
+    : path.posix.dirname(file.filePath);
+  const resolved = path.posix.join(base, clean);
+  const fromBundle = path.posix.relative(file.bundleDir, resolved);
+
+  if (fromBundle === ".." || fromBundle.startsWith("../")) {
+    return "external";
+  }
+
+  if (file.doesExist(resolved)) {
+    return "found";
+  }
+
+  const fromRoot = path.posix.join(file.bundleDir, clean);
+  const isFallback =
+    canFallBack &&
+    !clean.startsWith("/") &&
+    !path.posix.relative(file.bundleDir, fromRoot).startsWith("..") &&
+    file.doesExist(fromRoot);
+
+  return isFallback ? "fallback" : "missing";
 }
 
 /** Run a check over the root `index.md`'s parsed frontmatter, or find nothing. */
