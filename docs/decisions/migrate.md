@@ -20,9 +20,9 @@ sources:
   - id: okf-spec-v02
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification, v0.2
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T21:38:47Z }
-verified: { by: human:jjloneman, at: 2026-11-26T20:51:19Z }
+verified: { by: human:jjloneman, at: 2026-11-26T21:42:38Z }
 ---
 
 # How okf migrate moves a bundle to OKF v0.3
