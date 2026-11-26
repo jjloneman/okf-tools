@@ -11,7 +11,7 @@ tags:
   - safety
   - tags
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T23:17:23Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
 ---
 
 # What `okf init` writes, and how it keeps the agent block current
@@ -40,8 +40,8 @@ As of 2026-11-25, from `src/init.ts`, `src/agent-block.ts`, `src/options.ts`, an
 - **`okf init --check` writes nothing,** and exits `1` when a target is missing, has no block, has a stale one, or has malformed markers, or when a skill is missing, stale, or not its own; it checks the blocks and the skills, not the config. `--check` takes no `--bundle` or `--by`.
 - **The block's text is one constant, `AGENT_BLOCK`,** which the README's Agents section quotes, and a test keeps the two the same, so the rules are written once.
   - Its intro and rules come from `src/guide.ts`, which `okf guide` prints too, and it ends with a line pointing at `okf guide` for the commands (#50); see [What `okf guide` prints](guide.md).
-  - It names only commands that exist: `okf tags` (#53) added the sub-bullet under `tags` that lists the bundles' tags with it, and `okf init` then brings every repo up to date.
-  - It says to write `tags` as a block list, per [How a record's tags are laid out](tags-layout.md), with 5 to 10 specific tags that reuse the bundle's existing ones (#66).
+  - It names only commands that exist: `okf tags` (#53) is how its tag rules list the bundles' tags, and `okf init` then brings every repo up to date.
+  - It ends with the tag rules from `src/tag-rules.ts` (#66), which the okf-record skill quotes too: 5 to 10 specific tags that reuse the bundle's own, a block list per [How a record's tags are laid out](tags-layout.md), no re-stamp for a change to `tags` alone, and the repo's tag house rules winning where `okf.rules` turns one on.
 
 ## Why
 

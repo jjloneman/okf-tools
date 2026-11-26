@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: How okf new and okf touch stamp generated
-description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses."
+description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses; a change to `tags` alone isn't re-stamped."
 tags:
   - agents
   - cli
@@ -10,9 +10,11 @@ tags:
   - index
   - refusals
   - safety
+  - tags
   - timestamps
+  - verification
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:03:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:43:49Z }
 ---
 
 # How okf new and okf touch stamp generated
@@ -36,16 +38,26 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - **Neither adds or changes `verified`, and neither commits**, since signing off stays the person's call (see [Who verifies a record](who-verifies.md)).
 - **`--by` is required and must be an actor**, as `okf.verifiedBy` must; it names the producer, so it never falls back to `okf.verifiedBy`.
 - **The agent rules point at both commands** in place of telling an agent to stamp `generated` itself.
+- **A change to `tags` alone isn't re-stamped:** the agent rules and the `okf-record` skill say to skip `okf touch` for it, keeping `generated` and `status`, so a signed-off record stays signed off.
+  - Any other change in the same edit, to the body or another field, is re-stamped as before.
+  - `title` and `description` aren't exempt, since they summarize what the record says.
+  - In a tag audit, the record skill proposes every retag in one table first, so the person sees each change before it's written; a retag made in other work is shown only in its diff.
+  - **Rejected:** re-stamping every edit, tags included, which sent each retagged record back for sign-off, so a bundle-wide tag audit queued every record it touched.
 
 ## Why
 
 - A stamp from the clock is right every time, which a typed one isn't, and it matches what v0.3 means by `generated.at`.
 - Reusing the editor and the index sync means a scaffolded or re-stamped record reads the same to every other command, and inherits their refusals.
+- Tags help a reader find a record, while a sign-off confirms what the record says against its sources, which a tag can't change.
+  - As of 2026-11-25, upstream's okf-generate skill re-stamps `generated.at` only for a change in meaning, and keeps it for a move, which changes how a record is found but not what it says; a retag is the same kind of change.
+  - The CLI needed no change for it: a sign-off is judged by `generated.at`, and `okf check`'s `T006` gate compares only the body.
 - All-or-nothing writes match `okf verify`'s (see [How okf-verify writes and commits records](writes.md)).
 
 ## Links
 
 - [Issue #54](https://github.com/jjloneman/okf-tools/issues/54)
+- [Issue #66](https://github.com/jjloneman/okf-tools/issues/66), where the tags exception was decided
+- [How a record's tags are laid out](tags-layout.md)
 - [How okf index keeps an index.md in step with its records](index-sync.md)
 - [How okf-verify writes and commits records](writes.md)
 - [Who verifies a record](who-verifies.md)

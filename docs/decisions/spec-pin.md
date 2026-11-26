@@ -20,7 +20,7 @@ sources:
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T22:05:54Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T02:39:09Z }
 verified: { by: human:jjloneman, at: 2026-11-25T17:33:18Z }
 ---
 
@@ -43,7 +43,7 @@ As of 2026-11-25, from `spec/upstream.json` and issues #89 and #59:
 - **Every spec link is a permalink to the pinned commit**, in the README, AGENTS.md, and this bundle; a new pin re-pins them all.
   - **Rejected:** keeping signed-off records on the old permalink, which still resolves to the same text, since links that don't match the pin would hide which text a record was judged against.
 - **A re-pinned signed-off record goes back to `status: draft`**, keeping its `verified` entry, and is verified again; `okf-verify` sets it to `stable` on sign-off.
-  - **Rejected:** keeping `stable` for a link-only edit. v0.3 §5.2 says a trivial edit, such as link repair, doesn't change `generated.at`, but this repo re-stamps `generated` on every edit, so a signed-off record shows as changed, and one rule for every edit is simpler to follow.
+  - **Rejected:** keeping `stable` for a link-only edit. v0.3 §5.2 says a trivial edit, such as link repair, doesn't change `generated.at`, but this repo re-stamps `generated` on every edit apart from a change to `tags` alone, so a signed-off record shows as changed, and one rule for those edits is simpler to follow (see [How okf new and okf touch stamp generated](new-and-touch.md)).
 - **`candidates` is empty after the move**, since the only candidate became the home and no other is known.
   - The spec watch still looks for the next home without one, as #91 added: repos a new notice links to, and new repos beside the home.
 
