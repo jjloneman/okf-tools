@@ -498,6 +498,18 @@ export const SPEC_RULES: readonly CheckRule[] = [
   },
 ];
 
+/**
+ * Decode a link's or path field's percent escapes, or keep it as written
+ * when they're bad.
+ */
+export function decodePath(target: string): string {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
 /** Whether a timestamp is in one of §5's forms and names a real instant. */
 export function isValidTimestamp(value: string): boolean {
   return (
@@ -682,15 +694,6 @@ function checkTimestamp(params: {
           message: `${field} is an RFC 3339 date-time with an offset, such as 2026-06-30T14:00:00Z, or a date such as 2026-06-30 (§5); found ${describeValue(node)}`,
         },
       ];
-}
-
-/** Decode a link's percent escapes, or keep it as written when they're bad. */
-function decodePath(target: string): string {
-  try {
-    return decodeURIComponent(target);
-  } catch {
-    return target;
-  }
 }
 
 /** Quote a value for a message, or name it when it isn't a single value. */

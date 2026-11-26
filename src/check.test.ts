@@ -22,6 +22,13 @@ const { repo } = useTestRepo();
 /** A valid root `index.md`. */
 const ROOT_INDEX = '---\nokf_version: "0.3"\n---\n# KB\n';
 
+/** A record generated in 2026 that cites `src/a.ts`. */
+const CITING = record([
+  "type: Decision",
+  "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+  "sources: [{ resource: ../src/a.ts }]",
+]);
+
 /** A record no rule finds anything in. */
 const CONCEPT = record(["type: Decision", 'title: "A"']);
 
@@ -392,6 +399,142 @@ describe("runCheck", () => {
       "kb/a.md:5: error T006 unstamped-change: the body changed since the base branch, but human:jjloneman's sign-off at 2026-10-02T13:30:00Z, from before the change, still counts; re-stamp generated with okf touch, and sign it off again",
       "kb/c.md:3: info T001 draft: the record is a draft, so no one has signed it off as settled; okf verify signs it off",
       "2 files checked: 1 error, 0 warnings, 1 info.",
+    ]);
+  });
+
+  test("warns about a record whose source changed after it was written", () => {
+    // Given - a record generated before its cited file's commit, beside a
+    // record that cites a URL
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.write(
+      "kb/b.md",
+      record([
+        "type: Decision",
+        "sources: [{ resource: https://example.com/a }]",
+      ])
+    );
+    repo.commitAll("add the records");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+
+    // When - checking them
+    const code = check({});
+
+    // Then - a warning on the record that cites the file
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        /^kb\/a\.md:4: warning T007 source-changed: source \.\.\/src\/a\.ts changed in [\da-f]+, at /u
+      ),
+      "3 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("fails a record whose source was deleted", () => {
+    // Given - a record citing a file that's since been deleted
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.commitAll("add a");
+    repo.write("kb/a.md", CITING);
+    rmSync(path.join(repo.root, "src/a.ts"));
+    repo.commitAll("add the record, and delete a");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - an error
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(infos).toStrictEqual([
+      "kb/a.md:4: error T008 source-gone: source ../src/a.ts no longer exists, though git history has it; cite where it is now, or remove the source",
+      "2 files checked: 1 error, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("names the records citing a file the branch changed under --changed", () => {
+    // Given - records on main, and a branch that changes one's source alone,
+    // committed and not
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("src/b.ts", "b\n");
+    repo.write("kb/a.md", CITING);
+    repo.write(
+      "kb/b.md",
+      record([
+        "type: Decision",
+        "generated: { by: claude-code/1.0, at: 2999-01-01T00:00:00Z }",
+        "sources: [{ resource: ../src/b.ts }]",
+      ])
+    );
+    repo.write("kb/c.md", CONCEPT);
+    repo.commitAll("add the records");
+    repo.git("switch", "--quiet", "-c", "edit");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    repo.write("src/b.ts", "b2\n");
+
+    // When - checking only what the branch changed
+    check({ isChanged: true });
+
+    // Then - both citing records are checked, and the untouched one isn't
+    expect(infos).toStrictEqual([
+      expect.stringMatching(/^kb\/a\.md:4: warning T007 source-changed: /u),
+      expect.stringMatching(/^kb\/b\.md:3: warning T003 generated-ahead: /u),
+      "2 files checked: 0 errors, 2 warnings, 0 info.",
+    ]);
+  });
+
+  test("passes a source changed alongside its record in a repo with no commits", () => {
+    // Given - a record and its source, uncommitted, on a branch with no commit
+    repo.git("update-ref", "-d", "HEAD");
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.write("kb/b.md", CONCEPT);
+    repo.git("add", "--", "kb/index.md", "kb/b.md");
+
+    // When - checking only what changed
+    check({ isChanged: true });
+
+    // Then - every file is uncommitted, so the record kept up with its
+    // source
+    expect(infos).toStrictEqual([
+      "3 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("says when a source's history can't be read, and checks the rest", () => {
+    // Given - a record whose source's history git has lost a tree of, beside
+    // one that cites nothing
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.write("kb/b.md", CONCEPT);
+    repo.commitAll("add the record");
+    const tree = repo.git("rev-parse", "HEAD^{tree}").trim();
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    rmSync(
+      path.join(repo.root, ".git/objects", tree.slice(0, 2), tree.slice(2))
+    );
+
+    // When - checking it
+    const code = check({});
+
+    // Then - each history it couldn't read is said on stderr, and every
+    // record is still checked
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([
+      expect.stringMatching(
+        /^Couldn't read the history of kb\/a\.md: .*; the source rules skip it\.$/u
+      ),
+      expect.stringMatching(
+        /^Couldn't read the history of src\/a\.ts: .*; the source rules skip it\.$/u
+      ),
+    ]);
+    expect(infos).toStrictEqual([
+      "3 files checked: 0 errors, 0 warnings, 0 info.",
     ]);
   });
 

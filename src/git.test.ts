@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { rmSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { useTestRepo } from "#test/repo";
@@ -7,9 +9,11 @@ import {
   checkCommittable,
   commitFiles,
   findRepoRoot,
+  listBranchCommits,
   listChangedPaths,
   listDirtyPaths,
   listIndexPaths,
+  listPathChanges,
   listWorkingPaths,
   readBaseRef,
   readCommittedText,
@@ -394,6 +398,127 @@ describe("listChangedPaths", () => {
       paths: ["docs/a.md", "docs/b.md"],
       statusPaths: ["docs/a.md"],
     });
+  });
+});
+
+describe("listBranchCommits", () => {
+  test("lists the commits HEAD has that the base doesn't", () => {
+    // Given - a branch with one commit past main
+    const base = repo.git("rev-parse", "HEAD").trim();
+    repo.git("switch", "--quiet", "-c", "edit");
+    repo.write("a.md", "a\n");
+    repo.commitAll("add a");
+    const head = repo.git("rev-parse", "HEAD").trim();
+
+    // When - listing the branch's commits, and those past a base git
+    // doesn't have
+    const commits = listBranchCommits({ base, repoRoot: repo.root });
+    const unknown = listBranchCommits({
+      base: "0".repeat(40),
+      repoRoot: repo.root,
+    });
+
+    // Then - the one commit, and none
+    expect({ commits, unknown }).toStrictEqual({
+      commits: [head],
+      unknown: [],
+    });
+  });
+});
+
+describe("listPathChanges", () => {
+  test("lists a folder's commits, newest first, and its uncommitted files", () => {
+    // Given - two commits to a folder, one elsewhere, and an untracked file
+    repo.write("src/a.ts", "a\n");
+    repo.commitAll("add a");
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    repo.write("src/c.ts", "c\n");
+    const log = repo
+      .git("log", "--format=%H %h %at", "-2", "--", "src")
+      .trim()
+      .split("\n")
+      .map((line) => {
+        const [hash, shortHash, authoredAt] = line.split(" ");
+
+        return { authoredAt: Number(authoredAt), hash, shortHash };
+      });
+
+    // When - listing the folder's changes
+    const changes = listPathChanges({
+      filePath: "src",
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - its two commits, and that it has uncommitted changes
+    expect(changes).toStrictEqual({
+      isOk: true,
+      value: { commits: log, isDirty: true },
+    });
+  });
+
+  test("lists no commits on a branch that has none", () => {
+    // Given - a branch with no commit, and a clean file
+    repo.git("update-ref", "-d", "HEAD");
+
+    // When - listing a path's changes
+    const changes = listPathChanges({
+      filePath: "src/a.ts",
+      hasHead: false,
+      repoRoot: repo.root,
+    });
+
+    // Then - none
+    expect(changes).toStrictEqual({
+      isOk: true,
+      value: { commits: [], isDirty: false },
+    });
+  });
+
+  test("fails naming the path when git status fails", () => {
+    // Given - an index git can't read
+    repo.write(".git/index", "garbage\n");
+
+    // When - listing a path's changes
+    const changes = listPathChanges({
+      filePath: "src/a.ts",
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - it names what it was reading
+    expect(changes).toStrictEqual({
+      isOk: false,
+      reason:
+        "Couldn't read git status for src/a.ts: fatal: .git/index: index file smaller than expected",
+    });
+  });
+
+  test("fails naming the path when git log fails", () => {
+    // Given - a history git has lost a tree of
+    repo.write("src/a.ts", "a\n");
+    repo.commitAll("add a");
+    const tree = repo.git("rev-parse", "HEAD^{tree}").trim();
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    rmSync(
+      path.join(repo.root, ".git/objects", tree.slice(0, 2), tree.slice(2))
+    );
+
+    // When - listing a path's changes
+    const changes = listPathChanges({
+      filePath: "src/a.ts",
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - it names the path
+    expect(changes.isOk ? undefined : changes.reason).toMatch(
+      /^Couldn't read the history of src\/a\.ts: /u
+    );
   });
 });
 

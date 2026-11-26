@@ -34,6 +34,17 @@ function readFile(params: {
 }
 
 describe("readCheckedFile", () => {
+  test("knows no changes to any path when none are given", () => {
+    // When - reading a file with no history
+    const file = readFile({ filePath: "kb/a.md", text: "" });
+
+    // Then - no changes to it or to another path
+    expect([
+      file.readChanges("kb/a.md"),
+      file.readChanges("src"),
+    ]).toStrictEqual([[], []]);
+  });
+
   test.each([
     { description: "an index.md", filePath: "kb/index.md", kind: "index" },
     { description: "a log.md", filePath: "kb/sub/log.md", kind: "log" },

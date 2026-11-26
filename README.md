@@ -461,7 +461,12 @@ pnpm okf check --changed
   - The base is where the branch left `origin/HEAD`, else `origin/main`, else `main`, as for `okf verify --changed`; with none, uncommitted changes are compared with `HEAD`.
   - In CI, fetch the base branch, such as with `actions/checkout`'s `fetch-depth: 0`: a shallow checkout has no base, so the gate sees no change.
   - A sign-off made on the branch, after the change, covers it.
-- **`--changed` reports only on the files changed since the base branch**, from the branch diff and `git status`, for a pull request's check. Without a base to diff against, it says so on stderr and reports on uncommitted changes alone.
+- **A record whose `sources` cite a file in the repo warns when the file changed after the record was last written or signed off** (`T007`), and fails when it no longer exists (`T008`).
+  - A `resource` counts when it resolves by §6's rules to a path in the repo, in the bundle or not, such as `../../src/check.ts` for code the record describes; a URL and a scope descriptor are skipped.
+  - A change is a commit to the file, or uncommitted changes to it, later than both `generated.at` and the latest sign-off. A commit that changed the record too doesn't count, so a pull request that updates both passes.
+  - It works at file level, so it stays a warning: whether the prose still holds is the reviewer's call.
+  - It reads the history git has, so in CI fetch it all, as for `T006`: in a shallow checkout the oldest commit seems to change every file, the record included, so it doesn't count.
+- **`--changed` reports only on the files changed since the base branch**, from the branch diff and `git status`, and on the records whose `sources` cite a file the branch changed, for a pull request's check. Without a base to diff against, it says so on stderr and reports on uncommitted changes alone.
 - **It reads frontmatter as `okf verify` does**, so the two never disagree about a record.
 - **A key the spec doesn't define passes without a finding**, so a repo can use okf-tools beside a tool that adds its own keys.
 - **It skips what OKF leaves out of a bundle:** files and folders whose names start with `.`, and symlinks that lead out of the bundle; it skips what `okf.exclude` matches too.
@@ -472,7 +477,7 @@ pnpm okf check --changed
 | Flag                | Does                                                              |
 | ------------------- | ----------------------------------------------------------------- |
 | `--bundle <dir>`    | A bundle to check, relative to where you run it; repeat for more. |
-| `--changed`         | Report only on the files changed since the base branch.           |
+| `--changed`         | Report only on what changed since the base branch.                |
 | `--format <format>` | `text`, the default, or `json`.                                   |
 | `--strict`          | Exit `1` on a warning too.                                        |
 | `--help`, `-h`      | Print the usage.                                                  |
@@ -547,6 +552,8 @@ okf-tools' own rules, whose `T` codes upstream doesn't use:
 | T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                         |
 | T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.           |
 | T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.      |
+| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed after the record was last written or signed off.   |
+| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.        |
 
 ## 🧭 Agents
 

@@ -9,11 +9,16 @@
  *
  * - Each file changed since the base branch is also read as the branch's
  *   merge base holds it, for the rule that fails a record changed without
- *   a new `generated.at`. `--changed` reports on those files alone.
+ *   a new `generated.at`. `--changed` reports on those files alone, and on
+ *   the records whose `sources` cite a file the branch changed.
+ *
+ * - Each path a record's `sources` cite in the repo has its history read
+ *   once, with the record's own, for the source rules.
  *
  * - It never writes. It exits `1` on an error-level finding, a file it
  *   couldn't read, or under `--strict` a warning; otherwise `0`.
  */
+import { DateTime } from "luxon";
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 
@@ -24,6 +29,7 @@ import type {
   CheckReport,
   CheckSeverity,
   CheckSkipped,
+  FileChange,
 } from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
 import type { ExitCode } from "./exit-codes.ts";
@@ -34,6 +40,8 @@ import type { BundleContext } from "./run-context.ts";
 import { buildCheckReport, readCheckedFile } from "./check-engine.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import {
+  listBranchCommits,
+  listPathChanges,
   readMergeBase,
   readTextAt,
   readWorkingPaths,
@@ -46,6 +54,7 @@ import {
   matchExcluded,
   readRecordText,
 } from "./repo.ts";
+import { readSourcePaths, SOURCE_RULES } from "./source-rules.ts";
 import { SPEC_RULES } from "./spec-rules.ts";
 import { buildTrustRules } from "./trust-rules.ts";
 
@@ -136,7 +145,7 @@ export function runCheck(params: {
   const { context, drafts, format, isChanged, isGitHubActions, isStrict } =
     params;
   const { output } = context;
-  const read = readBundles(context);
+  const read = readBundles({ context, isChanged });
 
   if (!read.isOk) {
     output.error(read.reason);
@@ -144,7 +153,20 @@ export function runCheck(params: {
     return EXIT_CODES.failure;
   }
 
-  const { bundles, changedKeys, hasBase, skipped } = read.value;
+  const {
+    bundles,
+    changedKeys,
+    citingKeys,
+    hasBase,
+    historyFailures,
+    skipped,
+  } = read.value;
+
+  // A history git can't read, such as a path in a submodule, only leaves
+  // the source rules without it, so it's said but doesn't fail the run.
+  for (const reason of historyFailures) {
+    output.error(toTerminalLine(`${reason}; the source rules skip it.`));
+  }
 
   // On stderr in every format, so a JSON reader and a green CI job still
   // show that the gate saw only uncommitted changes.
@@ -157,9 +179,11 @@ export function runCheck(params: {
   const report = buildCheckReport({
     bundles,
     isInScope: isChanged
-      ? (filePath) => changedKeys.has(toPathKey(filePath))
+      ? (filePath) =>
+          changedKeys.has(toPathKey(filePath)) ||
+          citingKeys.has(toPathKey(filePath))
       : undefined,
-    rules: [...SPEC_RULES, ...buildTrustRules(drafts)],
+    rules: [...SPEC_RULES, ...buildTrustRules(drafts), ...SOURCE_RULES],
     skipped,
   });
 
@@ -229,24 +253,61 @@ function isInsideOnDisk(params: {
 }
 
 /**
+ * List the records whose `sources` cite a path changed on the branch, by a
+ * commit the base doesn't have or by uncommitted changes, each as its
+ * `toPathKey`.
+ */
+function listCitingKeys(params: {
+  branchCommits: ReadonlySet<string>;
+  cited: readonly { file: CheckedFile; paths: readonly string[] }[];
+}): Set<string> {
+  const { branchCommits, cited } = params;
+
+  return new Set(
+    cited
+      .filter(({ file, paths }) =>
+        paths.some((sourcePath) =>
+          file
+            .readChanges(sourcePath)
+            .some(
+              ({ commit }) =>
+                commit === undefined || branchCommits.has(commit.hash)
+            )
+        )
+      )
+      .map(({ file }) => toPathKey(file.filePath))
+  );
+}
+
+/**
  * Read every Markdown file in the bundles git would track, grouped by the
- * deepest bundle that holds each, the files that couldn't be read, and the
- * files changed since the base branch.
+ * deepest bundle that holds each, the files that couldn't be read, the files
+ * changed since the base branch, and under `--changed` the records citing a
+ * file the branch changed.
  *
  * - A changed file is also read as the branch's merge base holds it, or
  *   `HEAD` when there's no base to diff against.
  */
-function readBundles(context: BundleContext): Outcome<{
+function readBundles(params: {
+  context: BundleContext;
+  isChanged: boolean;
+}): Outcome<{
   bundles: CheckedBundle[];
   changedKeys: ReadonlySet<string>;
+  citingKeys: ReadonlySet<string>;
   hasBase: boolean;
+  historyFailures: string[];
   skipped: CheckSkipped[];
 }> {
+  const { context, isChanged } = params;
   const { bundleDirs, excludeGlobs, repoRoot } = context;
   const isExcluded = matchExcluded(excludeGlobs);
   const doesExist = (filePath: string): boolean =>
     existsSync(path.join(repoRoot, filePath));
   const files: CheckedFile[] = [];
+  const history = new Map<string, readonly FileChange[]>();
+  const readChanges = (filePath: string): readonly FileChange[] =>
+    history.get(filePath) ?? [];
   const skipped: CheckSkipped[] = [];
 
   const listed = readWorkingPaths(repoRoot);
@@ -300,6 +361,7 @@ function readBundles(context: BundleContext): Outcome<{
           bundleDir,
           doesExist,
           filePath,
+          readChanges,
           text: readRecordText({ filePath, repoRoot }),
         })
       );
@@ -311,6 +373,25 @@ function readBundles(context: BundleContext): Outcome<{
     }
   }
 
+  const cited = files.map((file) => ({
+    file,
+    paths: readSourcePaths(file),
+  }));
+  const failures = readHistory({
+    filePaths: cited.flatMap(({ file, paths }) =>
+      paths.length === 0 ? [] : [file.filePath, ...paths]
+    ),
+    hasHead: base !== undefined,
+    history,
+    repoRoot,
+  });
+
+  const branchCommits = new Set(
+    isChanged && base?.isBranchBase === true
+      ? listBranchCommits({ base: base.commit, repoRoot })
+      : []
+  );
+
   return {
     isOk: true,
     value: {
@@ -319,8 +400,53 @@ function readBundles(context: BundleContext): Outcome<{
         files: files.filter((file) => file.bundleDir === bundleDir),
       })),
       changedKeys,
+      citingKeys: listCitingKeys({ branchCommits, cited }),
       hasBase: base?.isBranchBase === true,
+      historyFailures: [...failures.values()],
       skipped,
     },
   };
+}
+
+/**
+ * Read the history of each path into `history`: its uncommitted changes as
+ * one change at the current time, then its commits, newest first.
+ *
+ * - A repo with no commits yet has no history to read.
+ *
+ * - A path git can't read has no history, so the source rules skip it.
+ *
+ * @returns why git couldn't read a path's history, by path.
+ */
+function readHistory(params: {
+  filePaths: readonly string[];
+  hasHead: boolean;
+  history: Map<string, readonly FileChange[]>;
+  repoRoot: string;
+}): Map<string, string> {
+  const { filePaths, hasHead, history, repoRoot } = params;
+  const failures = new Map<string, string>();
+  const now = Math.floor(DateTime.utc().toSeconds());
+
+  for (const filePath of new Set(filePaths)) {
+    const changes = listPathChanges({ filePath, hasHead, repoRoot });
+
+    if (!changes.isOk) {
+      failures.set(filePath, changes.reason);
+
+      continue;
+    }
+
+    const { commits, isDirty } = changes.value;
+
+    history.set(filePath, [
+      ...(isDirty ? [{ at: now, commit: undefined }] : []),
+      ...commits.map(({ authoredAt, hash, shortHash }) => ({
+        at: authoredAt,
+        commit: { hash, shortHash },
+      })),
+    ]);
+  }
+
+  return failures;
 }

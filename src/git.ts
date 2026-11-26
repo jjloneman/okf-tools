@@ -127,6 +127,31 @@ export type GitFailure = {
   stdout: string | undefined;
 };
 
+/** A commit that changed a path, with when it was authored. */
+export type PathCommit = {
+  /**
+   * When it was authored, in whole seconds since the epoch, which a rebase,
+   * a cherry-pick, or an amend keeps.
+   *
+   * @example 1790000000
+   */
+  authoredAt: number;
+
+  /**
+   * The commit's full hash.
+   *
+   * @example "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
+   */
+  hash: string;
+
+  /**
+   * The commit's hash as git abbreviates it.
+   *
+   * @example "1a2b3c4"
+   */
+  shortHash: string;
+};
+
 /**
  * The states in which git refuses a commit of only some files, by the ref
  * each one leaves.
@@ -322,6 +347,21 @@ export function isShallowRepo(repoRoot: string): boolean {
     tryGit({ args: ["rev-parse", "--is-shallow-repository"], repoRoot }) ===
     "true"
   );
+}
+
+/**
+ * List the full hashes of the commits `HEAD` has that a base commit doesn't,
+ * or none when git can't say.
+ */
+export function listBranchCommits(params: {
+  base: string;
+  repoRoot: string;
+}): string[] {
+  const { base, repoRoot } = params;
+
+  return (tryGit({ args: ["rev-list", `${base}..HEAD`], repoRoot }) ?? "")
+    .split("\n")
+    .filter(Boolean);
 }
 
 /**
@@ -528,6 +568,72 @@ export function listIndexPaths(repoRoot: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * List the changes git knows to a file or anything in a folder: its commits,
+ * newest first, each with when it was authored, and whether it has
+ * uncommitted changes, untracked files included.
+ *
+ * - `--no-follow`, since `log.follow` would refuse a folder, and
+ *   `--no-show-signature`, as `listFileCommits` says.
+ *
+ * - Without `hasHead`, the branch has no commits for `git log` to read.
+ */
+export function listPathChanges(params: {
+  filePath: string;
+  hasHead: boolean;
+  repoRoot: string;
+}): Outcome<{ commits: PathCommit[]; isDirty: boolean }> {
+  const { filePath, hasHead, repoRoot } = params;
+  const status = readStatusPaths({ pathspecs: [filePath], repoRoot });
+
+  if (!status.isOk) {
+    return status;
+  }
+
+  let output = "";
+
+  try {
+    if (hasHead) {
+      output = runGit({
+        args: [
+          "log",
+          "--no-follow",
+          "--no-show-signature",
+          "--format=%H %h %at",
+          "--",
+          filePath,
+        ],
+        repoRoot,
+      });
+    }
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't read the history of ${filePath}: ${describeGitFailure(error)}`,
+    };
+  }
+
+  return {
+    isOk: true,
+    value: {
+      commits: output
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const hashEnd = line.indexOf(" ");
+          const shortHashEnd = line.indexOf(" ", hashEnd + 1);
+
+          return {
+            authoredAt: Number(line.slice(shortHashEnd + 1)),
+            hash: line.slice(0, hashEnd),
+            shortHash: line.slice(hashEnd + 1, shortHashEnd),
+          };
+        }),
+      isDirty: status.value.length > 0,
+    },
+  };
 }
 
 /**
