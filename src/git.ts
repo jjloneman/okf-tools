@@ -191,6 +191,14 @@ export type PathCommit = {
   hash: string;
 
   /**
+   * The full hashes of the commit's parents, as committed; empty for a root
+   * commit.
+   *
+   * @example `["0f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6"]`
+   */
+  parents: string[];
+
+  /**
    * The commit's hash as git abbreviates it.
    *
    * @example "1a2b3c4"
@@ -671,7 +679,7 @@ export function listPathChanges(params: {
           "log",
           "--no-follow",
           "--no-show-signature",
-          "--format=%H %h %ct",
+          "--format=%H %h %ct %P",
           "--",
           filePath,
         ],
@@ -757,7 +765,7 @@ export function listPathChangesTogether(params: {
           "--root",
           "--name-only",
           "-z",
-          "--format=%x00%H %h %ct",
+          "--format=%x00%H %h %ct %P",
           "--",
           ...filePaths,
         ],
@@ -982,6 +990,80 @@ export function readTextAt(params: {
 }
 
 /**
+ * Read several files as commits hold them, each named `<commit>:<path>`, in
+ * one `git cat-file --batch`.
+ *
+ * - The names go in on stdin, one a line, so a path with a line break can't
+ *   be named, and fails.
+ *
+ * - A file the commit doesn't have, or a commit that doesn't exist, such as
+ *   the parent of a root commit, reads as `undefined`.
+ *
+ * - The output is read as bytes, since git gives each file's size in bytes.
+ *
+ * @returns each file's text, by its name.
+ */
+export function readTextsAt(params: {
+  /**
+   * The files to read, each as `<commit>:<path>`, the path from the repo
+   * root.
+   *
+   * @example `["1a2b3c4d…:kb/a.md"]`
+   */
+  names: readonly string[];
+
+  /** The repo's root folder. @example "/home/me/repo" */
+  repoRoot: string;
+}): Outcome<Map<string, string | undefined>> {
+  const { names, repoRoot } = params;
+
+  if (names.some((name) => name.includes("\n"))) {
+    return {
+      isOk: false,
+      reason: "git cat-file can't read a path with a line break",
+    };
+  }
+
+  let output: Buffer;
+
+  try {
+    output = execFileSync("git", ["cat-file", "--batch"], {
+      cwd: repoRoot,
+      input: names.map((name) => `${name}\n`).join(""),
+      maxBuffer: Infinity,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch (error) {
+    return { isOk: false, reason: describeGitFailure(error) };
+  }
+
+  const texts = new Map<string, string | undefined>();
+  let position = 0;
+
+  // Each answer is a header line, then, unless it says the file is missing,
+  // the file's bytes and a line break.
+  for (const name of names) {
+    const headerEnd = output.indexOf("\n", position);
+    const header = output.toString("utf8", position, headerEnd);
+
+    position = headerEnd + 1;
+
+    if (header.endsWith(" missing")) {
+      texts.set(name, undefined);
+
+      continue;
+    }
+
+    const size = Number(header.slice(header.lastIndexOf(" ") + 1));
+
+    texts.set(name, output.toString("utf8", position, position + size));
+    position += size + 1;
+  }
+
+  return { isOk: true, value: texts };
+}
+
+/**
  * List every path in the working tree git would track, as `listWorkingPaths`
  * does, each once, or say why git couldn't be asked.
  *
@@ -1050,7 +1132,7 @@ function describeGitFailure(error: unknown): string {
 }
 
 /**
- * Read `git log -z --name-only --format=%x00%H %h %ct` into each commit and
+ * Read `git log -z --name-only --format=%x00%H %h %ct %P` into each commit and
  * the keys of the paths it changed.
  *
  * - Each commit's line follows an empty field, and its first path follows a
@@ -1082,16 +1164,23 @@ function readNamedCommits(
 }
 
 /**
- * Read a commit's `%H %h %ct` line, as `listPathChanges` and
+ * Read a commit's `%H %h %ct %P` line, as `listPathChanges` and
  * `listPathChangesTogether` ask `git log` for it.
  */
 function readPathCommit(line: string): PathCommit {
   const hashEnd = line.indexOf(" ");
   const shortHashEnd = line.indexOf(" ", hashEnd + 1);
 
+  // `%P` is empty for a root commit, but the space before it stays.
+  const timeEnd = line.indexOf(" ", shortHashEnd + 1);
+
   return {
-    committedAt: Number(line.slice(shortHashEnd + 1)),
+    committedAt: Number(line.slice(shortHashEnd + 1, timeEnd)),
     hash: line.slice(0, hashEnd),
+    parents: line
+      .slice(timeEnd + 1)
+      .split(" ")
+      .filter(Boolean),
     shortHash: line.slice(hashEnd + 1, shortHashEnd),
   };
 }

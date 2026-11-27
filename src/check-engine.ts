@@ -118,7 +118,8 @@ export type CheckedFile = {
 
   /**
    * Which commits to the paths a record cites aren't in the history of any
-   * commit that changed the record, by the record's path from the repo root.
+   * commit that re-stamped or signed off the record, by the record's path
+   * from the repo root.
    *
    * - A commit is in that history when it's one of those commits or an
    *   ancestor of one.
@@ -128,7 +129,7 @@ export type CheckedFile = {
    *
    * @example `(filePath) => unseen.get(filePath)`
    */
-  readUnseenCommits: (filePath: string) => ReadonlySet<string> | undefined;
+  readUnseenCommits: (filePath: string) => undefined | UnseenCommits;
 
   /**
    * Its text, as read.
@@ -403,6 +404,28 @@ export type RuleHit = {
   message: string;
 };
 
+/**
+ * Which commits to the paths a record cites aren't in the history of any
+ * commit that re-stamped or signed off the record: changed its `generated`
+ * or its `verified`.
+ */
+export type UnseenCommits = {
+  /**
+   * The record's newest commit that re-stamped or signed it off, or
+   * `undefined` when none did.
+   *
+   * @example `{ hash: "5e6f7a8b…", shortHash: "5e6f7a8" }`
+   */
+  lastSeen: FileChange["commit"];
+
+  /**
+   * The commits, by full hash.
+   *
+   * @example `new Set(["1a2b3c4d…"])`
+   */
+  unseen: ReadonlySet<string>;
+};
+
 /** The version of the JSON report's shape. */
 export const CHECK_SCHEMA_VERSION = 1;
 
@@ -502,7 +525,7 @@ export function readCheckedFile(params: {
   filePath: string;
   readChanges?: ((filePath: string) => readonly FileChange[]) | undefined;
   readUnseenCommits?:
-    ((filePath: string) => ReadonlySet<string> | undefined) | undefined;
+    ((filePath: string) => undefined | UnseenCommits) | undefined;
   text: string;
 }): CheckedFile {
   const {

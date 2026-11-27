@@ -1,7 +1,8 @@
 /*
  * The source rules `okf check` runs beside the trust rules: whether a file a
  * record cites in `sources` changed in a commit outside the history of the
- * record's own commits, or has uncommitted changes, which git shows.
+ * record's re-stamps and sign-offs, or has uncommitted changes, which git
+ * shows.
  *
  * - Only a `sources[].resource` that resolves to a path in the repo is
  *   checked, by §6's rules; a URL, and a scope descriptor, which has a space
@@ -27,7 +28,11 @@ import type { ParsedFile } from "./spec-rules.ts";
 
 import { readNodeLine } from "./check-engine.ts";
 import { isGeneratedAhead, isVerifiedAhead } from "./frontmatter/read.ts";
-import { readTimestamp } from "./frontmatter/shared.ts";
+import {
+  parseFrontmatter,
+  readTimestamp,
+  splitFrontmatter,
+} from "./frontmatter/shared.ts";
 import { hasScheme } from "./markdown.ts";
 import {
   decodePath,
@@ -91,19 +96,61 @@ export function readSourcePaths(file: CheckedFile): string[] {
 }
 
 /**
+ * Read a record's `generated` and `verified` as one value, for telling which
+ * of its commits re-stamped or signed it off, or `undefined` when the text
+ * has no frontmatter YAML can read.
+ *
+ * - By what they mean, every mapping's keys sorted, so a change of layout,
+ *   flow or block, or of key order, isn't a re-stamp.
+ *
+ * - An alias that can't be resolved, one that expands past the parser's
+ *   limit, or one that loops back on itself reads as `undefined`, since a
+ *   past commit's frontmatter is never checked before it's read.
+ */
+export function readStamp(text: string | undefined): string | undefined {
+  const block = text === undefined ? undefined : splitFrontmatter(text);
+
+  if (block === undefined) {
+    return undefined;
+  }
+
+  const doc = parseFrontmatter(block.text);
+
+  if (doc.errors.length > 0) {
+    return undefined;
+  }
+
+  try {
+    const data: unknown = doc.toJS();
+    const fields = new Map(
+      typeof data === "object" && data !== null ? Object.entries(data) : []
+    );
+
+    return JSON.stringify(
+      [fields.get("generated"), fields.get("verified")],
+      sortKeys
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Warn about a cited path changed since the record was last written or
  * signed off.
  *
- * - A commit counts when it isn't in the history of a commit that changed
- *   the record, so a rebase, which resets every committer time, doesn't
- *   make a commit the record built on read as new, and a merged branch's
- *   commit counts whenever it was made.
+ * - A commit counts when it isn't in the history of a commit that re-stamped
+ *   or signed off the record, changing its `generated` or `verified`, so a
+ *   rebase, which resets every committer time, doesn't make a commit the
+ *   record built on read as new, a merged branch's commit counts whenever it
+ *   was made, and an edit that didn't re-stamp, such as to `tags` alone or
+ *   an `okf format`, doesn't hide one.
  *
  * - While the record has uncommitted changes, such as a re-stamp `okf touch`
  *   made, a commit counts only when it's also later than the later of
  *   `generated.at` and the latest sign-off, since git can't say what an
- *   uncommitted record saw; a record git has no commits of is judged by
- *   that time alone.
+ *   uncommitted record saw; a record no commit re-stamped or signed off is
+ *   judged by that time alone.
  *
  * - Uncommitted changes count unless the record has some too.
  *
@@ -120,21 +167,21 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
       return [];
     }
 
-    const ownChanges = file.readChanges(file.filePath);
-    const isDirty = ownChanges.some(({ commit }) => commit === undefined);
-    const lastCommit = ownChanges.find(
-      ({ commit }) => commit !== undefined
-    )?.commit;
-    const unseen = file.readUnseenCommits(file.filePath);
+    const isDirty = file
+      .readChanges(file.filePath)
+      .some(({ commit }) => commit === undefined);
+    const seen = file.readUnseenCommits(file.filePath);
 
-    if (unseen === undefined) {
+    if (seen === undefined) {
       return [];
     }
+
+    const { lastSeen, unseen } = seen;
     const isUnseen = ({ at, commit }: FileChange): boolean =>
       commit === undefined
         ? !isDirty
         : unseen.has(commit.hash) &&
-          ((!isDirty && lastCommit !== undefined) || at > writtenAt);
+          ((!isDirty && lastSeen !== undefined) || at > writtenAt);
 
     return readCitedSources(parsed).flatMap(({ node, path, resource }) => {
       if (!file.doesExist(path)) {
@@ -155,7 +202,7 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
       return [
         {
           line: readNodeLine({ file, node }),
-          message: `${describeChange({ change, lastCommit, resource, since })}; check the record still holds, then re-stamp generated with okf touch`,
+          message: `${describeChange({ change, lastSeen, resource, since })}; check the record still holds, then re-stamp generated with okf touch`,
         },
       ];
     });
@@ -181,10 +228,11 @@ function checkSourceGone(file: CheckedFile): RuleHit[] {
  *
  * - By uncommitted changes.
  *
- * - By a commit missing from the history of the record's last commit.
+ * - By a commit missing from the history of the record's last re-stamp or
+ *   sign-off.
  *
- * - For a record git has no commits of, by a commit later than when it was
- *   written.
+ * - For a record no commit re-stamped or signed off, by a commit later than
+ *   when it was written.
  */
 function describeChange(params: {
   /**
@@ -195,11 +243,12 @@ function describeChange(params: {
   change: FileChange;
 
   /**
-   * The record's last commit, or `undefined` when git has none of it.
+   * The record's last commit that re-stamped or signed it off, or
+   * `undefined` when none did.
    *
    * @example `{ hash: "5e6f…", shortHash: "5e6f7a8" }`
    */
-  lastCommit: FileChange["commit"];
+  lastSeen: FileChange["commit"];
 
   /** The `resource` as written. @example "../../src/check.ts" */
   resource: string;
@@ -211,7 +260,7 @@ function describeChange(params: {
    */
   since: string;
 }): string {
-  const { change, lastCommit, resource, since } = params;
+  const { change, lastSeen, resource, since } = params;
 
   if (change.commit === undefined) {
     return `source ${resource} has uncommitted changes ${since}`;
@@ -219,9 +268,9 @@ function describeChange(params: {
 
   const changed = `source ${resource} changed in ${change.commit.shortHash}, at ${formatSeconds(change.at)}`;
 
-  return lastCommit === undefined
+  return lastSeen === undefined
     ? `${changed}, ${since}`
-    : `${changed}, which isn't in the history of the record's last commit, ${lastCommit.shortHash}`;
+    : `${changed}, which isn't in the history of the record's last re-stamp or sign-off, ${lastSeen.shortHash}`;
 }
 
 /** Write whole seconds since the epoch as a UTC date-time. */
@@ -316,4 +365,18 @@ function resolveSourcePath(params: {
   return resolved === "." || resolved === ".." || resolved.startsWith("../")
     ? undefined
     : resolved;
+}
+
+/**
+ * Sort a mapping's keys, as `JSON.stringify` replaces each value, so two
+ * mappings that mean the same are written the same.
+ */
+function sortKeys(_key: string, value: unknown): unknown {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? Object.fromEntries(
+        Object.entries(value).sort(([left], [right]) =>
+          left.localeCompare(right)
+        )
+      )
+    : value;
 }

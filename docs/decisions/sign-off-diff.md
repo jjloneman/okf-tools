@@ -24,8 +24,8 @@ sources:
   - id: diff
     resource: ../../src/diff.ts
     title: src/diff.ts, the okf diff command
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
 verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
 ---
 

@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: How okf check judges whether a sign-off still holds
-description: "`okf check` runs okf-tools' own `T` trust rules beside the spec rules: a draft is a notice unless `okf.drafts` says allow, warn or block, a sign-off counts only while current as OKF v0.3 defines it, a body changed since the base branch under a sign-off the base already held that still counts is an error, and a file in the repo that a record's `sources` cite warns when a commit outside the history of the record's own commits changed it, and fails when it's gone; `--changed` reports only on what the branch changed."
+description: "`okf check` runs okf-tools' own `T` trust rules beside the spec rules: a draft is a notice unless `okf.drafts` says allow, warn or block, a sign-off counts only while current as OKF v0.3 defines it, a body changed since the base branch under a sign-off the base already held that still counts is an error, and a file in the repo that a record's `sources` cite warns when a commit outside the history of the record's re-stamps and sign-offs changed it, and fails when it's gone; `--changed` reports only on what the branch changed."
 tags:
   - change-detection
   - ci
@@ -38,8 +38,8 @@ sources:
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:51:34Z }
 verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
 ---
 
@@ -71,14 +71,18 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - **`T007 source-changed` warns when a file in the repo that `sources` cites changed since the record was last written or signed off**, as #52 asked, so a record written from code shows when the code moved on.
   - A `resource` counts when it resolves by §6's rules[^okf-spec] to a path in the repo, a folder included, even outside the bundle: a record about code cites the code. Only the path's git history and whether it exists are read, never its text, which §6 keeps a consumer from reading outside the bundle.
   - A URL is skipped, and so is a value with a space, which §6 has a path percent-encode, so it's a scope descriptor.
-  - A commit counts when it isn't in the history of any commit that changed the record, being neither one of them nor an ancestor of one[^source-rules], as #140 asked: what the record was built on, not when either commit landed.
+  - A commit counts when it isn't in the history of any commit that re-stamped or signed off the record, changing its `generated` or `verified`, being neither one of them nor an ancestor of one[^source-rules], as #140 and #144 asked: what the record was built on, not when either commit landed.
     - **Rejected:** the committer time, which #136 had chosen. A rebase resets it, so a source's commit made before the record's re-stamp in a later commit read as newer than the re-stamp and warned falsely, failing `--strict`; and `git log` on a path leaves out a merge that took the path from one side, so a branch's commit made before the re-stamp and merged after it read as seen.
     - **Rejected:** the author time. A rebase or a cherry-pick keeps it, so a commit written before the record was re-stamped but landed after it read as already seen, and the record never warned about a change it never saw.
     - **Rejected:** counting a commit when either its ancestry or its time says it's new. The time alone is what warned after a rebase, so it still would.
-    - A commit that changed the record too is in its history, so it doesn't count, as a squash-merged pull request changes both in one commit.
-    - Any commit that changed the record counts as having seen what came before it, even one that changed only its `tags`, which keeps `generated` as it was, since the rule can't tell an edit that checked the sources from one that didn't.
+    - A commit that re-stamped the record too is in its history, so it doesn't count, as a squash-merged pull request that re-stamps the record changes both in one commit.
+    - An edit that changes neither `generated` nor `verified` doesn't count as having seen anything: a change to `tags` alone, which keeps `generated` as it was, an `okf format` or `okf migrate` rewrite, or a merge that only took one side's re-stamp. The two are compared by what they mean, at each commit and each of its parents, so a change of layout or key order isn't a re-stamp, and a commit counts only when they differ from every parent's[^check].
+    - A commit whose parent held frontmatter that can't be read doesn't count, so repairing a broken frontmatter isn't a re-stamp.
+    - A commit that added the record counts, a `git mv` included, since the history is read without following renames, so a moved record's sources aren't checked against what came before the move.
+    - **Rejected:** counting any commit that changed the record, which #140 chose. It couldn't tell an edit that checked the sources from one that didn't, so a tags-only commit hid a change the clock rule before it had warned about.
+    - **Rejected:** `git log -G` on the `generated` and `verified` lines. A line pattern misses a change inside a flow mapping or one entry of a sign-off list, and matches a body line, so each commit's frontmatter is parsed instead, read for every record in one `git cat-file --batch`[^git].
   - Uncommitted changes to the path count, unless the record has some too.
-  - While the record has uncommitted changes, such as a re-stamp from `okf touch` not committed yet, a commit counts only when it's also later than both `generated.at` and the latest sign-off, to the whole second, by its committer time[^git], since git can't say what the record saw; a record git has no commits of is judged by that time alone.
+  - While the record has uncommitted changes, such as a re-stamp from `okf touch` not committed yet, a commit counts only when it's also later than both `generated.at` and the latest sign-off, to the whole second, by its committer time[^git], since git can't say what the record saw; a record no commit re-stamped or signed off, such as one git has no commits of, is judged by that time alone.
   - It's a warning, not an error: it works at file level, so a change that leaves the record true still warns, and judging the prose is the review skill's audit mode.
   - A `generated.at` or sign-off later than now doesn't count, as `T003` and `T004` warn, so it can't hide a source change until the clock passes it.
   - **Rejected:** comparing `sources[].last_modified`. It's the source's own recency signal, written by hand, and goes stale the same way.
