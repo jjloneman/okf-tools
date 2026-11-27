@@ -241,8 +241,8 @@ export function runCheck(params: {
      * - A fix never edits `generated` or `verified`, so its commit never
      *   counts to `T007` as the record having seen its sources.
      *
-     * - Until it's committed, a later check judges the record by the clock,
-     *   as for any uncommitted edit to a record.
+     * - Nor does it before it's committed, since `T007` falls back to the clock
+     *   only while a record's `generated` or `verified` differs from `HEAD`'s.
      */
     const fixed = applyFixes({
       bundles,

@@ -412,7 +412,8 @@ export type RuleHit = {
 export type UnseenCommits = {
   /**
    * Whether the record's `generated` or `verified` in the working tree
-   * differs from `HEAD`'s, as an uncommitted re-stamp or sign-off makes it.
+   * differs from `HEAD`'s, as an uncommitted re-stamp or sign-off makes it;
+   * always for a record no commit holds yet.
    *
    * @example true
    */
