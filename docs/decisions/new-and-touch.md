@@ -26,8 +26,8 @@ sources:
   - id: touch
     resource: ../../src/touch.ts
     title: src/touch.ts, the okf touch command
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T06:56:33Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 

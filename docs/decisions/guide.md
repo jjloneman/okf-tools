@@ -18,8 +18,8 @@ sources:
   - id: guide
     resource: ../../src/guide.ts
     title: src/guide.ts, the okf guide text and record rules
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:55:27Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T06:56:33Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
