@@ -606,8 +606,14 @@ describe("listPathChangesTogether", () => {
       return { changes: changes.isOk ? changes.value : changes, filePath };
     });
 
-    // Then - the same changes for every path
-    expect(together).toStrictEqual({ isOk: true, value: alone });
+    // Then - the same changes for every path, and every commit in order
+    expect(together).toStrictEqual({
+      isOk: true,
+      value: {
+        order: repo.git("rev-list", "--max-count=3", "HEAD").trim().split("\n"),
+        paths: alone,
+      },
+    });
   });
 
   test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
@@ -634,7 +640,10 @@ describe("listPathChangesTogether", () => {
       // Then - the same commit and uncommitted change
       expect(together).toStrictEqual({
         isOk: true,
-        value: [{ changes: alone.isOk ? alone.value : alone, filePath }],
+        value: {
+          order: [repo.git("rev-parse", "HEAD").trim()],
+          paths: [{ changes: alone.isOk ? alone.value : alone, filePath }],
+        },
       });
       expect(alone).toMatchObject({ value: { isDirty: true } });
     }
@@ -655,10 +664,13 @@ describe("listPathChangesTogether", () => {
     // Then - no commits, and the untracked one
     expect(changes).toStrictEqual({
       isOk: true,
-      value: [
-        { changes: { commits: [], isDirty: true }, filePath: "src/a.ts" },
-        { changes: { commits: [], isDirty: false }, filePath: "b.md" },
-      ],
+      value: {
+        order: [],
+        paths: [
+          { changes: { commits: [], isDirty: true }, filePath: "src/a.ts" },
+          { changes: { commits: [], isDirty: false }, filePath: "b.md" },
+        ],
+      },
     });
   });
 

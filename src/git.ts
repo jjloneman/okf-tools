@@ -144,6 +144,28 @@ export type PathChanges = {
   isDirty: boolean;
 };
 
+/**
+ * The changes git knows to several paths, as `listPathChangesTogether` reads
+ * them from one history with no merge.
+ */
+export type PathChangesTogether = {
+  /**
+   * The full hash of every commit that changed any of the paths, newest
+   * first, which with no merge is also each one's place in the history: a
+   * commit is an ancestor of every commit before it.
+   *
+   * @example `["1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"]`
+   */
+  order: string[];
+
+  /**
+   * Each path's changes, in the order given.
+   *
+   * @example `[{ changes: { commits: [], isDirty: true }, filePath: "a.md" }]`
+   */
+  paths: { changes: PathChanges; filePath: string }[];
+};
+
 /** A commit that changed a path, with when it was committed. */
 export type PathCommit = {
   /**
@@ -687,13 +709,14 @@ export function listPathChanges(params: {
  *   pathspecs and the names it prints alike; elsewhere a spelling git doesn't
  *   match names no file on disk, so the source rules skip it.
  *
- * @returns each path's changes, in the order given.
+ * @returns each path's changes, in the order given, and the commits'
+ *   order.
  */
 export function listPathChangesTogether(params: {
   filePaths: readonly string[];
   hasHead: boolean;
   repoRoot: string;
-}): Outcome<{ changes: PathChanges; filePath: string }[]> {
+}): Outcome<PathChangesTogether> {
   const { filePaths, hasHead, repoRoot } = params;
 
   if (
@@ -751,21 +774,24 @@ export function listPathChangesTogether(params: {
 
   return {
     isOk: true,
-    value: filePaths.map((filePath) => {
-      const key = toPathKey(filePath);
-      const isUnder = (changedKey: string): boolean =>
-        changedKey === key || changedKey.startsWith(`${key}/`);
+    value: {
+      order: commits.map(({ commit }) => commit.hash),
+      paths: filePaths.map((filePath) => {
+        const key = toPathKey(filePath);
+        const isUnder = (changedKey: string): boolean =>
+          changedKey === key || changedKey.startsWith(`${key}/`);
 
-      return {
-        changes: {
-          commits: commits
-            .filter(({ pathKeys }) => pathKeys.some(isUnder))
-            .map(({ commit }) => commit),
-          isDirty: dirtyKeys.some(isUnder),
-        },
-        filePath,
-      };
-    }),
+        return {
+          changes: {
+            commits: commits
+              .filter(({ pathKeys }) => pathKeys.some(isUnder))
+              .map(({ commit }) => commit),
+            isDirty: dirtyKeys.some(isUnder),
+          },
+          filePath,
+        };
+      }),
+    },
   };
 }
 

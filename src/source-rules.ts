@@ -1,7 +1,7 @@
 /*
  * The source rules `okf check` runs beside the trust rules: whether a file a
- * record cites in `sources` changed after the record was last written or
- * signed off, which its git history shows.
+ * record cites in `sources` changed in a commit outside the history of the
+ * record's own commits, or has uncommitted changes, which git shows.
  *
  * - Only a `sources[].resource` that resolves to a path in the repo is
  *   checked, by §6's rules; a URL, and a scope descriptor, which has a space
@@ -101,13 +101,14 @@ export function readSourcePaths(file: CheckedFile): string[] {
  *
  * - While the record has uncommitted changes, such as a re-stamp `okf touch`
  *   made, a commit counts only when it's also later than the later of
- *   `generated.at` and the latest sign-off, which is all git can't say; a
- *   record git has no commits of is judged by that time alone.
+ *   `generated.at` and the latest sign-off, since git can't say what an
+ *   uncommitted record saw; a record git has no commits of is judged by
+ *   that time alone.
  *
  * - Uncommitted changes count unless the record has some too.
  *
- * - When git couldn't say which commits the record's history holds, only
- *   uncommitted changes are judged.
+ * - When git couldn't say which commits a committed record's history holds,
+ *   it's skipped, as `okf check` says on stderr.
  *
  * - A path that no longer exists is `T008`'s.
  */
@@ -125,6 +126,10 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
       ({ commit }) => commit !== undefined
     )?.commit;
     const unseen = file.readUnseenCommits(file.filePath);
+
+    if (unseen === undefined && lastCommit !== undefined) {
+      return [];
+    }
     const isUnseen = ({ at, commit }: FileChange): boolean =>
       commit === undefined
         ? !isDirty

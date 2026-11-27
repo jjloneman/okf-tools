@@ -378,23 +378,27 @@ function listCitingKeys(params: {
  * Read into `unseen`, for each record that cites a path, which commits to the
  * paths it cites aren't in the history of any commit that changed it.
  *
- * - Records changed in the same commits share one `git rev-list`, as a pull
- *   request that re-stamps several records leaves them.
+ * - With the commits' `order` from a history with no merge, a commit is in
+ *   a record's history when it comes no earlier than the record's newest
+ *   commit, so no more git is run.
+ *
+ * - Otherwise records changed in the same commits share one `git rev-list`.
  *
  * - A record git has no commits of has seen none of them.
  *
- * - A record whose own history couldn't be read gets nothing, so the source
- *   rules skip its sources' commits.
+ * - A record whose own history couldn't be read gets nothing, and so does
+ *   one whose commits git couldn't place, so the source rules skip it.
  *
- * @returns why git couldn't say, for each group of records.
+ * @returns why git couldn't say, for each record.
  */
 function listUnseenCommits(params: {
   cited: readonly { file: CheckedFile; paths: readonly string[] }[];
   history: ReadonlyMap<string, readonly FileChange[]>;
+  order: readonly string[] | undefined;
   repoRoot: string;
   unseen: Map<string, ReadonlySet<string>>;
 }): string[] {
-  const { cited, history, repoRoot, unseen } = params;
+  const { cited, history, order, repoRoot, unseen } = params;
   const failures: string[] = [];
   const groups = new Map<
     string,
@@ -431,14 +435,14 @@ function listUnseenCommits(params: {
   }
 
   for (const { candidates, filePaths, from } of groups.values()) {
-    const listed: Outcome<ReadonlySet<string>> =
-      from.length === 0 || candidates.size === 0
-        ? { isOk: true, value: candidates }
-        : listUnreachedCommits({ commits: [...candidates], from, repoRoot });
+    const listed = placeCommits({ candidates, from, order, repoRoot });
 
     if (!listed.isOk) {
       failures.push(
-        `Couldn't tell which commits are in the history of ${filePaths.join(", ")}: ${listed.reason}`
+        ...filePaths.map(
+          (filePath) =>
+            `Couldn't tell which commits are in the history of ${filePath}: ${listed.reason}`
+        )
       );
 
       continue;
@@ -450,6 +454,38 @@ function listUnseenCommits(params: {
   }
 
   return failures;
+}
+
+/**
+ * Say which of some commits aren't in the history of any of a record's
+ * commits, `from`, newest first: all of them when it has none, by their
+ * place in `order` when the history has no merge, and else by asking git.
+ */
+function placeCommits(params: {
+  candidates: ReadonlySet<string>;
+  from: readonly string[];
+  order: readonly string[] | undefined;
+  repoRoot: string;
+}): Outcome<ReadonlySet<string>> {
+  const { candidates, from, order, repoRoot } = params;
+  const [newest] = from;
+
+  if (newest === undefined || candidates.size === 0) {
+    return { isOk: true, value: candidates };
+  }
+
+  if (order === undefined) {
+    return listUnreachedCommits({ commits: [...candidates], from, repoRoot });
+  }
+
+  return {
+    isOk: true,
+    value: new Set(
+      order
+        .slice(0, order.indexOf(newest))
+        .filter((hash) => candidates.has(hash))
+    ),
+  };
 }
 
 /**
@@ -555,7 +591,7 @@ function readBundles(params: {
     file,
     paths: readSourcePaths(file),
   }));
-  const failures = readHistory({
+  const { failures, order } = readHistory({
     filePaths: cited.flatMap(({ file, paths }) =>
       paths.length === 0 ? [] : [file.filePath, ...paths]
     ),
@@ -566,6 +602,7 @@ function readBundles(params: {
   const unseenFailures = listUnseenCommits({
     cited,
     history,
+    order,
     repoRoot,
     unseen,
   });
@@ -603,21 +640,23 @@ function readBundles(params: {
  *
  * - A path git can't read has no history, so the source rules skip it.
  *
- * @returns why git couldn't read a path's history, by path.
+ * @returns why git couldn't read a path's history, by path, and the order of
+ *   every commit read, newest first, when they were all read at once from a
+ *   history with no merge.
  */
 function readHistory(params: {
   filePaths: readonly string[];
   hasHead: boolean;
   history: Map<string, readonly FileChange[]>;
   repoRoot: string;
-}): Map<string, string> {
+}): { failures: Map<string, string>; order: readonly string[] | undefined } {
   const { filePaths, hasHead, history, repoRoot } = params;
   const failures = new Map<string, string>();
   const now = Math.floor(DateTime.utc().toSeconds());
   const uniquePaths = [...new Set(filePaths)];
 
   if (uniquePaths.length === 0) {
-    return failures;
+    return { failures, order: undefined };
   }
 
   const together = listPathChangesTogether({
@@ -627,7 +666,7 @@ function readHistory(params: {
   });
   const read: { changes: Outcome<PathChanges>; filePath: string }[] =
     together.isOk
-      ? together.value.map(({ changes, filePath }) => ({
+      ? together.value.paths.map(({ changes, filePath }) => ({
           changes: { isOk: true, value: changes },
           filePath,
         }))
@@ -654,5 +693,5 @@ function readHistory(params: {
     ]);
   }
 
-  return failures;
+  return { failures, order: together.isOk ? together.value.order : undefined };
 }
