@@ -49,6 +49,7 @@ import {
   listBranchCommits,
   listPathChanges,
   listPathChangesTogether,
+  listUnreachedCommits,
   readMergeBase,
   readTextAt,
   readWorkingPaths,
@@ -374,6 +375,84 @@ function listCitingKeys(params: {
 }
 
 /**
+ * Read into `unseen`, for each record that cites a path, which commits to the
+ * paths it cites aren't in the history of any commit that changed it.
+ *
+ * - Records changed in the same commits share one `git rev-list`, as a pull
+ *   request that re-stamps several records leaves them.
+ *
+ * - A record git has no commits of has seen none of them.
+ *
+ * - A record whose own history couldn't be read gets nothing, so the source
+ *   rules skip its sources' commits.
+ *
+ * @returns why git couldn't say, for each group of records.
+ */
+function listUnseenCommits(params: {
+  cited: readonly { file: CheckedFile; paths: readonly string[] }[];
+  history: ReadonlyMap<string, readonly FileChange[]>;
+  repoRoot: string;
+  unseen: Map<string, ReadonlySet<string>>;
+}): string[] {
+  const { cited, history, repoRoot, unseen } = params;
+  const failures: string[] = [];
+  const groups = new Map<
+    string,
+    { candidates: Set<string>; filePaths: string[]; from: string[] }
+  >();
+
+  for (const { file, paths } of cited) {
+    if (paths.length === 0 || !history.has(file.filePath)) {
+      continue;
+    }
+
+    const readHashes = (filePath: string): string[] =>
+      file
+        .readChanges(filePath)
+        .flatMap(({ commit }) => (commit === undefined ? [] : [commit.hash]));
+
+    const from = readHashes(file.filePath);
+    const own = new Set(from);
+    const key = from.join(" ");
+    const group = groups.get(key) ?? {
+      candidates: new Set<string>(),
+      filePaths: [],
+      from,
+    };
+
+    for (const hash of paths.flatMap(readHashes)) {
+      if (!own.has(hash)) {
+        group.candidates.add(hash);
+      }
+    }
+
+    group.filePaths.push(file.filePath);
+    groups.set(key, group);
+  }
+
+  for (const { candidates, filePaths, from } of groups.values()) {
+    const listed: Outcome<ReadonlySet<string>> =
+      from.length === 0 || candidates.size === 0
+        ? { isOk: true, value: candidates }
+        : listUnreachedCommits({ commits: [...candidates], from, repoRoot });
+
+    if (!listed.isOk) {
+      failures.push(
+        `Couldn't tell which commits are in the history of ${filePaths.join(", ")}: ${listed.reason}`
+      );
+
+      continue;
+    }
+
+    for (const filePath of filePaths) {
+      unseen.set(filePath, listed.value);
+    }
+  }
+
+  return failures;
+}
+
+/**
  * Read every Markdown file in the bundles git would track, grouped by the
  * deepest bundle that holds each, the files that couldn't be read, the files
  * changed since the base branch, and under `--changed` the records citing a
@@ -402,6 +481,10 @@ function readBundles(params: {
   const history = new Map<string, readonly FileChange[]>();
   const readChanges = (filePath: string): readonly FileChange[] =>
     history.get(filePath) ?? [];
+  const unseen = new Map<string, ReadonlySet<string>>();
+  const readUnseenCommits = (
+    filePath: string
+  ): ReadonlySet<string> | undefined => unseen.get(filePath);
   const skipped: CheckSkipped[] = [];
 
   const listed = readWorkingPaths(repoRoot);
@@ -456,6 +539,7 @@ function readBundles(params: {
           doesExist,
           filePath,
           readChanges,
+          readUnseenCommits,
           text: readRecordText({ filePath, repoRoot }),
         })
       );
@@ -479,6 +563,12 @@ function readBundles(params: {
     history,
     repoRoot,
   });
+  const unseenFailures = listUnseenCommits({
+    cited,
+    history,
+    repoRoot,
+    unseen,
+  });
 
   const branchCommits = new Set(
     isChanged && base?.isBranchBase === true
@@ -496,7 +586,7 @@ function readBundles(params: {
       changedKeys,
       citingKeys: listCitingKeys({ branchCommits, cited }),
       hasBase: base?.isBranchBase === true,
-      historyFailures: [...failures.values()],
+      historyFailures: [...failures.values(), ...unseenFailures],
       skipped,
     },
   };

@@ -470,7 +470,8 @@ pnpm okf format
   - A sign-off made on the branch, after the change, covers it.
 - **A record whose `sources` cite a file in the repo warns when the file changed after the record was last written or signed off** (`T007`), and fails when it no longer exists (`T008`).
   - A `resource` counts when it resolves by §6's rules to a path in the repo, in the bundle or not, such as `../../src/check.ts` for code the record describes; a URL and a scope descriptor are skipped.
-  - A change is a commit to the file, or uncommitted changes to it, later than both `generated.at` and the latest sign-off. A commit that changed the record too doesn't count, so a pull request that updates both passes.
+  - A change is a commit to the file that isn't in the history of a commit that changed the record, or uncommitted changes to it, so a rebase that re-dates a branch's commits doesn't warn, and a branch merged after the record's re-stamp does. A commit that changed the record too doesn't count, so a pull request that updates both passes.
+  - While the record has uncommitted changes of its own, such as a re-stamp from `okf touch`, a commit counts only when it's also later than both `generated.at` and the latest sign-off; a record not committed yet is judged by that time alone.
   - It works at file level, so it stays a warning: whether the prose still holds is the reviewer's call.
   - It reads the history git has, so in CI fetch it all, as for `T006`: in a shallow checkout the oldest commit seems to change every file, the record included, so it doesn't count.
 - **`--changed` reports only on the files changed since the base branch**, from the branch diff and `git status`, and on the records whose `sources` cite a file the branch changed, for a pull request's check. Without a base to diff against, it says so on stderr and reports on uncommitted changes alone.

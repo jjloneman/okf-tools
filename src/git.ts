@@ -770,6 +770,58 @@ export function listPathChangesTogether(params: {
 }
 
 /**
+ * List which of some commits aren't in the history of any of others, being
+ * neither one of them nor an ancestor of one, in one `git rev-list`.
+ *
+ * - The hashes go in on stdin, so no list of them outgrows a command line.
+ *
+ * - Git walks only what the commits reach and the others don't, so it reads
+ *   about as many commits as landed since the others.
+ *
+ * @returns the commits given that none of the others reach, by full hash.
+ */
+export function listUnreachedCommits(params: {
+  /**
+   * The full hashes of the commits to sort out.
+   *
+   * @example `["1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"]`
+   */
+  commits: readonly string[];
+
+  /**
+   * The full hashes of the commits to reach them from.
+   *
+   * @example `["5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1a2b3c4d"]`
+   */
+  from: readonly string[];
+
+  /**
+   * The repo's root folder.
+   *
+   * @example "/home/me/repo"
+   */
+  repoRoot: string;
+}): Outcome<Set<string>> {
+  const { commits, from, repoRoot } = params;
+  const wanted = new Set(commits);
+
+  try {
+    const output = runGit({
+      args: ["rev-list", "--stdin"],
+      input: [...commits, ...from.map((hash) => `^${hash}`), ""].join("\n"),
+      repoRoot,
+    });
+
+    return {
+      isOk: true,
+      value: new Set(output.split("\n").filter((hash) => wanted.has(hash))),
+    };
+  } catch (error) {
+    return { isOk: false, reason: describeGitFailure(error) };
+  }
+}
+
+/**
  * List every path in the working tree git would track: those in its index,
  * and untracked ones it doesn't ignore, in one `git ls-files` call; empty when
  * git can't be asked.
@@ -941,14 +993,24 @@ export function readWorkingPaths(repoRoot: string): Outcome<string[]> {
  */
 export function runGit(params: {
   args: readonly string[];
+
+  /**
+   * What to write to its standard input, which is closed without it.
+   *
+   * @example "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
+   */
+  input?: string | undefined;
   repoRoot: string;
 }): string {
-  const { args, repoRoot } = params;
+  const { args, input, repoRoot } = params;
 
   // Literal, so a record named `[ab].md` names only itself, never `a.md`.
   return execFileSync("git", ["--literal-pathspecs", ...args], {
     ...GIT_EXEC_OPTIONS,
     cwd: repoRoot,
+    ...(input === undefined
+      ? {}
+      : { input, stdio: ["pipe", "pipe", "pipe"] as const }),
   });
 }
 

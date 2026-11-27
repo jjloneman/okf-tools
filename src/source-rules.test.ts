@@ -11,6 +11,9 @@ import { readSourcePaths, SOURCE_RULES } from "./source-rules.ts";
 /** When the records below were generated. */
 const GENERATED_AT = "2026-10-01T15:00:00Z";
 
+/** The record the source rules are run over. */
+const RECORD_PATH = "kb/notes/a.md";
+
 /** A `generated` at `GENERATED_AT`. */
 const GENERATED = `generated: { by: claude-code/1.0, at: ${GENERATED_AT} }`;
 
@@ -37,7 +40,9 @@ function findHits(params: {
   code: string;
 
   /**
-   * The changes git knows to each path, by path from the repo root.
+   * The changes git knows to each path, by path from the repo root; without
+   * the record's own, it has uncommitted changes from when it was generated
+   * and no commits, as a record not committed yet has.
    *
    * @example `{ "src/a.ts": [{ at: toSeconds("2026-10-02T00:00:00Z"), … }] }`
    */
@@ -56,8 +61,29 @@ function findHits(params: {
    * @example `concept(["sources: [{ resource: ../../src/a.ts }]"])`
    */
   text: string;
+
+  /**
+   * The commits not in the record's history, by full hash, or `undefined`
+   * when git couldn't say; without it, every commit the record didn't make.
+   *
+   * @example `[commit("a").hash]`
+   */
+  unseen?: readonly string[] | undefined;
 }): string[] {
-  const { code, history = {}, paths = [], text } = params;
+  const { code, paths = [], text } = params;
+  const history: Record<string, readonly FileChange[]> = {
+    [RECORD_PATH]: [{ at: toSeconds(GENERATED_AT), commit: undefined }],
+    ...params.history,
+  };
+  const own = new Set(history[RECORD_PATH]?.map(({ commit }) => commit?.hash));
+  const unseen =
+    "unseen" in params
+      ? params.unseen
+      : Object.values(history).flatMap((changes) =>
+          changes.flatMap(({ commit }) =>
+            commit === undefined || own.has(commit.hash) ? [] : [commit.hash]
+          )
+        );
   const report = buildCheckReport({
     bundles: [
       {
@@ -66,8 +92,14 @@ function findHits(params: {
           readCheckedFile({
             bundleDir: "kb",
             doesExist: (filePath) => paths.includes(filePath),
-            filePath: "kb/notes/a.md",
+            filePath: RECORD_PATH,
             readChanges: (filePath) => history[filePath] ?? [],
+            ...(unseen === undefined
+              ? {}
+              : {
+                  readUnseenCommits: (filePath: string) =>
+                    filePath === RECORD_PATH ? new Set(unseen) : undefined,
+                }),
             text,
           }),
         ],
@@ -258,6 +290,7 @@ describe("T007 source-changed", () => {
     // Given - a record citing a file with uncommitted changes
     const text = concept(["sources: [{ resource: /refs/a.md }]"]);
     const history = {
+      "kb/notes/a.md": [{ at: toSeconds(GENERATED_AT), commit: commit("r") }],
       "kb/refs/a.md": [
         { at: toSeconds("2026-10-06T00:00:00Z"), commit: undefined },
       ],
@@ -342,6 +375,94 @@ describe("T007 source-changed", () => {
       history,
       paths: ["src/a.ts"],
       text,
+    });
+
+    // Then - nothing
+    expect(hits).toStrictEqual([]);
+  });
+
+  test.each([
+    {
+      at: "2026-09-15T00:00:00Z",
+      description: "made before the record was written",
+      expected:
+        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-09-15T00:00:00Z, which isn't in the history of the record's last commit, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
+      record: [{ at: toSeconds(GENERATED_AT), commit: commit("r") }],
+    },
+    {
+      at: "2026-10-05T00:00:00Z",
+      description: "made after an uncommitted re-stamp's time",
+      expected:
+        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-10-05T00:00:00Z, which isn't in the history of the record's last commit, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
+      record: [
+        { at: toSeconds("2026-10-06T00:00:00Z"), commit: undefined },
+        { at: toSeconds("2026-09-01T00:00:00Z"), commit: commit("r") },
+      ],
+    },
+  ])(
+    "warns about a commit missing from the record's history, $description",
+    ({ at, expected, record: own }) => {
+      // Given - a record whose commits don't have its source's commit in
+      // their history
+      const text = concept(["sources: [{ resource: ../../src/a.ts }]"]);
+      const history = {
+        "kb/notes/a.md": own,
+        "src/a.ts": [{ at: toSeconds(at), commit: commit("a") }],
+      };
+
+      // When - checking it
+      const hits = findHits({
+        code: "T007",
+        history,
+        paths: ["src/a.ts"],
+        text,
+        unseen: [commit("a").hash],
+      });
+
+      // Then - a warning naming the record's last commit
+      expect(hits).toStrictEqual([expected]);
+    }
+  );
+
+  test.each([
+    {
+      at: "2026-10-05T00:00:00Z",
+      description:
+        "a commit in the record's history, committed after it was written",
+      record: [{ at: toSeconds(GENERATED_AT), commit: commit("r") }],
+      unseen: [],
+    },
+    {
+      at: "2026-09-20T00:00:00Z",
+      description:
+        "a commit missing from the record's history, before an uncommitted re-stamp's time",
+      record: [
+        { at: toSeconds("2026-10-06T00:00:00Z"), commit: undefined },
+        { at: toSeconds("2026-09-01T00:00:00Z"), commit: commit("r") },
+      ],
+      unseen: [commit("a").hash],
+    },
+    {
+      at: "2026-10-05T00:00:00Z",
+      description: "a commit git couldn't place in the record's history",
+      record: [{ at: toSeconds(GENERATED_AT), commit: commit("r") }],
+      unseen: undefined,
+    },
+  ])("passes $description", ({ at, record: own, unseen }) => {
+    // Given - a record citing a file whose commit came before or after it
+    const text = concept(["sources: [{ resource: ../../src/a.ts }]"]);
+    const history = {
+      "kb/notes/a.md": own,
+      "src/a.ts": [{ at: toSeconds(at), commit: commit("a") }],
+    };
+
+    // When - checking it
+    const hits = findHits({
+      code: "T007",
+      history,
+      paths: ["src/a.ts"],
+      text,
+      unseen,
     });
 
     // Then - nothing

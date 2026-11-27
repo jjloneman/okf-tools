@@ -17,7 +17,12 @@ import { DateTime } from "luxon";
 import path from "node:path";
 import { isSeq } from "yaml";
 
-import type { CheckedFile, CheckRule, RuleHit } from "./check-engine.ts";
+import type {
+  CheckedFile,
+  CheckRule,
+  FileChange,
+  RuleHit,
+} from "./check-engine.ts";
 import type { ParsedFile } from "./spec-rules.ts";
 
 import { readNodeLine } from "./check-engine.ts";
@@ -86,12 +91,23 @@ export function readSourcePaths(file: CheckedFile): string[] {
 }
 
 /**
- * Warn about a cited path changed after the later of `generated.at` and the
- * latest sign-off.
+ * Warn about a cited path changed since the record was last written or
+ * signed off.
  *
- * - A commit that changed the record too doesn't count, since the record
- *   kept up with it, as a squash-merged pull request does; nor do
- *   uncommitted changes while the record has some too.
+ * - A commit counts when it isn't in the history of a commit that changed
+ *   the record, so a rebase, which resets every committer time, doesn't
+ *   make a commit the record built on read as new, and a merged branch's
+ *   commit counts whenever it was made.
+ *
+ * - While the record has uncommitted changes, such as a re-stamp `okf touch`
+ *   made, a commit counts only when it's also later than the later of
+ *   `generated.at` and the latest sign-off, which is all git can't say; a
+ *   record git has no commits of is judged by that time alone.
+ *
+ * - Uncommitted changes count unless the record has some too.
+ *
+ * - When git couldn't say which commits the record's history holds, only
+ *   uncommitted changes are judged.
  *
  * - A path that no longer exists is `T008`'s.
  */
@@ -103,9 +119,16 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
       return [];
     }
 
-    const ownChanges = new Set(
-      file.readChanges(file.filePath).map(({ commit }) => commit?.hash)
-    );
+    const ownChanges = file.readChanges(file.filePath);
+    const isDirty = ownChanges.some(({ commit }) => commit === undefined);
+    const lastCommit = ownChanges.find(
+      ({ commit }) => commit !== undefined
+    )?.commit;
+    const unseen = file.readUnseenCommits(file.filePath);
+    const isUnseen = ({ at, commit }: FileChange): boolean =>
+      commit === undefined
+        ? !isDirty
+        : unseen?.has(commit.hash) === true && (!isDirty || at > writtenAt);
 
     return readCitedSources(parsed).flatMap(({ node, path, resource }) => {
       if (!file.doesExist(path)) {
@@ -114,9 +137,7 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
 
       const [change] = file
         .readChanges(path)
-        .filter(
-          ({ at, commit }) => at > writtenAt && !ownChanges.has(commit?.hash)
-        )
+        .filter(isUnseen)
         .sort((left, right) => right.at - left.at);
 
       if (change === undefined) {
@@ -128,11 +149,7 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
       return [
         {
           line: readNodeLine({ file, node }),
-          message: `${
-            change.commit === undefined
-              ? `source ${resource} has uncommitted changes ${since}`
-              : `source ${resource} changed in ${change.commit.shortHash}, at ${formatSeconds(change.at)}, ${since}`
-          }; check the record still holds, then re-stamp generated with okf touch`,
+          message: `${describeChange({ change, lastCommit, resource, since })}; check the record still holds, then re-stamp generated with okf touch`,
         },
       ];
     });
@@ -151,6 +168,30 @@ function checkSourceGone(file: CheckedFile): RuleHit[] {
         message: `source ${resource} no longer exists, though git history has it; cite where it is now, or remove the source`,
       }))
   );
+}
+
+/**
+ * Say how a cited path changed: by uncommitted changes, by a commit missing
+ * from the history of the record's last commit, or, for a record git has no
+ * commits of, by a commit later than when it was written.
+ */
+function describeChange(params: {
+  change: FileChange;
+  lastCommit: FileChange["commit"];
+  resource: string;
+  since: string;
+}): string {
+  const { change, lastCommit, resource, since } = params;
+
+  if (change.commit === undefined) {
+    return `source ${resource} has uncommitted changes ${since}`;
+  }
+
+  const changed = `source ${resource} changed in ${change.commit.shortHash}, at ${formatSeconds(change.at)}`;
+
+  return lastCommit === undefined
+    ? `${changed}, ${since}`
+    : `${changed}, which isn't in the history of the record's last commit, ${lastCommit.shortHash}`;
 }
 
 /** Write whole seconds since the epoch as a UTC date-time. */
