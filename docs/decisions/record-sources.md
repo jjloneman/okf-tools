@@ -16,8 +16,8 @@ sources:
   - id: source-rules
     resource: ../../src/source-rules.ts
     title: src/source-rules.ts, the rules on a record's sources
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T08:15:50Z }
 verified: { by: human:jjloneman, at: 2026-11-27T07:50:01Z }
 ---
 
