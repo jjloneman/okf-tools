@@ -32,9 +32,9 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:44:00Z }
-verified: { by: human:jjloneman, at: 2026-11-27T02:05:49Z }
+verified: { by: human:jjloneman, at: 2026-11-27T06:09:50Z }
 ---
 
 # Which house rules okf check runs, and how a repo turns them on
