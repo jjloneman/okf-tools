@@ -317,8 +317,8 @@ export function readReviewThread(node: unknown): ReviewThread | undefined {
 /**
  * Word a draft's comment, ending in its marker: an alert by severity,
  * holding a heading with the linked code, the finding's first clause as
- * its summary, the clauses between as bullets, and the two ways to settle
- * it.
+ * its summary, and the clauses between as bullets; then, after the alert,
+ * the two ways to settle it.
  *
  * - The finding's message joins its clauses with `; `, and ends with the
  *   command that settles it, as `T001`'s does.
@@ -354,19 +354,21 @@ export function wordComment(params: {
     ...(details.length === 0
       ? []
       : ["", ...details.map((detail) => `- ${detail}`)]),
-    "",
-    ...(settle === undefined
+  ];
+  const steps =
+    settle === undefined
       ? [MERGE_AS_DRAFT]
       : [
           "**What to do**, one or the other:",
           "",
           `- **Sign it off:** ${settle.replace(/\.$/u, "")}, and the next run resolves this thread.`,
           `- **Or merge it as a draft:** ${MERGE_AS_DRAFT_STEP}`,
-        ]),
-  ];
+        ];
 
   return [
     ...alert.map((line) => (line === "" ? ">" : `> ${line}`)),
+    "",
+    ...steps,
     "",
     formatMarker({ blob, code: finding.code, path: finding.path }),
   ].join("\n");

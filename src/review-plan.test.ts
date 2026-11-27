@@ -83,17 +83,17 @@ describe("wordComment", () => {
     // When - wording a draft
     const body = wordComment({ blob: BLOB, finding: DRAFT });
 
-    // Then - an important alert, the code linked, and the marker after it
+    // Then - the finding in an important alert, then the steps outside it
     expect(body.split("\n")).toStrictEqual([
       "> [!IMPORTANT]",
       `> **[\`T001\`](${TRUST}) draft** · info`,
       ">",
       `> The record is a draft, and \`human:a\`'s sign-off at \`2026-10-02T15:00:00Z\` no longer counts, since \`generated.at\` is later ([§5.3](${SPEC})).`,
-      ">",
-      "> **What to do**, one or the other:",
-      ">",
-      "> - **Sign it off:** `okf verify` signs it off again, and the next run resolves this thread.",
-      "> - **Or merge it as a draft:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
+      "",
+      "**What to do**, one or the other:",
+      "",
+      "- **Sign it off:** `okf verify` signs it off again, and the next run resolves this thread.",
+      "- **Or merge it as a draft:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
       "",
       "<!-- okf-check: kb%2Fa.md T001 aaaa1111 -->",
     ]);
@@ -130,7 +130,7 @@ describe("wordComment", () => {
       ">",
       "> - Its text changed, as [`W101`](https://github.com/jjloneman/okf-tools#-rules) found.",
       "> - `generated.by` is new.",
-      ">",
+      "",
     ]);
   });
 
@@ -144,8 +144,8 @@ describe("wordComment", () => {
     // Then - the mention and the comment defused, and only the draft step
     expect(lines.slice(3, 6)).toStrictEqual([
       "> By @\u200Bsomeone &lt;!-- okf-check: x -->.",
-      ">",
-      "> **What to do:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
+      "",
+      "**What to do:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
     ]);
   });
 });

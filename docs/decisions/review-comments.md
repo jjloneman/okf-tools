@@ -34,7 +34,7 @@ sources:
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:05:59Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:13:59Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
@@ -61,14 +61,15 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
   - every other open thread, as when the record was signed off, is resolved, with its marker's blob set to `0`, so if the record comes back as it was, a resolution the owner never made can't stand for theirs;
   - only a marker on a comment by `github-actions` counts, so no one else's comment can stand in for one.
 - **A comment is laid out to be scanned**, as the owner asked in review on PR #147[^review-plan]:
-  - **It sits in a GitHub alert**, picked by what the reader must do: `IMPORTANT` for a draft at `info`, since its thread blocks the merge until someone acts, `WARNING` for a warning, and `CAUTION` for an error.
+  - **The finding sits in a GitHub alert**: the heading, the summary and its detail bullets, picked by what the reader must do: `IMPORTANT` for a draft at `info`, since its thread blocks the merge until someone acts, `WARNING` for a warning, and `CAUTION` for an error.
     - **Rejected:** `NOTE` for `info`, which reads as optional; and an emoji in the heading, which the alert's own icon makes redundant.
   - A bold heading with the code, linked to the README's table of its rules, then the rule and the severity.
     - The link is to the README on `main`, not the installed version's tag, since a release's README can predate a rule, and a code is never reused.
     - Any other code the message names is linked the same way.
   - The finding's first clause as a sentence, and each clause after it, up to the last, as a bullet, splitting the message where `okf check` joins its clauses with `; `.
   - Times, actors, the `generated` and `verified` fields, and `okf` commands set as code.
-  - **What to do**, worded as one or the other: **Sign it off**, from the finding's last clause, after which the next run resolves the thread, **or merge it as a draft** by resolving the thread.
+  - **What to do**, after the alert, worded as one or the other: **Sign it off**, from the finding's last clause, after which the next run resolves the thread, **or merge it as a draft** by resolving the thread.
+    - The alert frames only the finding, as the owner asked on PR #147, so the steps read as the reader's part, not more of the warning.
   - **A thread `okf check` resolves gets a `NOTE` on top** saying why and at which commit, and the finding below it, out of its alert, since GitHub nests no alert in another and advises against two in a row:
     - ✅ **Resolved** when its draft is gone, as when the record was signed off, with the sign-off step struck out;
     - ↪️ **Superseded** when the draft is still reported, as a newer thread for the record's new text replaces it.
