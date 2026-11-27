@@ -53,11 +53,11 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - **`--by` is required and must be an actor**, as `okf.verifiedBy` must; it names the producer, so it never falls back to `okf.verifiedBy`.
 - **The agent rules point at both commands** in place of telling an agent to stamp `generated` itself.
 - **A change to `tags` alone isn't re-stamped:** the agent rules and the `okf-record` skill say to skip `okf touch` for it, keeping `generated` and `status`, so a signed-off record stays signed off.
-  - Any other change in the same edit, to the body or another field, is re-stamped as before.
+  - Any other change in the same edit, to the body or another field, is re-stamped as before, apart from a reorder of `sources`.
   - `title` and `description` aren't exempt, since they summarize what the record says.
   - In a tag audit, the record skill proposes every retag in one table first, so the person sees each change before it's written; a retag made in other work is shown only in its diff.
   - **Rejected:** re-stamping every edit, tags included, which sent each retagged record back for sign-off, so a bundle-wide tag audit queued every record it touched.
-- **A change to the order of `sources` alone isn't re-stamped either** (#150, #155): the agent rules and the `okf-record` skill name it beside `tags`, since a footnote cites its source by `id`, so the order changes no claim. `okf format` sorts `sources` under the `sources-sorted` house rule without re-stamping, per [What okf check --fix fixes, and how it writes](fixes.md).
+- **A change to the order of `sources` alone isn't re-stamped either** (#150, #155): the agent rules and the `okf-record` skill name it beside `tags`, alone or with a `tags` change in the same edit, since a footnote cites its source by `id`, so the order changes no claim. `okf format` sorts `sources` under the `sources-sorted` house rule without re-stamping, per [What okf check --fix fixes, and how it writes](fixes.md).
   - Adding, removing, or editing an entry is re-stamped as before, since it changes what the record rests on.
 
 ## Why
