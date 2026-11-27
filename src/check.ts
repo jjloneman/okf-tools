@@ -67,12 +67,7 @@ import {
   matchExcluded,
   readRecordText,
 } from "./repo.ts";
-import {
-  readDocStamp,
-  readSourcePaths,
-  readStamp,
-  SOURCE_RULES,
-} from "./source-rules.ts";
+import { readSourcePaths, readStamp, SOURCE_RULES } from "./source-rules.ts";
 import { SPEC_RULES } from "./spec-rules.ts";
 import { buildTrustRules } from "./trust-rules.ts";
 
@@ -466,9 +461,10 @@ function listCitingKeys(params: {
  *
  * - A record with uncommitted changes counts as re-stamped in the working
  *   tree by the same test, against the newest commit that changed it, which
- *   holds it as `HEAD` does: its `generated` and `verified` there can be
- *   read and differ from that commit's, or no commit holds it yet; a clean
- *   one never does.
+ *   holds it as `HEAD` does: its stamp there, `generated` and `verified`
+ *   together, can be read and differs from that commit's, or no commit has
+ *   changed it yet; a clean one never does, and nor does one whose newest
+ *   commit has no blob for it.
  *
  * @returns the commits, by the record's path from the repo root, the records
  *   re-stamped in the working tree, and why git couldn't say, for each
@@ -527,12 +523,7 @@ function listStampCommits(params: {
   const records = cited.flatMap(({ file, paths }) => {
     const own = commits.get(file.filePath);
 
-    // A record cites a path only from frontmatter that parsed.
-    if (
-      paths.length === 0 ||
-      own === undefined ||
-      file.frontmatter.kind !== "parsed"
-    ) {
+    if (paths.length === 0 || own === undefined) {
       return [];
     }
 
@@ -546,12 +537,12 @@ function listStampCommits(params: {
 
     return [
       {
-        doc: file.frontmatter.doc,
         filePath: file.filePath,
         isDirty: file
           .readChanges(file.filePath)
           .some(({ commit }) => commit === undefined),
         own,
+        text: file.text,
       },
     ];
   });
@@ -583,20 +574,21 @@ function listStampCommits(params: {
 
   const texts = read.value;
 
-  for (const { doc, filePath, isDirty, own } of records) {
+  for (const { filePath, isDirty, own, text } of records) {
     const [newest] = own;
+    const held =
+      newest === undefined
+        ? undefined
+        : texts.get(`${newest.hash}:${filePath}`);
 
-    // The newest commit to change the record holds it as `HEAD` does.
+    // The newest commit to change the record holds it as `HEAD` does; one
+    // with no blob for it, as when it deleted the record, or git names the
+    // path another way, isn't a version to judge against, so the record
+    // keeps its warnings.
     if (
       isDirty &&
-      isRestamp({
-        parentTexts: [
-          newest === undefined
-            ? undefined
-            : texts.get(`${newest.hash}:${filePath}`),
-        ],
-        stamp: readDocStamp(doc),
-      })
+      (newest === undefined || held !== undefined) &&
+      isRestamp({ parentTexts: [held], stamp: readStamp(text) })
     ) {
       uncommittedStamps.add(filePath);
     }

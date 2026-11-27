@@ -411,10 +411,10 @@ export type RuleHit = {
  */
 export type UnseenCommits = {
   /**
-   * Whether the record has an uncommitted re-stamp or sign-off: its
-   * `generated` and `verified` in the working tree can be read and differ
-   * from `HEAD`'s, which can be read too, or no commit holds it yet and its
-   * own can be read.
+   * Whether the record has an uncommitted re-stamp or sign-off: its stamp in
+   * the working tree, `generated` and `verified` together, can be read and
+   * differs from `HEAD`'s, which can be read too, or no commit has changed
+   * it yet and its own can be read.
    *
    * @example true
    */

@@ -1328,6 +1328,31 @@ describe("runCheck --fix", () => {
     }
   );
 
+  test("warns about an uncommitted source change to a record recreated after a commit deleted it", () => {
+    // Given - a record citing a source, committed, then deleted in a commit,
+    // then written again with a later generated, its source changed, both
+    // left uncommitted
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "export {};\n");
+    repo.write("kb/a.md", CITING);
+    commitAt({ at: "2026-10-02T15:00:00Z", message: "add the record" });
+    repo.git("rm", "--quiet", "--", "kb/a.md");
+    commitAt({ at: "2026-10-02T16:00:00Z", message: "remove the record" });
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+    repo.write("src/a.ts", "export const a = 1;\n");
+
+    // When - checking it
+    check({});
+
+    // Then - the uncommitted source change warns, since the deleting commit
+    // holds no version to judge a re-stamp against
+    expect(infos.filter((line) => line.includes("T007"))).toStrictEqual([
+      expect.stringMatching(
+        /^kb\/a\.md:\d+: warning T007 source-changed: source \.\.\/src\/a\.ts has uncommitted changes /u
+      ),
+    ]);
+  });
+
   test("keeps a record's source-changed warning once its fix is committed", () => {
     // Given - a record citing a source, its tags out of order, and the
     // source changed in a later commit

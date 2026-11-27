@@ -16,7 +16,7 @@
  */
 import { DateTime } from "luxon";
 import path from "node:path";
-import { type Document, isSeq } from "yaml";
+import { isSeq } from "yaml";
 
 import type {
   CheckedFile,
@@ -84,27 +84,6 @@ export const SOURCE_RULES: readonly CheckRule[] = [
 ];
 
 /**
- * Read a parsed frontmatter's `generated` and `verified` as `readStamp`
- * does, for a record already parsed, or `undefined` when its aliases can't
- * be expanded.
- */
-export function readDocStamp(doc: Document.Parsed): string | undefined {
-  try {
-    const data: unknown = doc.toJS();
-    const fields = new Map(
-      typeof data === "object" && data !== null ? Object.entries(data) : []
-    );
-
-    return JSON.stringify(
-      [fields.get("generated"), fields.get("verified")],
-      sortKeys
-    );
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Read the paths in the repo a record's `sources` cite, each once, or none
  * for a file that isn't a concept.
  */
@@ -137,7 +116,23 @@ export function readStamp(text: string | undefined): string | undefined {
 
   const doc = parseFrontmatter(block.text);
 
-  return doc.errors.length > 0 ? undefined : readDocStamp(doc);
+  if (doc.errors.length > 0) {
+    return undefined;
+  }
+
+  try {
+    const data: unknown = doc.toJS();
+    const fields = new Map(
+      typeof data === "object" && data !== null ? Object.entries(data) : []
+    );
+
+    return JSON.stringify(
+      [fields.get("generated"), fields.get("verified")],
+      sortKeys
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -159,8 +154,8 @@ export function readStamp(text: string | undefined): string | undefined {
  *   judged by that time alone.
  *
  * - Uncommitted changes count unless the record has an uncommitted re-stamp
- *   or sign-off too; an uncommitted edit that changes neither, such as an
- *   `okf format` fix, hides nothing.
+ *   or sign-off too; an uncommitted edit that is neither, such as an
+ *   `okf format` fix, is judged as its commit will be, so it hides nothing.
  *
  * - When git couldn't read the record's history, or say which commits it
  *   holds, the record is skipped, as `okf check` says on stderr.

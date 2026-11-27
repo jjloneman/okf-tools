@@ -40,8 +40,9 @@ function findHits(params: {
   code: string;
 
   /**
-   * Whether the record's `generated` or `verified` differs from `HEAD`'s;
-   * without it, whether the record has uncommitted changes.
+   * Whether the record has an uncommitted re-stamp or sign-off; without it,
+   * whether it has uncommitted changes, the same thing for a record no
+   * commit holds yet.
    *
    * @example false
    */
@@ -474,7 +475,8 @@ describe("T007 source-changed", () => {
       lines: [],
     },
     {
-      description: "uncommitted changes while the record has some too",
+      description:
+        "uncommitted changes while the record has an uncommitted re-stamp too",
       history: {
         "kb/notes/a.md": [
           { at: toSeconds("2026-10-05T00:00:00Z"), commit: undefined },
