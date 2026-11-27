@@ -17,6 +17,9 @@ sources:
   - id: check
     resource: ../../src/check.ts
     title: src/check.ts, the okf check command
+  - id: cited-sources
+    resource: ../../src/cited-sources.ts
+    title: src/cited-sources.ts, the paths a record's sources cite
   - id: config
     resource: ../../src/config.ts
     title: src/config.ts, which reads the okf block of package.json
@@ -64,7 +67,11 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - **`T001 draft` notes a `status: draft` record, at a severity `okf.drafts` sets:** unset, a notice; `allow`, nothing; `warn`, a warning, which `--strict` fails on; `block`, an error, for a branch that must not merge drafts.
   - **A draft whose every sign-off is older than `generated.at` says why it needs signing off again**, as #146 asked: it names the latest `verified` entry by its time, cites §5.3, and, when the base branch holds a copy to compare, says whether the record's text changed since or only its frontmatter differs. The text is the body, compared as `T006` compares it.
   - Only times in one of §5's forms count, as `I204` reads them. A sign-off ahead of the clock, which `T004` names, or a `generated.at` or sign-off time that can't be compared, which `W101` names, gets the plain draft notice.
-  - **Rejected:** naming the cited source that changed. `T007` stops reporting it once the record is re-stamped in a later commit, and the re-stamp's commit doesn't say why it was made, so `T001` can't tell a source change from any other re-stamp.
+  - **When only its frontmatter differs, it names the cited sources the branch changed**, as #154 asked, since a re-stamp with no text change usually follows a change to a cited file: in a commit the merge base doesn't have, or uncommitted, the test `--changed` uses for the records citing a changed file.[^cited-sources] With none, it keeps saying only its frontmatter differs.
+    - It names what changed without saying it caused the re-stamp, so check the record still holds against it, since a re-stamp's commit doesn't say why it was made.
+    - It reads the branch's commits rather than `T007`'s findings, which stop once the record is re-stamped, so `okf check` lists them on every run with a base branch, not only under `--changed`.
+    - **Rejected, before #154:** naming the cited source `T007` reported. `T007` stops reporting it once the record is re-stamped, and the re-stamp's commit doesn't say why it was made, so `T001` can't tell a source change from any other re-stamp. Reading the branch's own changes answers the first point, and wording the clause as what changed, not why, the second.
+    - **Rejected:** a reason stored with the re-stamp, such as an `okf touch --reason`, for now: where it would live is a choice the spec doesn't make, which #161 takes up.
 - **`T002 verified-draft` warns about a draft with a current sign-off**, which `okf verify` would have set `stable`.
   - **Rejected:** any `verified` entry on a draft. A signed-off record that's edited goes back to `draft` and keeps its old entry, as AGENTS.md says, so that would flag every edit in progress.
 - **`T003 generated-ahead` and `T004 verified-ahead` warn about a time later than now**, as a wrong time zone writes it, following #77 and #92: no sign-off made now passes the first, and the second would hide every change until the clock passes it.
@@ -111,7 +118,7 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 ## Consequences
 
 - Adding a trust rule is another entry in `buildTrustRules`, or `SOURCE_RULES` for one on `sources`, with the next `T` code.
-- `okf check` reads every cited path's history, and each citing record's, in one `git status` and one `git log`, which name each commit's changed files, with a `git rev-list` to rule out a merge first: three git calls however many files a bundle cites, as of 2026-11-27.
+- `okf check` reads every cited path's history, and each citing record's, in one `git status` and one `git log`, which name each commit's changed files, with a `git rev-list` to rule out a merge first: three git calls however many files a bundle cites, and a fourth `git rev-list` on a branch with a base, listing the branch's commits for `T001` and `--changed`, as of 2026-11-27.
   - With no merge, that `git log` lists every commit in the history's own order, so a source's commit is in a record's history when it comes no earlier than the record's newest commit, and placing it needs no more git.
   - In a history with a merge, it reads one `git status` and one `git log` for each path instead, since git simplifies history at a merge by every pathspec at once, and so could follow a parent that the path's own `git log` wouldn't.
     - It then places a source's commits with one `git rev-list` for each set of records changed in the same commits, which reads about as many commits as landed since they last changed and takes the hashes on stdin, so no list of them outgrows a command line.
@@ -127,7 +134,11 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - [#137](https://github.com/jjloneman/okf-tools/issues/137) — reading every cited path's history in one `git log`.
 - [#140](https://github.com/jjloneman/okf-tools/issues/140) — judging a source's change by commit ancestry instead of a clock.
 - [#146](https://github.com/jjloneman/okf-tools/issues/146) — one notice that says why a draft needs signing off again, and review comments for drafts.
+- [#154](https://github.com/jjloneman/okf-tools/issues/154) — naming the cited sources the branch changed under a re-stamped draft.
+- [#161](https://github.com/jjloneman/okf-tools/issues/161) — a reason stored with the re-stamp, with `okf touch --reason`.
 - [How okf-check.yml posts drafts as review comments](review-comments.md) — the reusable workflow's opt-in review comments.
+
+[^cited-sources]: `src/cited-sources.ts`, the paths a record's sources cite.
 
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 
