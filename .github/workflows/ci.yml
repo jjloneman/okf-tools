@@ -61,10 +61,16 @@ jobs:
     name: 📚 Decision records
     # This repo's own reusable workflow, called on its decision records, so
     # every change to it runs on this repo first. `./` pins it to this commit.
+    #
+    # - Review comments make each draft a thread to resolve, which the
+    #   ruleset requires before a merge, so a draft merges only once the
+    #   owner has acknowledged it.
     permissions:
       contents: read
+      pull-requests: write
     uses: ./.github/workflows/okf-check.yml
     with:
+      review-comments: true
       strict: true
 
   package:

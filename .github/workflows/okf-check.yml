@@ -32,14 +32,26 @@ on:
         description: A version of @jjloneman/okf-tools to run from npm; empty runs the one the repo's own pnpm lockfile installs.
         required: false
         type: string
+      review-comments:
+        default: false
+        description: "On a pull request from the same repo, post each draft record's T001 finding as a review comment the owner resolves, instead of an annotation; the calling job grants `pull-requests: write`."
+        required: false
+        type: boolean
       strict:
         default: false
         description: Fail on warnings too, as `--strict` does.
         required: false
         type: boolean
 
-# Nothing by default; the job grants only what it uses.
-permissions: {}
+# No workflow-wide `permissions`, so a job that declares none, the review
+# comments job, gets what the calling job grants.
+#
+# - A called job that asks for more than its caller grants fails the whole
+#   run before it starts, even when its `if` is false, so asking for
+#   `pull-requests: write` here would break every caller that doesn't grant
+#   it.
+#
+# - The check job still declares only what it uses.
 
 jobs:
   check:
@@ -47,6 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      drafts: ${{ steps.annotate.outputs.drafts }}
     steps:
       # The full history, so the base branch exists to diff against: a shallow
       # checkout has no base, and the trust rules' gate would see no change.
@@ -81,9 +95,17 @@ jobs:
 
       # The inputs reach the shell only through the environment, never spliced
       # into the script, so no value can run as code.
-      - env:
+      #
+      # - Review comments need a pull request whose token can write, which a
+      #   fork's never can, so anywhere else the drafts stay annotations.
+      #
+      # - For review comments, the report is read as JSON by the next step,
+      #   which annotates the rest and fails the job as okf would have.
+      - id: run
+        env:
           BUNDLES: ${{ inputs.bundles }}
           IS_CHANGED: ${{ inputs.changed }}
+          IS_REVIEW: ${{ inputs.review-comments && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
           IS_STRICT: ${{ inputs.strict }}
           OKF_VERSION: ${{ inputs.okf-version }}
         shell: bash
@@ -101,8 +123,221 @@ jobs:
             fi
           done <<< "$BUNDLES"
 
-          if [[ -n "$OKF_VERSION" ]]; then
-            npm exec --yes --package="@jjloneman/okf-tools@$OKF_VERSION" -- okf "${args[@]}"
+          okf() {
+            if [[ -n "$OKF_VERSION" ]]; then
+              npm exec --yes --package="@jjloneman/okf-tools@$OKF_VERSION" -- okf "$@"
+            else
+              pnpm --silent okf "$@"
+            fi
+          }
+
+          if [[ "$IS_REVIEW" == true ]]; then
+            status=0
+            okf "${args[@]}" --format json > "$RUNNER_TEMP/okf-report.json" || status=$?
+            echo "status=$status" >> "$GITHUB_OUTPUT"
           else
-            pnpm okf "${args[@]}"
+            okf "${args[@]}"
           fi
+
+      # Each finding prints as a line, as `okf check` prints it, and as an
+      # annotation, except a draft's `T001`, which the review comments job
+      # posts, with the record's blob at the pull request's head, so a changed
+      # record is told apart from one already acknowledged, and a change on
+      # the base branch, which the merge checkout holds, doesn't count.
+      - id: annotate
+        if: ${{ steps.run.outputs.status != '' }}
+        uses: actions/github-script@v9.0.0
+        with:
+          script: |
+            const fs = require("node:fs");
+            const LEVELS = { error: "error", info: "notice", warning: "warning" };
+            const text = fs.readFileSync(process.env.REPORT, "utf8");
+
+            // okf prints no report when it stops early, as on a bad config,
+            // and says why on stderr, in the step above.
+            if (text.trim() === "") {
+              core.setFailed(`okf check exited ${process.env.STATUS} with no report; its reason is in the step above`);
+
+              return;
+            }
+
+            const report = JSON.parse(text);
+            const drafts = [];
+            const oneLine = (text) => text.replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, " ");
+            const count = (total, noun) => `${total} ${noun}${total === 1 ? "" : "s"}`;
+            const readBlob = async (path) => {
+              const atHead = await exec.getExecOutput("git", ["rev-parse", "--verify", "--quiet", `${process.env.HEAD_SHA}:${path}`], { ignoreReturnCode: true, silent: true });
+
+              return atHead.exitCode === 0 ? atHead.stdout.trim() : (await exec.getExecOutput("git", ["hash-object", "--", path], { silent: true })).stdout.trim();
+            };
+
+            for (const finding of report.findings) {
+              const { code, line, message, path, rule, severity } = finding;
+
+              core.info(oneLine(`${path}${line === null ? "" : `:${line}`}: ${severity} ${code} ${rule}: ${message}`));
+
+              if (code === "T001") {
+                drafts.push({ ...finding, blob: await readBlob(path) });
+              } else {
+                core[LEVELS[severity]](message, { file: path, startLine: line ?? undefined, title: `${code} ${rule}` });
+              }
+            }
+
+            for (const { reason } of report.skipped) {
+              core.error(`Skipped: ${reason}`);
+            }
+
+            const { counts, filesChecked } = report;
+
+            core.info(`${count(filesChecked, "file")} checked: ${count(counts.error, "error")}, ${count(counts.warning, "warning")}, ${counts.info} info.`);
+            core.setOutput("drafts", JSON.stringify(drafts));
+
+            if (process.env.STATUS !== "0") {
+              core.setFailed(`okf check exited ${process.env.STATUS}`);
+            }
+
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPORT: ${{ runner.temp }}/okf-report.json
+          STATUS: ${{ steps.run.outputs.status }}
+  # Posts each draft's `T001` as a file-level review comment, which the owner
+  # resolves to acknowledge that the record merges as a draft.
+  #
+  # - No `permissions`, so it gets the calling job's, which must include
+  #   `pull-requests: write` (see the note above `jobs`).
+  #
+  # - A hidden marker names the record, the code and the blob it was found
+  #   in. A thread for the same blob is kept as it is, resolved or not; an
+  #   open thread for an older blob is edited; when every thread for it is
+  #   resolved, a changed record gets a new comment.
+  #
+  # - Every other open thread, as when the record was signed off, is
+  #   resolved, its marker's blob set to `0`, so a resolution the owner never
+  #   made can't stand for theirs if the record comes back.
+  #
+  # - A draft the pull request doesn't change, which GitHub won't take a
+  #   comment on, and a comment it can't post, become annotations.
+  comments:
+    name: 💬 OKF review comments
+    if: ${{ !cancelled() && needs.check.outputs.drafts != '' }}
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9.0.0
+        with:
+          script: |
+            const LEVELS = { error: "error", info: "notice", warning: "warning" };
+            const MARKER = /<!-- okf-check: (\S+) (\S+) ([0-9a-f]+) -->$/u;
+            const drafts = JSON.parse(process.env.DRAFTS);
+            const { owner, repo } = context.repo;
+            const pull = context.payload.pull_request;
+            const chosen = new Set();
+            const threads = [];
+            let cursor = null;
+            let files;
+
+            const annotate = (finding) =>
+              core[LEVELS[finding.severity]](finding.message, { file: finding.path, startLine: finding.line ?? undefined, title: `${finding.code} ${finding.rule}` });
+
+            // A record's own text can reach the message, so it can't mention
+            // anyone, open an HTML comment, or forge a marker.
+            const word = (finding) =>
+              [
+                `**${finding.code} ${finding.rule}** (${finding.severity})`,
+                "",
+                finding.message
+                  .replaceAll("<", "&lt;")
+                  .replaceAll("@", "@\u200b")
+                  .replace(/§(\d+(?:\.\d+)*)/gu, `[§$1](${process.env.SPEC_URL})`),
+                "",
+                "Resolve this thread to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
+                "",
+                `<!-- okf-check: ${encodeURIComponent(finding.path)} ${finding.code} ${finding.blob} -->`,
+              ].join("\n");
+
+            // Without read access to the pull request, such as when the calling
+            // job doesn't grant it, no comment can be posted, so each draft is an
+            // annotation instead.
+            try {
+              do {
+                const result = await github.graphql(
+                  `query ($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                    repository(owner: $owner, name: $repo) {
+                      pullRequest(number: $number) {
+                        reviewThreads(first: 100, after: $cursor) {
+                          pageInfo { endCursor hasNextPage }
+                          nodes { id isResolved comments(first: 1) { nodes { author { login } body databaseId } } }
+                        }
+                      }
+                    }
+                  }`,
+                  { cursor, number: pull.number, owner, repo }
+                );
+                const page = result.repository.pullRequest.reviewThreads;
+
+                for (const node of page.nodes) {
+                  const comment = node.comments.nodes[0];
+                  const match = comment?.body.match(MARKER);
+
+                  if (match && /^github-actions(\[bot\])?$/u.test(comment.author?.login ?? "")) {
+                    threads.push({ blob: match[3], code: match[2], comment, id: node.id, isResolved: node.isResolved, marker: match[1], path: decodeURIComponent(match[1]) });
+                  }
+                }
+
+                cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+              } while (cursor !== null);
+
+              files = new Set((await github.paginate(github.rest.pulls.listFiles, { owner, per_page: 100, pull_number: pull.number, repo })).map(({ filename }) => filename));
+            } catch (error) {
+              core.warning(`Couldn't read the review threads, so each draft is an annotation instead: ${error.message}`);
+              drafts.forEach(annotate);
+
+              return;
+            }
+
+            for (const finding of drafts) {
+              const body = word(finding);
+              const own = threads.filter(({ code, path }) => code === finding.code && path === finding.path);
+              const thread = own.find(({ blob }) => blob === finding.blob) ?? own.findLast(({ isResolved }) => !isResolved);
+
+              // Kept before the skip below, so a draft that's still reported
+              // never has its thread resolved as gone.
+              if (thread !== undefined) {
+                chosen.add(thread.id);
+              }
+
+              if (!files.has(finding.path)) {
+                annotate(finding);
+
+                continue;
+              }
+
+              try {
+                if (thread === undefined) {
+                  await github.rest.pulls.createReviewComment({ body, commit_id: pull.head.sha, owner, path: finding.path, pull_number: pull.number, repo, subject_type: "file" });
+                } else if (thread.comment.body !== body) {
+                  await github.rest.pulls.updateReviewComment({ body, comment_id: thread.comment.databaseId, owner, repo });
+                }
+              } catch (error) {
+                core.warning(`Couldn't post a review comment on ${finding.path}, so it's an annotation instead: ${error.message}`);
+                annotate(finding);
+              }
+            }
+
+            for (const thread of threads) {
+              if (!thread.isResolved && !chosen.has(thread.id)) {
+                try {
+                  await github.rest.pulls.updateReviewComment({ body: thread.comment.body.replace(MARKER, `okf check resolved this thread: the record no longer reads as it did here, or is no longer a draft.\n\n<!-- okf-check: ${thread.marker} ${thread.code} 0 -->`), comment_id: thread.comment.databaseId, owner, repo });
+                  await github.graphql(`mutation ($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id } } }`, { id: thread.id });
+                } catch (error) {
+                  core.warning(`Couldn't resolve the review thread on ${thread.path}: ${error.message}`);
+                }
+              }
+            }
+        env:
+          DRAFTS: ${{ needs.check.outputs.drafts }}
+          SPEC_URL: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
+    # One run at a time for each pull request, so two never both find no
+    # thread for a draft and post it twice.
+    concurrency:
+      group: okf-review-comments-${{ github.repository }}-${{ github.event.pull_request.number }}
