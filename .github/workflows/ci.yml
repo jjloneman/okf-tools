@@ -65,8 +65,12 @@ jobs:
     # - Review comments make each draft a thread to resolve, which the
     #   ruleset requires before a merge, so a draft merges only once the
     #   owner has acknowledged it.
+    #
+    # - `contents: write` reaches only the review comments job, which takes
+    #   these permissions, since resolving a thread needs it; the check job
+    #   declares `contents: read` itself.
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     uses: ./.github/workflows/okf-check.yml
     with:
