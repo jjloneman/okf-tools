@@ -12,18 +12,18 @@ tags:
   - selection
   - verification
 sources:
-  - id: non-interactive
-    resource: ../../src/non-interactive.ts
-    title: src/non-interactive.ts, the --yes verify mode
   - id: exit-codes
     resource: ../../src/exit-codes.ts
     title: src/exit-codes.ts, the exit codes
-  - id: working-directory
-    resource: ../../src/working-directory.ts
-    title: src/working-directory.ts, which resolves the working directory
+  - id: non-interactive
+    resource: ../../src/non-interactive.ts
+    title: src/non-interactive.ts, the --yes verify mode
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
+  - id: working-directory
+    resource: ../../src/working-directory.ts
+    title: src/working-directory.ts, which resolves the working directory
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

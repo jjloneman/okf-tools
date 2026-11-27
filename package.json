@@ -116,6 +116,9 @@
       "docs/decisions",
       "docs/references"
     ],
+    "rules": {
+      "sources-sorted": "error"
+    },
     "verifiedBy": "human:jjloneman"
   }
 }

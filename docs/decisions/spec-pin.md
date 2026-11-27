@@ -11,15 +11,15 @@ tags:
   - upstream
   - verification
 sources:
-  - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
-    title: Open Knowledge Format specification
   - id: catalog-frozen
     resource: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/62651738dab0b497b0e3fd804c87bcd235f027b8/okf/README.md
     title: knowledge-catalog's okf/README.md, which freezes its copy
   - id: gcp-deprecated
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/commit/8a8ff87bfd3847c34c9ddd4fbfd9296be2aee4a3
     title: GoogleCloudPlatform/open-knowledge-format marked deprecated
+  - id: okf-spec
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
+    title: Open Knowledge Format specification
   - id: upstream-pin
     resource: ../../spec/upstream.json
     title: spec/upstream.json, the pin of the spec okf-tools follows

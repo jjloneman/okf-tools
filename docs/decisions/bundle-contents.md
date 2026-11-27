@@ -14,15 +14,15 @@ tags:
   - spec
   - symlinks
 sources:
+  - id: config
+    resource: ../../src/config.ts
+    title: src/config.ts, which reads the okf block of package.json
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
-  - id: config
-    resource: ../../src/config.ts
-    title: src/config.ts, which reads the okf block of package.json
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

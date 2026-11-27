@@ -12,18 +12,18 @@ tags:
   - scripts
   - typescript
 sources:
-  - id: changesets-changelog
-    resource: https://github.com/changesets/changesets/blob/main/docs/modifying-changelog-format.md
-    title: Changesets, modifying the changelog format
-  - id: node-type-stripping
-    resource: https://nodejs.org/api/typescript.html
-    title: Node.js, modules and TypeScript
   - id: changelog
     resource: ../../scripts/changelog.ts
     title: scripts/changelog.ts, the changesets changelog formatter
   - id: changeset-config
     resource: ../../.changeset/config.json
     title: .changeset/config.json, which names the changelog formatter
+  - id: changesets-changelog
+    resource: https://github.com/changesets/changesets/blob/main/docs/modifying-changelog-format.md
+    title: Changesets, modifying the changelog format
+  - id: node-type-stripping
+    resource: https://nodejs.org/api/typescript.html
+    title: Node.js, modules and TypeScript
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

@@ -13,21 +13,21 @@ tags:
   - trust-tiers
   - verification
 sources:
-  - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
-    title: Open Knowledge Format specification
-  - id: status
-    resource: ../../src/status.ts
-    title: src/status.ts, the okf status command
-  - id: repo
-    resource: ../../src/repo.ts
-    title: src/repo.ts, the file-system work on records
   - id: frontmatter-read
     resource: ../../src/frontmatter/read.ts
     title: src/frontmatter/read.ts, the record state and trust tier reads
   - id: frontmatter-types
     resource: ../../src/frontmatter/types.ts
     title: src/frontmatter/types.ts, the public types and constants
+  - id: okf-spec
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
+    title: Open Knowledge Format specification
+  - id: repo
+    resource: ../../src/repo.ts
+    title: src/repo.ts, the file-system work on records
+  - id: status
+    resource: ../../src/status.ts
+    title: src/status.ts, the okf status command
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

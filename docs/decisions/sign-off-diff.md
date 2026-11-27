@@ -12,18 +12,18 @@ tags:
   - timestamps
   - verification
 sources:
-  - id: sign-off-diff
-    resource: ../../src/sign-off-diff.ts
-    title: src/sign-off-diff.ts, what changed since a sign-off
+  - id: diff
+    resource: ../../src/diff.ts
+    title: src/diff.ts, the okf diff command
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
   - id: interactive
     resource: ../../src/interactive.ts
     title: src/interactive.ts, the interactive verify mode
-  - id: diff
-    resource: ../../src/diff.ts
-    title: src/diff.ts, the okf diff command
+  - id: sign-off-diff
+    resource: ../../src/sign-off-diff.ts
+    title: src/sign-off-diff.ts, what changed since a sign-off
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }

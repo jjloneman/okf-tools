@@ -20,15 +20,15 @@ sources:
   - id: frontmatter-deprecate
     resource: ../../src/frontmatter/deprecate.ts
     title: src/frontmatter/deprecate.ts, the deprecation edit
-  - id: records
-    resource: ../../src/records.ts
-    title: src/records.ts, the record edits and stale_after from --stale-in
-  - id: frontmatter-touch
-    resource: ../../src/frontmatter/touch.ts
-    title: src/frontmatter/touch.ts, touchRecord's re-stamp
   - id: frontmatter-fields
     resource: ../../src/frontmatter/fields.ts
     title: src/frontmatter/fields.ts, writeFields' single-value edits
+  - id: frontmatter-touch
+    resource: ../../src/frontmatter/touch.ts
+    title: src/frontmatter/touch.ts, touchRecord's re-stamp
+  - id: records
+    resource: ../../src/records.ts
+    title: src/records.ts, the record edits and stale_after from --stale-in
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:22:42Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

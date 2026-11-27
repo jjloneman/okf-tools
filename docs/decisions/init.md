@@ -14,15 +14,15 @@ tags:
   - skills
   - tags
 sources:
-  - id: init
-    resource: ../../src/init.ts
-    title: src/init.ts, the okf init command
   - id: agent-block
     resource: ../../src/agent-block.ts
     title: src/agent-block.ts, the agent block's text and markers
   - id: guide
     resource: ../../src/guide.ts
     title: src/guide.ts, the okf guide text and record rules
+  - id: init
+    resource: ../../src/init.ts
+    title: src/init.ts, the okf init command
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
