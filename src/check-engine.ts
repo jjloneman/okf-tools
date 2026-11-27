@@ -413,7 +413,8 @@ export type UnseenCommits = {
   /**
    * Whether the record has an uncommitted re-stamp or sign-off: its
    * `generated` and `verified` in the working tree can be read and differ
-   * from `HEAD`'s, which can be read too, or no commit holds it yet.
+   * from `HEAD`'s, which can be read too, or no commit holds it yet and its
+   * own can be read.
    *
    * @example true
    */

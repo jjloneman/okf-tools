@@ -507,20 +507,20 @@ function listStampCommits(params: {
   failures: string[];
 
   /**
-   * The records re-stamped or signed off in the working tree, by path from
-   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
-   *
-   * @example `new Set(["kb/a.md"])`
-   */
-  restamped: Set<string>;
-
-  /**
    * The full hashes of each record's re-stamps and sign-offs, by its path
    * from the repo root.
    *
    * @example `new Map([["kb/a.md", new Set(["1a2b3c4d…"])]])`
    */
   stamps: Map<string, ReadonlySet<string>>;
+
+  /**
+   * The records re-stamped or signed off in the working tree, by path from
+   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
+   *
+   * @example `new Set(["kb/a.md"])`
+   */
+  uncommittedStamps: Set<string>;
 } {
   const { cited, commits, repoRoot } = params;
   const failures: string[] = [];
@@ -564,7 +564,7 @@ function listStampCommits(params: {
     names.length === 0
       ? { isOk: true as const, value: new Map<string, string | undefined>() }
       : readTextsAt({ names: [...new Set(names)], repoRoot });
-  const restamped = new Set<string>();
+  const uncommittedStamps = new Set<string>();
   const stamps = new Map<string, ReadonlySet<string>>();
 
   if (!read.isOk) {
@@ -576,8 +576,8 @@ function listStampCommits(params: {
             `Couldn't tell which commits re-stamped or signed off ${filePath}: ${read.reason}`
         ),
       ],
-      restamped,
       stamps,
+      uncommittedStamps,
     };
   }
 
@@ -598,7 +598,7 @@ function listStampCommits(params: {
         stamp: readDocStamp(doc),
       })
     ) {
-      restamped.add(filePath);
+      uncommittedStamps.add(filePath);
     }
 
     stamps.set(
@@ -618,7 +618,7 @@ function listStampCommits(params: {
     );
   }
 
-  return { failures, restamped, stamps };
+  return { failures, stamps, uncommittedStamps };
 }
 
 /**
@@ -666,14 +666,6 @@ function listUnseenCommits(params: {
   repoRoot: string;
 
   /**
-   * The records re-stamped or signed off in the working tree, by path from
-   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
-   *
-   * @example `new Set(["kb/a.md"])`
-   */
-  restamped: ReadonlySet<string>;
-
-  /**
    * The full hashes of each record's re-stamps and sign-offs, by its path
    * from the repo root.
    *
@@ -682,13 +674,21 @@ function listUnseenCommits(params: {
   stamps: ReadonlyMap<string, ReadonlySet<string>>;
 
   /**
+   * The records re-stamped or signed off in the working tree, by path from
+   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
+   *
+   * @example `new Set(["kb/a.md"])`
+   */
+  uncommittedStamps: ReadonlySet<string>;
+
+  /**
    * Where each record's unseen commits go, by its path from the repo root.
    *
    * @example `new Map()`
    */
   unseen: Map<string, UnseenCommits>;
 }): string[] {
-  const { cited, order, repoRoot, restamped, stamps, unseen } = params;
+  const { cited, order, repoRoot, stamps, uncommittedStamps, unseen } = params;
   const failures: string[] = [];
   const groups = new Map<
     string,
@@ -747,7 +747,7 @@ function listUnseenCommits(params: {
 
     for (const { filePath, lastSeen } of records) {
       unseen.set(filePath, {
-        hasUncommittedStamp: restamped.has(filePath),
+        hasUncommittedStamp: uncommittedStamps.has(filePath),
         lastSeen,
         unseen: listed.value,
       });
@@ -931,8 +931,8 @@ function readBundles(params: {
     cited,
     order,
     repoRoot,
-    restamped: stamped.restamped,
     stamps: stamped.stamps,
+    uncommittedStamps: stamped.uncommittedStamps,
     unseen,
   });
 
