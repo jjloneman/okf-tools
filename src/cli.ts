@@ -56,7 +56,6 @@ import {
 } from "./options.ts";
 import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
-import { runReviewComments } from "./review-comments.ts";
 import { runStatus } from "./status.ts";
 import { runTags } from "./tags.ts";
 import { runTouch } from "./touch.ts";
@@ -653,7 +652,10 @@ async function runReviewCommentsCommand(params: {
     return EXIT_CODES.failure;
   }
 
-  // It returns every failure as a reason, so it never throws.
+  // Loaded only for this command, so no other command loads Octokit; it
+  // returns every failure as a reason, so it never throws.
+  const { runReviewComments } = await import("./review-comments.ts");
+
   return runReviewComments({
     draftsFile: path.resolve(cwd, parsed.options.draftsFile),
     env: process.env,

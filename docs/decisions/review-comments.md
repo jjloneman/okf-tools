@@ -20,11 +20,17 @@ sources:
   - id: review-comments
     resource: ../../src/review-comments.ts
     title: src/review-comments.ts, the okf review-comments command
+  - id: review-plan
+    resource: ../../src/review-plan.ts
+    title: src/review-plan.ts, what a run posts, edits, or resolves
+  - id: github-client
+    resource: ../../src/github-client.ts
+    title: src/github-client.ts, the GitHub calls
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T03:34:25Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T03:57:11Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 
@@ -61,7 +67,12 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 - **The check job keeps its name, `🩺 OKF check`**, so no caller's required check moves; the comments job is a new one, `💬 OKF review comments`, which falls back to annotations rather than failing, so it needn't be required.
 - **Comments are posted by `okf review-comments`**, okf-tools' own command, tested like the rest of the package[^review-comments], as the owner asked in review on PR #147.
   - The workflow runs against the caller's checkout, so it can't load a script from this repo; the command reaches it as okf does, from the repo's own lockfile or `okf-version`, and the comments job installs it the same way the check job does.
-  - It calls GitHub with `fetch` and the job's token, with no new dependency, and reads the record's blob at the head from the pull request's file list.
+  - It calls GitHub through `@octokit/core`[^github-client], GitHub's own client, with the job's token, and reads the record's blob at the head from the pull request's file list.
+    - Octokit types each REST call by its endpoint, from GitHub's own API description, and handles the auth header and a GitHub Enterprise URL; GraphQL answers aren't typed, so the client narrows each field it reads.
+    - The cost: as of 2026-11-27, installing it adds about 6.3 MB to every repo that installs okf-tools, 5.1 MB of it `@octokit/openapi-types`, which holds only types and never loads, for one command that runs only in CI. The owner judged that worth it in review on PR #147.
+    - **Rejected:** a hand-written client over `fetch`, which the first move out of the workflow used, with no new dependency; the owner asked in review on PR #147 whether a GitHub package could replace it, since it made the file long.
+    - **Rejected:** the `gh` CLI, which GitHub's runners have; okf would depend on it being installed, its tests would fake a binary, and its answers would be untyped all the same.
+  - The command is three files: the pure plan[^review-plan], the client, and the command that reads its inputs and runs them.
   - A run whose pull request's head has moved on since its push annotates its drafts instead, since its blob would be read from a commit its check never saw; the newer push's run posts them.
   - A marker whose path isn't valid percent-encoding is skipped, as no run of its own wrote it, and an answer without the pull request's threads falls back to annotations, rather than reading as none and posting every draft again.
   - **Rejected:** inline `actions/github-script` steps, which the first version used. The owner asked in review on PR #147 for them to be extracted: code in a workflow's YAML isn't linted, typechecked, or tested, so it sits outside the 100% coverage gate every other line of the repo meets, and a reviewer reads it without tests beside it.
@@ -78,7 +89,7 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 
 - A caller needs a version of okf-tools with `okf check --review-file` and `okf review-comments` before it turns `review-comments` on.
 - This repo's own pull requests run the workflow first, as `ci.yml`'s `okf` job calls it from the same commit.
-- A spec pin moves the spec link in `src/review-comments.ts` with every other spec link.
+- A spec pin moves the spec link in `src/review-plan.ts` with every other spec link.
 
 ## Links
 
@@ -90,6 +101,10 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 [^check]: `src/check.ts`, the `okf check` command.
 
 [^review-comments]: `src/review-comments.ts`, the `okf review-comments` command.
+
+[^review-plan]: `src/review-plan.ts`, what a run posts, edits, or resolves.
+
+[^github-client]: `src/github-client.ts`, the GitHub calls.
 
 [^ci-yml]: `.github/workflows/ci.yml`, which calls it on this repo's records.
 
