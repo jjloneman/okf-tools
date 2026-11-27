@@ -13,15 +13,15 @@ tags:
   - validation
   - yaml
 sources:
-  - id: okfit
-    resource: https://www.npmjs.com/package/@okfit/cli/v/0.16.7
-    title: "@okfit/cli 0.16.7 on npm"
-  - id: okf-lint
-    resource: https://www.npmjs.com/package/@thisismydesign/okf-lint/v/0.2.0
-    title: "@thisismydesign/okf-lint 0.2.0 on npm"
   - id: okf-kit
     resource: https://www.npmjs.com/package/okf-kit/v/0.22.0
     title: okf-kit 0.22.0 on npm
+  - id: okf-lint
+    resource: https://www.npmjs.com/package/@thisismydesign/okf-lint/v/0.2.0
+    title: "@thisismydesign/okf-lint 0.2.0 on npm"
+  - id: okfit
+    resource: https://www.npmjs.com/package/@okfit/cli/v/0.16.7
+    title: "@okfit/cli 0.16.7 on npm"
   - id: spec-rules
     resource: ../../src/spec-rules.ts
     title: src/spec-rules.ts, the rules the spec states

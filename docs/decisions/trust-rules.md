@@ -14,21 +14,6 @@ tags:
   - timestamps
   - verification
 sources:
-  - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
-    title: Open Knowledge Format specification, v0.3
-  - id: validate-py
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
-    title: Upstream's validate.py, at the pinned commit
-  - id: trust-rules
-    resource: ../../src/trust-rules.ts
-    title: src/trust-rules.ts, the trust rules
-  - id: source-rules
-    resource: ../../src/source-rules.ts
-    title: src/source-rules.ts, the rules on a record's sources
-  - id: spec-rules
-    resource: ../../src/spec-rules.ts
-    title: src/spec-rules.ts, the rules the spec states
   - id: check
     resource: ../../src/check.ts
     title: src/check.ts, the okf check command
@@ -38,6 +23,21 @@ sources:
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
+  - id: okf-spec
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
+    title: Open Knowledge Format specification, v0.3
+  - id: source-rules
+    resource: ../../src/source-rules.ts
+    title: src/source-rules.ts, the rules on a record's sources
+  - id: spec-rules
+    resource: ../../src/spec-rules.ts
+    title: src/spec-rules.ts, the rules the spec states
+  - id: trust-rules
+    resource: ../../src/trust-rules.ts
+    title: src/trust-rules.ts, the trust rules
+  - id: validate-py
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
+    title: Upstream's validate.py, at the pinned commit
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:32:51Z }
 verified: { by: human:jjloneman, at: 2026-11-27T06:03:41Z }

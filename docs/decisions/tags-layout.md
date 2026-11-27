@@ -12,24 +12,24 @@ tags:
   - tags
   - yaml
 sources:
-  - id: prettier-print-width
-    resource: https://prettier.io/docs/options#print-width
-    title: Prettier options, print width
-  - id: tags
-    resource: ../../src/tags.ts
-    title: src/tags.ts, the okf tags command
-  - id: house-rules
-    resource: ../../src/house-rules.ts
-    title: src/house-rules.ts, the opt-in house rules
   - id: frontmatter-format
     resource: ../../src/frontmatter/format.ts
     title: src/frontmatter/format.ts, the --fix formatting edits
+  - id: house-rules
+    resource: ../../src/house-rules.ts
+    title: src/house-rules.ts, the opt-in house rules
+  - id: prettier-print-width
+    resource: https://prettier.io/docs/options#print-width
+    title: Prettier options, print width
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
+  - id: tags
+    resource: ../../src/tags.ts
+    title: src/tags.ts, the okf tags command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:44:00Z }
+verified: { by: human:jjloneman, at: 2026-11-27T06:09:50Z }
 ---
 
 # How a record's tags are laid out

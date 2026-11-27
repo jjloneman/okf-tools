@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: Which house rules okf check runs, and how a repo turns them on
-description: "`okf check` runs okf-tools' own `H` rules on conventions the spec leaves open, tags, key order, index lines, uncited sources and wikilinks, each off until `okf.rules` names it at `warn` or `error`, as ESLint takes rules; a convention upstream's validate.py checks, such as a footnote with no source or a broken link, is a spec rule instead."
+description: "`okf check` runs okf-tools' own `H` rules on conventions the spec leaves open, tags, key order, index lines, uncited or unsorted sources and wikilinks, each off until `okf.rules` names it at `warn` or `error`, as ESLint takes rules; a convention upstream's validate.py checks, such as a footnote with no source or a broken link, is a spec rule instead."
 tags:
   - checks
   - config
@@ -14,27 +14,27 @@ tags:
   - upstream
   - validation
 sources:
-  - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
-    title: Open Knowledge Format specification, v0.3
-  - id: validate-py
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
-    title: Upstream's validate.py, at the pinned commit
-  - id: house-rules
-    resource: ../../src/house-rules.ts
-    title: src/house-rules.ts, the opt-in house rules
-  - id: spec-rules
-    resource: ../../src/spec-rules.ts
-    title: src/spec-rules.ts, the rules the spec states
-  - id: index-sync
-    resource: ../../src/index-sync.ts
-    title: src/index-sync.ts, the rewrite of one index.md
   - id: config
     resource: ../../src/config.ts
     title: src/config.ts, which reads the okf block of package.json
+  - id: house-rules
+    resource: ../../src/house-rules.ts
+    title: src/house-rules.ts, the opt-in house rules
+  - id: index-sync
+    resource: ../../src/index-sync.ts
+    title: src/index-sync.ts, the rewrite of one index.md
+  - id: okf-spec
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
+    title: Open Knowledge Format specification, v0.3
+  - id: spec-rules
+    resource: ../../src/spec-rules.ts
+    title: src/spec-rules.ts, the rules the spec states
+  - id: validate-py
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
+    title: Upstream's validate.py, at the pinned commit
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:31:16Z }
-verified: { by: human:jjloneman, at: 2026-11-27T02:05:49Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:44:00Z }
+verified: { by: human:jjloneman, at: 2026-11-27T06:09:50Z }
 ---
 
 # Which house rules okf check runs, and how a repo turns them on
@@ -51,12 +51,14 @@ As of 2026-11-26, from `src/house-rules.ts`[^house-rules], `src/spec-rules.ts`[^
   - **Rejected:** an object per rule, `{ "level": "warn", "max": 10 }`. ESLint's pair is the shape users already know, and a level alone stays a string.
 - **A name, level or option `okf check` doesn't know refuses the config**, so a typo can't silently leave a rule off.
 - **Codes start with `H`**, a range `validate.py` doesn't use, like the trust rules' `T`.
-- **The rules, as of 2026-11-26:**
+- **The rules, as of 2026-11-27:**
   - tags: `tags-required`, `tags-sorted`, `tags-kebab-case`, `tags-vocabulary` with its `tags`, `tags-layout` with `block`, `flow` or `any` (the default; see [How a record's tags are laid out](tags-layout.md)), and `tags-count` with `min` and `max`, by default 5 and 10, from #66;
   - keys: `key-order` with its `order`, from #47 (see [What okf check --fix fixes, and how it writes](fixes.md));
   - index: `index-entry-missing`, `index-entry-stale` and `index-entry-order`;
-  - sources: `source-uncited`, a `sources` entry no footnote cites;
+  - sources: `source-uncited`, a `sources` entry no footnote cites, and `sources-sorted`, the first entry whose `id` sorts before the one above it, from #150;
   - links: `wikilink`, a `[[wikilink]]`, which §6.1 says isn't a link[^okf-spec].
+- **`sources-sorted` is off by default, like the rest**, though this repo turns it on: some repos list a record's main source first, and that order carries meaning.
+  - It compares `id`s by code unit, as `tags-sorted` compares tags, and passes over an entry with no `id`.
 - **The vocabulary is `tags-vocabulary`'s own option**, a list in `package.json`.
   - **Rejected:** reading it from the tag index in `index.md`. `okf index` adds every tag a record carries there, so it would never refuse one.
 - **The index rules judge an index against what `okf index` would write**, so running it clears them all.
@@ -93,6 +95,7 @@ As of 2026-11-26, from `src/house-rules.ts`[^house-rules], `src/spec-rules.ts`[^
 - [#47](https://github.com/jjloneman/okf-tools/issues/47) — `key-order`, and the fixes.
 - [#65](https://github.com/jjloneman/okf-tools/issues/65) — `tags-layout`.
 - [#66](https://github.com/jjloneman/okf-tools/issues/66) — `tags-count`, and the tag audit that reads it.
+- [#150](https://github.com/jjloneman/okf-tools/issues/150) — `sources-sorted`.
 
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 

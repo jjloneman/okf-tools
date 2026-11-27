@@ -20,12 +20,12 @@ sources:
   - id: frontmatter-edit
     resource: ../../src/frontmatter/edit.ts
     title: src/frontmatter/edit.ts, verifyRecord's position-based edits
-  - id: frontmatter-meaning
-    resource: ../../src/frontmatter/meaning.ts
-    title: src/frontmatter/meaning.ts, the checks that an edit keeps its meaning
   - id: frontmatter-layout
     resource: ../../src/frontmatter/layout.ts
     title: src/frontmatter/layout.ts, the allowlist of editable layouts
+  - id: frontmatter-meaning
+    resource: ../../src/frontmatter/meaning.ts
+    title: src/frontmatter/meaning.ts, the checks that an edit keeps its meaning
   - id: frontmatter-read
     resource: ../../src/frontmatter/read.ts
     title: src/frontmatter/read.ts, the field reads

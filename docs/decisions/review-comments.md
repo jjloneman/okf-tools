@@ -12,24 +12,24 @@ tags:
   - rulesets
   - verification
 sources:
-  - id: okf-check-yml
-    resource: ../../.github/workflows/okf-check.yml
-    title: .github/workflows/okf-check.yml, the reusable workflow
-  - id: ci-yml
-    resource: ../../.github/workflows/ci.yml
-    title: .github/workflows/ci.yml, which calls it on this repo's records
   - id: check
     resource: ../../src/check.ts
     title: src/check.ts, the okf check command
+  - id: ci-yml
+    resource: ../../.github/workflows/ci.yml
+    title: .github/workflows/ci.yml, which calls it on this repo's records
+  - id: github-client
+    resource: ../../src/github-client.ts
+    title: src/github-client.ts, the GitHub calls
+  - id: okf-check-yml
+    resource: ../../.github/workflows/okf-check.yml
+    title: .github/workflows/okf-check.yml, the reusable workflow
   - id: review-comments
     resource: ../../src/review-comments.ts
     title: src/review-comments.ts, the okf review-comments command
   - id: review-plan
     resource: ../../src/review-plan.ts
     title: src/review-plan.ts, what a run posts, edits, or resolves
-  - id: github-client
-    resource: ../../src/github-client.ts
-    title: src/github-client.ts, the GitHub calls
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main

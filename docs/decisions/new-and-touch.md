@@ -17,12 +17,12 @@ sources:
   - id: frontmatter-scaffold
     resource: ../../src/frontmatter/scaffold.ts
     title: src/frontmatter/scaffold.ts, a new draft record's frontmatter
-  - id: new-record
-    resource: ../../src/new-record.ts
-    title: src/new-record.ts, the okf new command
   - id: frontmatter-touch
     resource: ../../src/frontmatter/touch.ts
     title: src/frontmatter/touch.ts, the re-stamp edit
+  - id: new-record
+    resource: ../../src/new-record.ts
+    title: src/new-record.ts, the okf new command
   - id: touch
     resource: ../../src/touch.ts
     title: src/touch.ts, the okf touch command

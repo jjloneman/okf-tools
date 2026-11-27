@@ -6,9 +6,9 @@
  *   `okf.rules` turns on decide what it touches, and under `--changed` so
  *   does the scope `check.ts` reports on.
  *
- * - A record's fixes, sorted tags, a block `tags` list and the key order,
- *   go through `formatRecord`, which moves text by position and never edits
- *   `generated` or `verified`.
+ * - A record's fixes, sorted tags, a block `tags` list, sorted sources and
+ *   the key order, go through `formatRecord`, which moves text by position
+ *   and never edits `generated` or `verified`.
  *
  * - An index's fix writes the index the finding judged whole, as `okf index`
  *   would, so its other stale lines and its tag index are synced too.
@@ -57,6 +57,7 @@ const INDEX_RULES: Readonly<Record<IndexDrift["kind"], keyof HouseRules>> = {
 /** The house rules whose findings `formatRecord` clears. */
 const RECORD_RULES: ReadonlySet<string> = new Set<keyof HouseRules>([
   "key-order",
+  "sources-sorted",
   "tags-layout",
   "tags-sorted",
 ]);
@@ -213,7 +214,8 @@ function findWriteProblem(params: {
 
 /**
  * Plan each record's fixes from its findings: sort its tags, write them as a
- * block list, and order its keys, each as its rule's options say.
+ * block list, sort its sources, and order its keys, each as its rule's
+ * options say.
  *
  * - `tags-layout` has a fix only for `block`; a flow list stays a finding.
  */
@@ -241,16 +243,23 @@ function planRecordFixes(params: {
   for (const { filePath, text } of bundles.flatMap((bundle) => bundle.files)) {
     const rules = rulesByPath.get(filePath) ?? new Set<string>();
     const shouldBlockTags = isBlockLayout && rules.has("tags-layout");
+    const shouldSortSources = rules.has("sources-sorted");
     const shouldSortTags = rules.has("tags-sorted");
     const shouldOrderKeys = rules.has("key-order");
 
-    if (!shouldBlockTags && !shouldSortTags && !shouldOrderKeys) {
+    if (
+      !shouldBlockTags &&
+      !shouldSortSources &&
+      !shouldSortTags &&
+      !shouldOrderKeys
+    ) {
       continue;
     }
 
     const formatted = formatRecord({
       keyOrder: shouldOrderKeys ? keyOrder : undefined,
       shouldBlockTags,
+      shouldSortSources,
       shouldSortTags,
       text,
     });

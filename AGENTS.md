@@ -62,7 +62,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
     - `scaffold.ts` — `scaffoldRecord`: a new draft record's frontmatter, with no body.
     - `fields.ts` — `writeFields`: overwrites or adds top-level fields that each hold one value, such as `stale_after`, under `verifyRecord`'s refusals, and checks the result means only that.
     - `deprecate.ts` — `deprecateRecord`: `touchRecord`, then `status: deprecated` and `superseded_by` with `writeFields`.
-    - `format.ts` — `formatRecord`, for `okf check --fix`: sorts `tags`, rewrites a flow `tags` list as a block list, and orders the top-level keys, moving text by position under `writeFields`' refusals, never touching `generated` or `verified`, and checks the result means the original apart from order.
+    - `format.ts` — `formatRecord`, for `okf check --fix`: sorts `tags`, rewrites a flow `tags` list as a block list, sorts `sources` by `id`, and orders the top-level keys, moving text by position under `writeFields`' refusals, never touching `generated` or `verified`, and checks the result means the original apart from order.
   - `output.ts` — the output lines, prefixed `[okf]`, or `[okf-verify]` under the alias, and the unprefixed `data` for JSON and the guide, carried on the `RunContext`, plus `toTerminalLine`, which makes a record's own text safe as one line; `exit-codes.ts`, `outcome.ts`, and `run-context.ts` are shared types.
 - `scripts/changelog.ts` — the changesets changelog formatter, tested and covered like `src/` but never published.
 - `scripts/spec-watch/` — the spec watch that `spec-watch.yml` runs (see [Spec watch](#-spec-watch)), covered like `src/` and never published; `bin.ts` is its entry.
@@ -231,7 +231,7 @@ Why the package works the way it does is recorded in [docs/decisions/](docs/deci
   - no `verified` means it is an unreviewed draft;
   - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again;
   - set a signed-off record you edit back to `status: draft`, even for a link-only edit, keeping its `verified` entry; `okf-verify` sets it to `stable` again on sign-off.
-  - a change to `tags` alone is the exception: keep `generated` and `status` as they are, so a signed-off record stays signed off (see [How okf new and okf touch stamp generated](docs/decisions/new-and-touch.md)).
+  - a change to `tags` alone is the exception: keep `generated` and `status` as they are, so a signed-off record stays signed off (see [How okf new and okf touch stamp generated](docs/decisions/new-and-touch.md)); so is a change to the order of `sources` alone, which `okf format` makes under `sources-sorted` (see [What okf check --fix fixes, and how it writes](docs/decisions/fixes.md)).
 
 ## 🔖 References
 

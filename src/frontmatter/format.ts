@@ -1,7 +1,8 @@
 /*
  * Formats a record's frontmatter in place, for `okf check --fix`: sorts its
- * `tags`, rewrites a flow `tags` list as a block list, and orders its
- * top-level keys, as the house rules a repo turned on ask.
+ * `tags`, rewrites a flow `tags` list as a block list, sorts its `sources` by
+ * `id`, and orders its top-level keys, as the house rules a repo turned on
+ * ask.
  *
  * - Each fix moves text by the positions the parser reports, so a value
  *   keeps its quotes and its style; nothing is serialized again.
@@ -11,14 +12,14 @@
  *   kept.
  *
  * - The result is checked to mean what the original did, apart from the
- *   order of the tags and the keys, before it's returned.
+ *   order of the tags, the sources and the keys, before it's returned.
  *
  * - Nothing here touches the file system or the clock.
  */
-import type { Scalar, YAMLMap, YAMLSeq } from "yaml";
+import type { Node, Scalar, YAMLMap, YAMLSeq } from "yaml";
 
 import { isDeepStrictEqual } from "node:util";
-import { isAlias, isMap, isScalar, isSeq } from "yaml";
+import { isAlias, isMap, isNode, isScalar, isSeq, visit } from "yaml";
 
 import type { Outcome } from "../outcome.ts";
 import type { RecordVerification, TextEdit } from "./edit.ts";
@@ -33,12 +34,14 @@ import {
   findPair,
   FRONTMATTER_KEYS,
   isPlaced,
+  LF,
   parseFrontmatter,
   readIndent,
   readLineBreak,
   readLineStart,
   readNodeEnd,
   readString,
+  readTimestamp,
   splitFrontmatter,
 } from "./shared.ts";
 import { REFUSAL_KINDS } from "./types.ts";
@@ -62,6 +65,13 @@ export type FormatRecordParams = {
   shouldBlockTags: boolean;
 
   /**
+   * Whether to sort `sources` by `id`, as `sources-sorted` reads them.
+   *
+   * @example true
+   */
+  shouldSortSources: boolean;
+
+  /**
    * Whether to sort `tags` alphabetically, as `tags-sorted` reads them.
    *
    * @example true
@@ -74,6 +84,30 @@ export type FormatRecordParams = {
    * @example `"---\ntags: [b, a]\n---\n"`
    */
   text: string;
+};
+
+/** A `sources` entry as written: its place, its text, and its `id`. */
+type WrittenSource = {
+  /**
+   * The entry's `id`, as `sources-sorted` compares it.
+   *
+   * @example "spec"
+   */
+  id: string;
+
+  /**
+   * Where the entry's text starts and ends in the frontmatter.
+   *
+   * @example `{ end: 64, start: 12 }`
+   */
+  place: { end: number; start: number };
+
+  /**
+   * The entry exactly as written, from its first key to its last value.
+   *
+   * @example "id: spec"
+   */
+  raw: string;
 };
 
 /** A tag as written: its node, and its text in the frontmatter. */
@@ -103,6 +137,9 @@ type WrittenTag = {
 /** What a refusal of an unsupported layout tells the person to do instead. */
 const HAND_EDIT_HINT = "fix the record by hand";
 
+/** The key of a record's sources, and of the `id` that names each one. */
+const SOURCE_KEYS = { id: "id", sources: "sources" } as const;
+
 /** The quoting styles a tag may be written in to be moved as it is. */
 const MOVABLE_TYPES: ReadonlySet<Scalar["type"]> = new Set([
   "PLAIN",
@@ -111,8 +148,8 @@ const MOVABLE_TYPES: ReadonlySet<Scalar["type"]> = new Set([
 ]);
 
 /**
- * Check that the formatted frontmatter means the original, its tags sorted
- * when asked, with its keys in the order asked.
+ * Check that the formatted frontmatter means the original, its tags and its
+ * sources sorted when asked, with its keys in the order asked.
  *
  * - The fixes are built to pass it; it's the net under them, so a layout
  *   they get wrong is refused rather than written with another meaning.
@@ -123,9 +160,10 @@ export function checkFormatted(params: {
   doc: Frontmatter;
   edited: string;
   keyOrder: readonly string[] | undefined;
+  shouldSortSources: boolean;
   shouldSortTags: boolean;
 }): string | undefined {
-  const { doc, edited, keyOrder, shouldSortTags } = params;
+  const { doc, edited, keyOrder, shouldSortSources, shouldSortTags } = params;
   const editedDoc = parseFrontmatter(edited);
 
   if (editedDoc.errors.length > 0 || findAmbiguity(editedDoc) !== undefined) {
@@ -133,7 +171,13 @@ export function checkFormatted(params: {
   }
 
   try {
-    return compareFormatted({ doc, editedDoc, keyOrder, shouldSortTags });
+    return compareFormatted({
+      doc,
+      editedDoc,
+      keyOrder,
+      shouldSortSources,
+      shouldSortTags,
+    });
   } catch {
     // The parser refuses to expand an alias used too many times.
     return "the frontmatter uses an alias too many times to compare";
@@ -142,7 +186,7 @@ export function checkFormatted(params: {
 
 /**
  * Format a record's frontmatter as asked: sort `tags`, rewrite a flow `tags`
- * list as a block list, and order the top-level keys.
+ * list as a block list, sort `sources` by `id`, and order the top-level keys.
  *
  * - A fix with nothing to do leaves the text as it is.
  *
@@ -155,6 +199,12 @@ export function checkFormatted(params: {
  *   its key is quoted; the keys are refused when a comment line sits between
  *   two of them.
  *
+ * - A `sources` list is refused when it's an alias or a flow list, carries
+ *   an anchor or a tag, has a comment before, between or after its entries,
+ *   or holds entries that don't all start at the same column, or an entry
+ *   that isn't a mapping with an `id`, carries an anchor, a tag or an alias,
+ *   or ends in a line break.
+ *
  * - Everything outside the moved text, line endings included, is kept byte
  *   for byte.
  */
@@ -162,6 +212,7 @@ export function formatRecord(params: FormatRecordParams): RecordVerification {
   const {
     keyOrder,
     shouldBlockTags,
+    shouldSortSources,
     shouldSortTags,
     text: recordText,
   } = params;
@@ -216,6 +267,16 @@ export function formatRecord(params: FormatRecordParams): RecordVerification {
     text = tagged.value;
   }
 
+  if (shouldSortSources) {
+    const sorted = sortSources(text);
+
+    if (!sorted.isOk) {
+      return refuseLayout(sorted.reason);
+    }
+
+    text = sorted.value;
+  }
+
   if (keyOrder !== undefined) {
     const ordered = orderKeys({ keyOrder, text });
 
@@ -230,6 +291,7 @@ export function formatRecord(params: FormatRecordParams): RecordVerification {
     doc,
     edited: text,
     keyOrder,
+    shouldSortSources,
     shouldSortTags,
   });
 
@@ -269,9 +331,11 @@ function compareFormatted(params: {
   doc: Frontmatter;
   editedDoc: Frontmatter;
   keyOrder: readonly string[] | undefined;
+  shouldSortSources: boolean;
   shouldSortTags: boolean;
 }): string | undefined {
-  const { doc, editedDoc, keyOrder, shouldSortTags } = params;
+  const { doc, editedDoc, keyOrder, shouldSortSources, shouldSortTags } =
+    params;
 
   // The frontmatter was checked to be a mapping, so it reads as an object.
   const original = doc.toJS() as Record<string, unknown>;
@@ -282,6 +346,16 @@ function compareFormatted(params: {
   // tags were all moved holds only strings.
   if (shouldSortTags && Array.isArray(tags)) {
     expected[FRONTMATTER_KEYS.tags] = [...(tags as string[])].sort(compareTags);
+  }
+
+  const sources = expected[SOURCE_KEYS.sources];
+
+  // The sort refuses an entry that isn't a mapping with a single-value `id`,
+  // so a list it sorted holds only those; `sort` is stable, as it is.
+  if (shouldSortSources && Array.isArray(sources)) {
+    expected[SOURCE_KEYS.sources] = [...(sources as { id: string }[])].sort(
+      (left, right) => compareTags(left.id, right.id)
+    );
   }
 
   const formatted = editedDoc.toJS() as Record<string, unknown>;
@@ -302,7 +376,7 @@ function compareFormatted(params: {
     : "the keys couldn't be put in order";
 }
 
-/** Compare two tags as `tags-sorted` does: by code unit. */
+/** Compare two tags as `tags-sorted` does, or two `id`s: by code unit. */
 function compareTags(left: string, right: string): number {
   if (left === right) {
     return 0;
@@ -404,6 +478,37 @@ function formatTags(params: {
   };
 }
 
+/** Whether a node, or any node inside it, is an alias or has an anchor. */
+function hasAnchorOrAlias(node: Node): boolean {
+  let isFound = false;
+
+  visit(node, (_key, inner) => {
+    if (isAlias(inner) || (isNode(inner) && inner.anchor !== undefined)) {
+      isFound = true;
+
+      return visit.BREAK;
+    }
+
+    return undefined;
+  });
+
+  return isFound;
+}
+
+/**
+ * Whether a comment follows a list's last entry, on its line or on an
+ * indented line below it, where it would stay as another entry moved in.
+ *
+ * - A comment at the left edge heads the next top-level key, so it stays.
+ */
+function hasTrailingComment(params: { index: number; text: string }): boolean {
+  const { index, text } = params;
+  const [rest = "", ...below] = text.slice(index).split(LF);
+  const next = below.find((line) => line.trim() !== "");
+
+  return rest.includes("#") || (next !== undefined && /^[\t ]+#/u.test(next));
+}
+
 /**
  * Put the top-level keys in the order asked, moving each key's lines, from
  * the key to the next key, as they are.
@@ -484,6 +589,93 @@ function readKeyNames(doc: Frontmatter): string[] {
 }
 
 /**
+ * Read each entry of a `sources` list as written, refusing a list whose
+ * entries can't be moved as they are.
+ */
+function readWrittenSources(params: {
+  keyEnd: number;
+  seq: Placed<YAMLSeq>;
+  text: string;
+}): Outcome<WrittenSource[]> {
+  const { keyEnd, seq, text } = params;
+  const sources: WrittenSource[] = [];
+
+  if (seq.anchor !== undefined || seq.tag !== undefined) {
+    return { isOk: false, reason: "`sources` has an anchor or a tag" };
+  }
+
+  for (const node of seq.items) {
+    const id = isMap(node)
+      ? readTimestamp(node.get(SOURCE_KEYS.id, true))
+      : undefined;
+
+    if (id === undefined || !isMap(node) || !isPlaced(node)) {
+      return {
+        isOk: false,
+        reason: "a `sources` entry isn't a mapping, or has no `id`",
+      };
+    }
+
+    // An alias moved above its anchor would name nothing, and an anchor moved
+    // below one would change what it names.
+    if (hasAnchorOrAlias(node)) {
+      return {
+        isOk: false,
+        reason: "a `sources` entry holds an anchor or an alias",
+      };
+    }
+
+    if (node.tag !== undefined) {
+      return { isOk: false, reason: "a `sources` entry has a tag" };
+    }
+
+    const place = { end: readNodeEnd(node), start: node.range[0] };
+    const raw = text.slice(place.start, place.end);
+
+    // A block scalar's text ends with its line break, which the entry after
+    // it would lose.
+    if (/[\n\r]$/u.test(raw)) {
+      return { isOk: false, reason: "a `sources` entry ends in a line break" };
+    }
+
+    sources.push({ id, place, raw });
+  }
+
+  // An entry's later lines are indented from its first, so one moved to a
+  // slot at another column would change what they belong to.
+  const columns = new Set(
+    sources.map(
+      ({ place }) => place.start - readLineStart({ index: place.start, text })
+    )
+  );
+
+  if (columns.size > 1) {
+    return {
+      isOk: false,
+      reason: "the `sources` entries don't all start at the same column",
+    };
+  }
+
+  // Outside its entries, a list holds only dashes, line breaks and space,
+  // from the line after `sources:` to the end of its last entry.
+  const bounds = [
+    findLineEnd({ index: keyEnd, text }),
+    ...sources.flatMap(({ place }) => [place.start, place.end]),
+    readNodeEnd(seq),
+  ];
+  const gaps = bounds
+    .flatMap((start, index) =>
+      index % 2 === 0 ? [text.slice(start, bounds[index + 1])] : []
+    )
+    .join("");
+
+  return gaps.includes("#") ||
+    hasTrailingComment({ index: readNodeEnd(seq), text })
+    ? { isOk: false, reason: "a comment sits among the `sources` entries" }
+    : { isOk: true, value: sources };
+}
+
+/**
  * Read each tag of a list as written, refusing a list whose tags can't be
  * moved as they are.
  */
@@ -551,4 +743,59 @@ function refuseLayout(problem: string): RecordVerification {
     kind: REFUSAL_KINDS.unsupportedLayout,
     reason: `${problem}; ${HAND_EDIT_HINT}`,
   };
+}
+
+/**
+ * Sort a record's `sources` by `id`, moving each entry's text, comments
+ * inside it included, as written.
+ *
+ * - The entries must all start at the same column, so an entry's later
+ *   lines keep their indent wherever it lands.
+ */
+function sortSources(text: string): Outcome<string> {
+  const map = parseFrontmatter(text).contents as YAMLMap;
+  const pair = map.items.find(
+    ({ key }) => readString(key) === SOURCE_KEYS.sources
+  );
+  const seq = pair?.value;
+
+  // The rules read through an alias, but its list is written elsewhere.
+  if (isAlias(seq)) {
+    return { isOk: false, reason: "`sources` is an alias" };
+  }
+
+  // A single value or an empty list has no order to fix.
+  if (!isSeq(seq) || seq.items.length === 0) {
+    return { isOk: true, value: text };
+  }
+
+  if (seq.flow === true) {
+    return { isOk: false, reason: "`sources` is a flow list" };
+  }
+
+  const sources = readWrittenSources({
+    keyEnd: readNodeEnd(pair?.key),
+    seq: seq as Placed<YAMLSeq>,
+    text,
+  });
+
+  if (!sources.isOk) {
+    return sources;
+  }
+
+  const sorted = [...sources.value].sort((left, right) =>
+    compareTags(left.id, right.id)
+  );
+
+  // Each entry's place takes the entry that sorts there; `slice` pairs them
+  // up with no index that could miss.
+  const edits = sources.value.flatMap(({ place }, index) =>
+    sorted.slice(index, index + 1).map(({ raw }): TextEdit => ({
+      end: place.end,
+      start: place.start,
+      text: raw,
+    }))
+  );
+
+  return { isOk: true, value: applyEdits({ edits, text }) };
 }

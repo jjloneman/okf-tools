@@ -12,12 +12,12 @@ tags:
   - safety
   - tags
 sources:
-  - id: index-sync
-    resource: ../../src/index-sync.ts
-    title: src/index-sync.ts, the rewrite of one index.md
   - id: index-command
     resource: ../../src/index-command.ts
     title: src/index-command.ts, the okf index command
+  - id: index-sync
+    resource: ../../src/index-sync.ts
+    title: src/index-sync.ts, the rewrite of one index.md
   - id: tags
     resource: ../../src/tags.ts
     title: src/tags.ts, the okf tags command

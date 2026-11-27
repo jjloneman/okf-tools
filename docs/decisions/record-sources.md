@@ -10,12 +10,12 @@ tags:
   - sources
   - staleness
 sources:
-  - id: source-rules
-    resource: ../../src/source-rules.ts
-    title: src/source-rules.ts, the rules on a record's sources
   - id: ci-workflow
     resource: ../../.github/workflows/ci.yml
     title: .github/workflows/ci.yml, the CI workflow
+  - id: source-rules
+    resource: ../../src/source-rules.ts
+    title: src/source-rules.ts, the rules on a record's sources
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:15:34Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }

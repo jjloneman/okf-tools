@@ -672,7 +672,8 @@ run only as \`okf.rules\` in package.json turns each on: warn or error.
 
 --fix, or \`okf format\`, first fixes the house-rule findings that have
 one obvious fix: unsorted tags, a flow tags list under tags-layout block,
-keys out of key-order's order, and index lines okf index would rewrite.
+sources out of order by id, keys out of key-order's order, and index
+lines okf index would rewrite.
 It moves text as written and never edits generated or verified, so a
 sign-off still holds. An index fix writes the whole index as okf index
 would. Under --changed it fixes only the files the branch changed, and

@@ -25,6 +25,7 @@ const NINE_TAGS = [
 const FIXES = {
   keyOrder: ["type", "title", "description", "tags", "status"],
   shouldBlockTags: true,
+  shouldSortSources: true,
   shouldSortTags: true,
 } as const;
 

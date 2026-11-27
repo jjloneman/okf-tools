@@ -126,6 +126,43 @@ describe("applyFixes", () => {
     });
   });
 
+  test("sorts a record's sources by id", () => {
+    // Given - a record whose sources are out of order
+    const text = record([
+      "type: Decision",
+      "sources:",
+      "  - id: b",
+      "  - id: a",
+    ]);
+
+    repo.write("kb/a.md", text);
+
+    // When - fixing its sources-sorted finding
+    const fixed = applyFixes({
+      bundles: [readBundle(["kb/a.md"])],
+      context: buildContext(),
+      findings: [finding({ path: "kb/a.md", rule: "sources-sorted" })],
+      houseRules: { "sources-sorted": "warn" },
+    });
+
+    // Then - the sources sorted, on disk too
+    const sorted = record([
+      "type: Decision",
+      "sources:",
+      "  - id: a",
+      "  - id: b",
+    ]);
+
+    expect(fixed).toStrictEqual({
+      isOk: true,
+      value: {
+        refusals: [],
+        written: [{ filePath: "kb/a.md", originalText: text, text: sorted }],
+      },
+    });
+    expect(repo.read("kb/a.md")).toBe(sorted);
+  });
+
   test.each([
     {
       description: "a record reached through a symlink",

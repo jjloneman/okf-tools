@@ -11,12 +11,12 @@ tags:
   - okf-verify
   - output
 sources:
-  - id: okf-bin
-    resource: ../../src/okf-bin.ts
-    title: src/okf-bin.ts, the okf entry
   - id: bin
     resource: ../../src/bin.ts
     title: src/bin.ts, the okf-verify entry
+  - id: okf-bin
+    resource: ../../src/okf-bin.ts
+    title: src/okf-bin.ts, the okf entry
   - id: output
     resource: ../../src/output.ts
     title: src/output.ts, the prefixed output lines

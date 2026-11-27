@@ -12,12 +12,12 @@ tags:
   - okf-verify
   - selection
 sources:
-  - id: guide
-    resource: ../../src/guide.ts
-    title: src/guide.ts, the okf guide text and record rules
   - id: agent-block
     resource: ../../src/agent-block.ts
     title: src/agent-block.ts, the agent block's text and markers
+  - id: guide
+    resource: ../../src/guide.ts
+    title: src/guide.ts, the okf guide text and record rules
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:55:27Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }

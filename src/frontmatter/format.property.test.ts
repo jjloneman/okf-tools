@@ -192,6 +192,7 @@ describe("formatRecord", () => {
         const result = formatRecord({
           keyOrder: order,
           shouldBlockTags: model.shouldBlockTags,
+          shouldSortSources: false,
           shouldSortTags: model.shouldSortTags,
           text,
         });
@@ -238,6 +239,7 @@ describe("formatRecord", () => {
           formatRecord({
             keyOrder: order,
             shouldBlockTags: model.shouldBlockTags,
+            shouldSortSources: false,
             shouldSortTags: model.shouldSortTags,
             text: result.text,
           })

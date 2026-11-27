@@ -14,18 +14,18 @@ tags:
   - timestamps
   - verification
 sources:
+  - id: migrate
+    resource: ../../src/migrate.ts
+    title: src/migrate.ts, the okf migrate command
+  - id: migrate-plan
+    resource: ../../src/migrate-plan.ts
+    title: src/migrate-plan.ts, the plan for one bundle's migration
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
   - id: okf-spec-v02
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/0b87c52c6ef999286c745e19998fdfcd03d5dbee/SPEC.md
     title: Open Knowledge Format specification, v0.2
-  - id: migrate-plan
-    resource: ../../src/migrate-plan.ts
-    title: src/migrate-plan.ts, the plan for one bundle's migration
-  - id: migrate
-    resource: ../../src/migrate.ts
-    title: src/migrate.ts, the okf migrate command
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

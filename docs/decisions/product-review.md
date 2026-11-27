@@ -12,12 +12,12 @@ tags:
   - skills
   - staleness
 sources:
-  - id: product-review-skill
-    resource: ../../.claude/skills/product-review/SKILL.md
-    title: .claude/skills/product-review/SKILL.md, the product review skill
   - id: product-review-reminder
     resource: ../../.github/workflows/product-review-reminder.yml
     title: .github/workflows/product-review-reminder.yml, the review reminder
+  - id: product-review-skill
+    resource: ../../.claude/skills/product-review/SKILL.md
+    title: .claude/skills/product-review/SKILL.md, the product review skill
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

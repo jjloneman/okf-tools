@@ -12,18 +12,18 @@ tags:
   - verification
   - yaml
 sources:
-  - id: okf-spec
-    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
-    title: Open Knowledge Format specification
-  - id: yaml-spec
-    resource: https://yaml.org/spec/1.2.2/
-    title: YAML 1.2.2 specification
   - id: config
     resource: ../../src/config.ts
     title: src/config.ts, which reads the okf block of package.json
   - id: frontmatter-edit
     resource: ../../src/frontmatter/edit.ts
     title: src/frontmatter/edit.ts, verifyRecord's position-based edits
+  - id: okf-spec
+    resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
+    title: Open Knowledge Format specification
+  - id: yaml-spec
+    resource: https://yaml.org/spec/1.2.2/
+    title: YAML 1.2.2 specification
 status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }

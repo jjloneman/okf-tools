@@ -12,6 +12,7 @@ const HAND_EDIT_HINT = "fix the record by hand";
 /** Every fix off, for a test to turn on the ones it needs. */
 const NO_FIXES: Omit<FormatRecordParams, "text"> = {
   shouldBlockTags: false,
+  shouldSortSources: false,
   shouldSortTags: false,
 };
 
@@ -161,6 +162,76 @@ describe("formatRecord", () => {
         shouldSortTags: true,
       },
     },
+    {
+      after: [
+        "sources:",
+        "  - id: a",
+        "    # the main one",
+        "    resource: ../a.md",
+        "  - id: b",
+        "    title: B",
+        "type: Decision",
+      ],
+      before: [
+        "sources:",
+        "  - id: b",
+        "    title: B",
+        "  - id: a",
+        "    # the main one",
+        "    resource: ../a.md",
+        "type: Decision",
+      ],
+      description: "sources by id, each entry moved whole, comments included",
+      fixes: { shouldSortSources: true },
+    },
+    {
+      after: [
+        "sources:",
+        "  - { id: a }",
+        "  - id: b",
+        "    n: 1",
+        "  - id: b",
+      ],
+      before: [
+        "sources:",
+        "  - id: b",
+        "    n: 1",
+        "  - { id: a }",
+        "  - id: b",
+      ],
+      description: "sources with an id given twice, keeping both in order",
+      fixes: { shouldSortSources: true },
+    },
+    {
+      after: ["sources: # why", "  - id: a", "  - id: b", "# next", "title: A"],
+      before: [
+        "sources: # why",
+        "  - id: b",
+        "  - id: a",
+        "# next",
+        "title: A",
+      ],
+      description: "sources with comments on their key line and after them",
+      fixes: { shouldSortSources: true },
+    },
+    {
+      after: ["sources: []", "title: A"],
+      before: ["sources: []", "title: A"],
+      description: "an empty sources list, leaving it",
+      fixes: { shouldSortSources: true },
+    },
+    {
+      after: ["sources: ../a.md"],
+      before: ["sources: ../a.md"],
+      description: "a single-value sources, leaving it",
+      fixes: { shouldSortSources: true },
+    },
+    {
+      after: ["title: A"],
+      before: ["title: A"],
+      description: "no sources, leaving the record",
+      fixes: { shouldSortSources: true },
+    },
   ])("formats $description", ({ after, before, fixes }) => {
     // When - formatting the record
     const formatted = formatRecord({
@@ -181,6 +252,7 @@ describe("formatRecord", () => {
     const formatted = formatRecord({
       keyOrder: ORDER,
       shouldBlockTags: true,
+      shouldSortSources: true,
       shouldSortTags: true,
       text,
     });
@@ -364,6 +436,109 @@ describe("formatRecord", () => {
       frontmatter: ["title: A", "type: Decision", "..."],
       reason: "the formatted frontmatter wouldn't be valid YAML",
     },
+    {
+      description: "sources that are an alias",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["x-base: &s", "  - id: b", "  - id: a", "sources: *s"],
+      reason: "`sources` is an alias",
+    },
+    {
+      description: "sources as a flow list",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources: [{ id: b }, { id: a }]"],
+      reason: "`sources` is a flow list",
+    },
+    {
+      description: "sources with an anchor",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources: &s", "  - id: b", "  - id: a"],
+      reason: "`sources` has an anchor or a tag",
+    },
+    {
+      description: "a source with no id",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b", "  - resource: ../a.md"],
+      reason: "a `sources` entry isn't a mapping, or has no `id`",
+    },
+    {
+      description: "a source that isn't a mapping",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b", "  - ../a.md"],
+      reason: "a `sources` entry isn't a mapping, or has no `id`",
+    },
+    {
+      description: "a source with a tag",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b", "  - !!map", "    id: a"],
+      reason: "a `sources` entry has a tag",
+    },
+    {
+      description: "a source holding an anchor",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b", "    title: &t B", "  - id: a"],
+      reason: "a `sources` entry holds an anchor or an alias",
+    },
+    {
+      description: "a source ending in a block scalar",
+      fixes: { shouldSortSources: true },
+      frontmatter: [
+        "sources:",
+        "  - id: b",
+        "    title: |",
+        "      B",
+        "  - id: a",
+      ],
+      reason: "a `sources` entry ends in a line break",
+    },
+    {
+      description: "a comment between two sources",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b", "  # why", "  - id: a"],
+      reason: "a comment sits among the `sources` entries",
+    },
+    {
+      description: "a comment after a source's last value",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b # why", "  - id: a"],
+      reason: "a comment sits among the `sources` entries",
+    },
+    {
+      description: "a comment after the last source's value",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  - id: b", "  - id: a # why"],
+      reason: "a comment sits among the `sources` entries",
+    },
+    {
+      description: "an indented comment below the last source",
+      fixes: { shouldSortSources: true },
+      frontmatter: [
+        "sources:",
+        "  - id: b",
+        "  - id: a",
+        "",
+        "    # why",
+        "x: 1",
+      ],
+      reason: "a comment sits among the `sources` entries",
+    },
+    {
+      description: "a comment above the first source",
+      fixes: { shouldSortSources: true },
+      frontmatter: ["sources:", "  # why", "  - id: b", "  - id: a"],
+      reason: "a comment sits among the `sources` entries",
+    },
+    {
+      description: "sources that start at different columns",
+      fixes: { shouldSortSources: true },
+      frontmatter: [
+        "sources:",
+        "  - id: b",
+        "    n: 1",
+        "  -   id: a",
+        "      n: 2",
+      ],
+      reason: "the `sources` entries don't all start at the same column",
+    },
   ])("refuses $description", ({ fixes, frontmatter, reason }) => {
     // When - formatting it
     const formatted = formatRecord({
@@ -418,6 +593,7 @@ describe("checkFormatted", () => {
         doc,
         edited,
         keyOrder,
+        shouldSortSources: false,
         shouldSortTags: false,
       });
 

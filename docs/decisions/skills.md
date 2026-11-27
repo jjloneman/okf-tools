@@ -13,15 +13,15 @@ tags:
   - upstream
   - verification
 sources:
-  - id: skills
-    resource: ../../src/skills.ts
-    title: src/skills.ts, the skills okf init installs
-  - id: init
-    resource: ../../src/init.ts
-    title: src/init.ts, the okf init command
   - id: guide
     resource: ../../src/guide.ts
     title: src/guide.ts, the okf guide text and record rules
+  - id: init
+    resource: ../../src/init.ts
+    title: src/init.ts, the okf init command
+  - id: skills
+    resource: ../../src/skills.ts
+    title: src/skills.ts, the skills okf init installs
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags

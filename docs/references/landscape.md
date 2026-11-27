@@ -12,21 +12,21 @@ tags:
   - validation
   - verification
 sources:
-  - id: okf-md
-    resource: https://okf.md/tools/
-    title: okf.md's tools directory
-  - id: upstream
-    resource: https://github.com/open-knowledge-format/open-knowledge-format
-    title: open-knowledge-format/open-knowledge-format
-  - id: trial
-    resource: https://github.com/jjloneman/okf-tools/issues/40
-    title: "#40: the trial of okfit, okf-lint and okf-kit"
   - id: npm-downloads
     resource: https://github.com/npm/registry/blob/main/docs/download-counts.md
     title: npm's download counts API
+  - id: okf-md
+    resource: https://okf.md/tools/
+    title: okf.md's tools directory
   - id: pypistats
     resource: https://pypistats.org/api/
     title: pypistats' API
+  - id: trial
+    resource: https://github.com/jjloneman/okf-tools/issues/40
+    title: "#40: the trial of okfit, okf-lint and okf-kit"
+  - id: upstream
+    resource: https://github.com/open-knowledge-format/open-knowledge-format
+    title: open-knowledge-format/open-knowledge-format
 status: stable
 stale_after: 2027-01-26T20:51:28Z
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T01:09:40Z }
