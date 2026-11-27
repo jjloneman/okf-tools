@@ -427,9 +427,11 @@ function listCitingKeys(params: {
  *   name, and every record when git can't read the files, so the source
  *   rules skip them.
  *
- * - A record counts as re-stamped in the working tree when its `generated`
- *   or `verified` there differs from `HEAD`'s, read in the same batch; one
- *   no commit holds yet always does.
+ * - A record with uncommitted changes counts as re-stamped in the working
+ *   tree when its `generated` or `verified` there differs from `HEAD`'s,
+ *   read in the same batch, or can't be read, as the source rules judged
+ *   any uncommitted record before #151; one no commit holds yet always
+ *   does, and a clean one never does, so its `HEAD` isn't read.
  *
  * @returns the commits, by the record's path from the repo root, the records
  *   re-stamped in the working tree, and why git couldn't say, for each
@@ -500,12 +502,21 @@ function listStampCommits(params: {
       return [];
     }
 
-    return [{ file, filePath: file.filePath, own }];
+    return [
+      {
+        file,
+        filePath: file.filePath,
+        isDirty: file
+          .readChanges(file.filePath)
+          .some(({ commit }) => commit === undefined),
+        own,
+      },
+    ];
   });
 
   // `HEAD` holds a record only when some commit does.
-  const names = records.flatMap(({ filePath, own }) => [
-    ...(own.length === 0 ? [] : [`HEAD:${filePath}`]),
+  const names = records.flatMap(({ filePath, isDirty, own }) => [
+    ...(isDirty && own.length > 0 ? [`HEAD:${filePath}`] : []),
     ...own.flatMap(({ hash, parents }) =>
       [hash, ...parents].map((commit) => `${commit}:${filePath}`)
     ),
@@ -533,9 +544,16 @@ function listStampCommits(params: {
 
   const texts = read.value;
 
-  for (const { file, filePath, own } of records) {
-    if (readStamp(file.text) !== readStamp(texts.get(`HEAD:${filePath}`))) {
-      restamped.add(filePath);
+  for (const { file, filePath, isDirty, own } of records) {
+    if (isDirty) {
+      const stamp = readStamp(file.text);
+
+      if (
+        stamp === undefined ||
+        stamp !== readStamp(texts.get(`HEAD:${filePath}`))
+      ) {
+        restamped.add(filePath);
+      }
     }
 
     stamps.set(

@@ -1257,6 +1257,43 @@ describe("runCheck --fix", () => {
     }
   );
 
+  test("passes an uncommitted re-stamp of a record whose stamp can't be read", () => {
+    // Given - a committed record whose aliases expand past the parser's
+    // limit, so its generated and verified can't be compared with HEAD's,
+    // then re-stamped and its source changed, both left uncommitted
+    const bomb = [
+      "a: &a [x, x, x, x, x, x, x, x, x, x]",
+      `b: &b [${"*a, ".repeat(10)}*a]`,
+      `c: &c [${"*b, ".repeat(10)}*b]`,
+      `d: [${"*c, ".repeat(10)}*c]`,
+    ];
+
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "export {};\n");
+    repo.write(
+      "kb/a.md",
+      record([
+        "type: Decision",
+        "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+        "sources: [{ resource: ../src/a.ts }]",
+        ...bomb,
+      ])
+    );
+    commitAt({ at: "2026-10-02T15:00:00Z", message: "add the record" });
+    repo.write(
+      "kb/a.md",
+      repo.read("kb/a.md").replace("2026-10-01", "2026-10-03")
+    );
+    repo.write("src/a.ts", "export const a = 1;\n");
+
+    // When - checking it
+    check({});
+
+    // Then - no T007, since a record whose stamp can't be read counts as
+    // re-stamped while it has uncommitted changes
+    expect(infos.filter((line) => line.includes("T007"))).toStrictEqual([]);
+  });
+
   test("keeps a record's source-changed warning once its fix is committed", () => {
     // Given - a record citing a source, its tags out of order, and the
     // source changed in a later commit
