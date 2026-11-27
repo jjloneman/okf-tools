@@ -134,6 +134,24 @@ describe("wordComment", () => {
     ]);
   });
 
+  test("lists the cited sources a branch changed as a bullet", () => {
+    // Given - a re-stamped draft whose text is the same as on the base
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message: `${DRAFT.message.replace("; okf verify signs it off again", "")}; its text is the same as on the base branch, and its source ../../src/check.ts changed on this branch, so check the record still holds against it; okf verify signs it off again`,
+    };
+
+    // When/Then - the reason as its own bullet, under the summary
+    expect(
+      wordComment({ blob: BLOB, finding }).split("\n").slice(3, 7)
+    ).toStrictEqual([
+      `> The record is a draft, and \`human:a\`'s sign-off at \`2026-10-02T15:00:00Z\` no longer counts, since \`generated.at\` is later ([§5.3](${SPEC})).`,
+      ">",
+      "> - Its text is the same as on the base branch, and its source ../../src/check.ts changed on this branch, so check the record still holds against it.",
+      "",
+    ]);
+  });
+
   test("keeps a record's text from mentioning anyone or opening a comment", () => {
     // Given - a message quoting a record's own text, with no command
     const finding = { ...DRAFT, message: "by @someone <!-- okf-check: x -->" };

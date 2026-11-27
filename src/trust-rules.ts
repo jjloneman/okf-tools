@@ -16,6 +16,7 @@ import type { DraftPolicy } from "./config.ts";
 import type { ParsedFile } from "./spec-rules.ts";
 
 import { readCheckedFile, readNodeLine } from "./check-engine.ts";
+import { readCitedSources } from "./cited-sources.ts";
 import {
   isCurrentVerification,
   isGeneratedAhead,
@@ -53,6 +54,9 @@ type TrustEvent = {
    */
   node: unknown;
 };
+
+/** How a clause lists paths: `a`, `a and b`, or `a, b, and c`. */
+const LIST_FORMAT = new Intl.ListFormat("en-US", { type: "conjunction" });
 
 /** The severity the draft rule takes under each `okf.drafts` policy. */
 const DRAFT_SEVERITIES = {
@@ -124,6 +128,10 @@ export function readChangedAt(parsed: ParsedFile): unknown {
  *   only its frontmatter differs, so it says what `I204` would and more,
  *   and `I204` skips drafts.
  *
+ * - When only its frontmatter differs, it names the cited sources the
+ *   branch changed, since a re-stamp with no text change usually follows
+ *   one.
+ *
  * - Without a base copy, such as a record the branch didn't change, it
  *   can't say which, so it names the sign-off alone.
  */
@@ -160,7 +168,7 @@ function checkDraft(file: CheckedFile): RuleHit[] {
         message:
           last === undefined || !isOutdated
             ? "the record is a draft, so no one has signed it off as settled; okf verify signs it off"
-            : `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${describeTextChange(file)}; okf verify signs it off again`,
+            : `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${describeTextChange(parsed)}; okf verify signs it off again`,
       },
     ];
   });
@@ -285,17 +293,40 @@ function checkVerifiedDraft(file: CheckedFile): RuleHit[] {
 /**
  * Say whether a record's text changed since the base branch, or only its
  * frontmatter differs, as a clause; nothing without a base copy.
+ *
+ * - When only its frontmatter differs, it names the cited sources the
+ *   branch changed, as the likely reason for the re-stamp, without saying
+ *   they caused it, since a re-stamp's commit doesn't say why it was made.
  */
-function describeTextChange(file: CheckedFile): string {
+function describeTextChange(parsed: ParsedFile): string {
+  const { file } = parsed;
   const { baseText } = file;
 
   if (baseText === undefined) {
     return "";
   }
 
-  return readBody(baseText) === readBody(file.text)
-    ? "; its text is the same as on the base branch, and only its frontmatter differs"
-    : "; its text changed since the base branch";
+  if (readBody(baseText) !== readBody(file.text)) {
+    return "; its text changed since the base branch";
+  }
+
+  const changed = [
+    ...new Set(
+      readCitedSources(parsed)
+        .filter(({ path }) => file.readChanges(path).some(file.isOnBranch))
+        .map(({ resource }) => resource)
+    ),
+  ];
+  const same = "; its text is the same as on the base branch, and";
+
+  if (changed.length === 0) {
+    return `${same} only its frontmatter differs`;
+  }
+
+  const [noun, pronoun] =
+    changed.length === 1 ? ["source", "it"] : ["sources", "them"];
+
+  return `${same} its ${noun} ${LIST_FORMAT.format(changed)} changed on this branch, so check the record still holds against ${pronoun}`;
 }
 
 /** Read a body, everything after the frontmatter, with LF line breaks. */

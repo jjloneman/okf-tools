@@ -100,6 +100,14 @@ export type CheckedFile = {
   isAtBundleRoot: boolean;
 
   /**
+   * Whether a change to a path is the branch's own: uncommitted, or a commit
+   * the base branch doesn't have.
+   *
+   * @example `({ commit }) => commit === undefined || branch.has(commit.hash)`
+   */
+  isOnBranch: (change: FileChange) => boolean;
+
+  /**
    * What OKF makes of it by its name: an `index.md`, a `log.md`, or any
    * other Markdown file.
    *
@@ -533,6 +541,7 @@ export function readCheckedFile(params: {
   bundleDir: string;
   doesExist: (filePath: string) => boolean;
   filePath: string;
+  isOnBranch?: ((change: FileChange) => boolean) | undefined;
   readChanges?: ((filePath: string) => readonly FileChange[]) | undefined;
   readUnseenCommits?:
     ((filePath: string) => undefined | UnseenCommits) | undefined;
@@ -541,6 +550,7 @@ export function readCheckedFile(params: {
   const {
     bundleDir,
     filePath,
+    isOnBranch = ({ commit }) => commit === undefined,
     readChanges = () => [],
     readUnseenCommits = () => undefined,
     text,
@@ -562,6 +572,7 @@ export function readCheckedFile(params: {
       text,
     }),
     isAtBundleRoot: folder === bundleDir,
+    isOnBranch,
     kind: readKind(name),
     readChanges,
     readUnseenCommits,

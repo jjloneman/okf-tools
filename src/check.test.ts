@@ -516,6 +516,45 @@ describe("runCheck", () => {
     ]);
   });
 
+  test("names the cited source a branch changed under a re-stamped draft", () => {
+    // Given - a signed-off record on main citing two files, and a branch
+    // that changes one and re-stamps the record, leaving its text as it was
+    const signed = (lines: readonly string[]): string =>
+      record([
+        "type: Decision",
+        ...lines,
+        `verified: { by: ${VERIFIED_BY}, at: 2026-10-02T13:30:00Z }`,
+        "sources: [{ resource: ../src/a.ts }, { resource: ../src/b.ts }]",
+      ]);
+
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("src/b.ts", "b\n");
+    repo.write("kb/a.md", signed(["status: stable", GENERATED_LINE]));
+    repo.commitAll("add the record");
+    repo.git("switch", "--quiet", "-c", "edit");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("change a");
+    repo.write(
+      "kb/a.md",
+      signed([
+        "status: draft",
+        "generated: { by: claude-code/1.0, at: 2026-10-03T15:00:00Z }",
+      ])
+    );
+    repo.commitAll("re-stamp the record");
+
+    // When - checking every file, not only what the branch changed
+    const code = check({});
+
+    // Then - the draft's notice names the source the branch changed
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      `kb/a.md:3: info T001 draft: the record is a draft, and ${VERIFIED_BY}'s sign-off at 2026-10-02T13:30:00Z no longer counts, since generated.at is later (§5.3); its text is the same as on the base branch, and its source ../src/a.ts changed on this branch, so check the record still holds against it; okf verify signs it off again`,
+      "2 files checked: 0 errors, 0 warnings, 1 info.",
+    ]);
+  });
+
   test("warns about a record whose source changed after it was written", () => {
     // Given - a record generated before its cited file's commit, beside a
     // record that cites a URL

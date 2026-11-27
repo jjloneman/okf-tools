@@ -569,16 +569,16 @@ The gaps in the numbering are upstream rules okf-tools doesn't run yet, such as 
 
 okf-tools' own rules, whose `T` codes upstream doesn't use:
 
-| Code | Rule               | Severity                 | Finds                                                                                                                              |
-| ---- | ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`; one re-stamped since a sign-off names it, and says whether its text changed since the base branch. |
-| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.                                      |
-| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes.                                |
-| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                                                        |
-| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.                                          |
-| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.                                     |
-| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed in a commit outside the history of the record's re-stamps and sign-offs.          |
-| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.                                       |
+| Code | Rule               | Severity                 | Finds                                                                                                                                                                                          |
+| ---- | ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`; one re-stamped since a sign-off names it, and says whether its text changed since the base branch, naming the cited sources the branch changed when it didn't. |
+| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.                                                                                                  |
+| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes.                                                                                            |
+| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                                                                                                                    |
+| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.                                                                                                      |
+| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.                                                                                                 |
+| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed in a commit outside the history of the record's re-stamps and sign-offs.                                                                      |
+| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.                                                                                                   |
 
 ### 🏠 House rules
 
