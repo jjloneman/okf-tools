@@ -34,7 +34,7 @@ sources:
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:02:27Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:08:57Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 
@@ -60,6 +60,12 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
   - when every thread for the record is resolved, a changed record gets a new comment, so a resolved thread stays resolved until the record changes again;
   - every other open thread, as when the record was signed off, is resolved, with its marker's blob set to `0`, so if the record comes back as it was, a resolution the owner never made can't stand for theirs;
   - only a marker on a comment by `github-actions` counts, so no one else's comment can stand in for one.
+- **A comment is laid out to be scanned**, as the owner asked in review on PR #147[^review-plan]:
+  - a bold heading with an emoji for the severity, the code as code, and the rule, such as **📝 `T001` draft** · info;
+  - the finding's first clause as a sentence, and each clause after it, up to the last, as a bullet, splitting the message where `okf check` joins its clauses with `; `;
+  - times, actors, the `generated` and `verified` fields, and `okf` commands set as code;
+  - a bold **What to do:** with two steps: **Sign it off**, from the finding's last clause, and **Resolve this thread**.
+  - Since a run edits a comment whose wording changed, a new layout reaches every open and resolved thread on the next run, and a resolved one stays resolved.
 - **The message's own text can't mention anyone or open an HTML comment**, so a record's `verified.by` can't ping someone or forge a marker; a section such as §5.3 links to the pinned spec.
 - **The comments job declares no `permissions`, so it takes the calling job's**, which must grant `contents: write` and `pull-requests: write`, and the workflow drops its workflow-wide `permissions: {}`.
   - `pull-requests: write` posts and edits comments; resolving a thread also needs `contents: write`, as GitHub refused it with "Resource not accessible by integration" without it on PR #147, as of 2026-11-27.

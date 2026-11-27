@@ -7,7 +7,7 @@
  *   request's head, so a later run finds its own comment by the record's
  *   text, not its line.
  */
-import type { CheckFinding } from "./check-engine.ts";
+import type { CheckFinding, CheckSeverity } from "./check-engine.ts";
 
 import { readArray, readPath } from "./json.ts";
 
@@ -179,6 +179,20 @@ const MARKER =
 /** The logins a comment made with a workflow's `GITHUB_TOKEN` shows. */
 const BOT_LOGINS = new Set(["github-actions", "github-actions[bot]"]);
 
+/** The emoji a comment's heading opens with, by the finding's severity. */
+const SEVERITY_EMOJIS: Record<CheckSeverity, string> = {
+  error: "🛑",
+  info: "📝",
+  warning: "⚠️",
+};
+
+/**
+ * What a comment sets as code: an RFC 3339 time, an actor before `'s`, a
+ * dotted frontmatter field, and an `okf` command.
+ */
+const CODE_TOKEN =
+  /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z|\b[a-z][a-z0-9-]*:[\w.-]+(?='s\b)|\b(?:generated|verified)\.(?:at|by)\b|\bokf [a-z-]+/gu;
+
 /** What follows an `@` so it mentions no one, written as its code point. */
 const ZERO_WIDTH_SPACE = String.fromCodePoint(0x20_0b);
 
@@ -322,7 +336,14 @@ export function readReviewThread(node: unknown): ReviewThread | undefined {
 }
 
 /**
- * Word a draft's comment, ending in its marker.
+ * Word a draft's comment, ending in its marker: a heading with the code, the
+ * finding's first clause as its summary, the clauses between as bullets, and
+ * what to do, in bold, as the last.
+ *
+ * - The finding's message joins its clauses with `; `, and ends with the
+ *   command that settles it, as `T001`'s does.
+ *
+ * - Times, actors, fields, and `okf` commands read as code.
  *
  * - A record's own text can reach the message, so it can't mention anyone,
  *   open an HTML comment, or forge a marker.
@@ -343,17 +364,24 @@ export function wordComment(params: {
   finding: CheckFinding;
 }): string {
   const { blob, finding } = params;
-  const message = finding.message
-    .replaceAll("<", "&lt;")
-    .replaceAll("@", `@${ZERO_WIDTH_SPACE}`)
-    .replaceAll(/§(?<section>\d+(?:\.\d+)*)/gu, `[§$<section>](${SPEC_URL})`);
+  const [summary = "", ...rest] = finding.message
+    .split("; ")
+    .map((clause) => toSentence(formatClause(clause)));
+  const settle = rest.at(-1);
+  const details = rest.slice(0, -1);
 
   return [
-    `**${finding.code} ${finding.rule}** (${finding.severity})`,
+    `**${SEVERITY_EMOJIS[finding.severity]} \`${finding.code}\` ${finding.rule}** · ${finding.severity}`,
     "",
-    message,
+    summary,
+    ...(details.length === 0
+      ? []
+      : ["", ...details.map((detail) => `- ${detail}`)]),
     "",
-    "Resolve this thread to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
+    "**What to do:**",
+    "",
+    ...(settle === undefined ? [] : [`- **Sign it off:** ${settle}`]),
+    "- **Resolve this thread** to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
     "",
     `<!-- okf-check: ${encodeURIComponent(finding.path)} ${finding.code} ${blob} -->`,
   ].join("\n");
@@ -366,4 +394,21 @@ function decodePath(encoded: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Defuse a clause of a finding's message, set its times, actors, fields,
+ * and commands as code, and link its spec sections.
+ */
+function formatClause(clause: string): string {
+  return clause
+    .replaceAll("<", "&lt;")
+    .replaceAll("@", `@${ZERO_WIDTH_SPACE}`)
+    .replaceAll(CODE_TOKEN, (token) => `\`${token}\``)
+    .replaceAll(/§(?<section>\d+(?:\.\d+)*)/gu, `[§$<section>](${SPEC_URL})`);
+}
+
+/** Make a clause a sentence: a capital first letter and a full stop. */
+function toSentence(clause: string): string {
+  return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
 }

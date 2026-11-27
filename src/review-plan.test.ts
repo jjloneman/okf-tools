@@ -63,30 +63,65 @@ function threadNode(params: {
 }
 
 describe("wordComment", () => {
-  test("links a spec section and ends with the marker", () => {
+  const SPEC =
+    "https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md";
+
+  test("leads with the code, then the summary, then what to do", () => {
     // When - wording a draft
     const body = wordComment({ blob: BLOB, finding: DRAFT });
 
-    // Then - the heading, the linked section, and the marker
+    // Then - code set as code, the section linked, and the marker last
     expect(body.split("\n")).toStrictEqual([
-      "**T001 draft** (info)",
+      "**📝 `T001` draft** · info",
       "",
-      "the record is a draft, and human:a's sign-off at 2026-10-02T15:00:00Z no longer counts, since generated.at is later ([§5.3](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)); okf verify signs it off again",
+      `The record is a draft, and \`human:a\`'s sign-off at \`2026-10-02T15:00:00Z\` no longer counts, since \`generated.at\` is later ([§5.3](${SPEC})).`,
       "",
-      "Resolve this thread to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
+      "**What to do:**",
+      "",
+      "- **Sign it off:** `okf verify` signs it off again.",
+      "- **Resolve this thread** to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
       "",
       "<!-- okf-check: kb%2Fa.md T001 aaaa1111 -->",
     ]);
   });
 
+  test("lists the clauses between the summary and what to do", () => {
+    // Given - a warning with two clauses in the middle
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message:
+        "the record is a draft; its text changed since the base branch; generated.by is new; okf verify signs it off",
+      severity: "warning",
+    };
+
+    // When/Then - each as a bullet, under a warning's emoji
+    expect(
+      wordComment({ blob: BLOB, finding }).split("\n").slice(0, 7)
+    ).toStrictEqual([
+      "**⚠️ `T001` draft** · warning",
+      "",
+      "The record is a draft.",
+      "",
+      "- Its text changed since the base branch.",
+      "- `generated.by` is new.",
+      "",
+    ]);
+  });
+
   test("keeps a record's text from mentioning anyone or opening a comment", () => {
-    // Given - a message quoting a record's own text
+    // Given - a message quoting a record's own text, with no command
     const finding = { ...DRAFT, message: "by @someone <!-- okf-check: x -->" };
 
-    // When/Then - the mention and the comment defused
-    expect(wordComment({ blob: BLOB, finding }).split("\n")[2]).toBe(
-      "by @\u200Bsomeone &lt;!-- okf-check: x -->"
-    );
+    // When - wording it
+    const lines = wordComment({ blob: BLOB, finding }).split("\n");
+
+    // Then - the mention and the comment defused, and only the resolve step
+    expect(lines[2]).toBe("By @\u200Bsomeone &lt;!-- okf-check: x -->.");
+    expect(lines.slice(4, 7)).toStrictEqual([
+      "**What to do:**",
+      "",
+      "- **Resolve this thread** to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
+    ]);
   });
 });
 
