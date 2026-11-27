@@ -387,6 +387,15 @@ describe("I204 no-current-verification", () => {
       expected: [],
       lines: ["verified: [{ by: human:a, at: 2026-10-01T15:00:00Z }]"],
     },
+    {
+      description: "a draft, which T001 reports instead",
+      expected: [],
+      lines: [
+        "status: draft",
+        generated,
+        "verified: [{ by: human:a, at: 2026-10-01T15:00:00Z }]",
+      ],
+    },
   ])("checks $description", ({ expected, lines }) => {
     // When/Then - the lines it reports
     expect(

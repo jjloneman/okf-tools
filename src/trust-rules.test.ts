@@ -114,6 +114,102 @@ describe("T001 draft", () => {
   });
 
   test.each([
+    {
+      description: "a draft with a current sign-off",
+      text: concept(["status: draft", GENERATED, SIGNED]),
+    },
+    {
+      description: "a draft whose only sign-off is ahead of the clock",
+      text: concept([
+        "status: draft",
+        GENERATED,
+        "verified: [{ by: human:a, at: 2999-01-01T00:00:00Z }]",
+      ]),
+    },
+    {
+      description: "a draft whose sign-off in SQL form is current",
+      text: concept([
+        "status: draft",
+        GENERATED,
+        'verified: [{ by: human:a, at: "2026-10-02 15:00:00" }]',
+      ]),
+    },
+    {
+      description: "a draft whose generated.at can't be read",
+      text: concept([
+        "status: draft",
+        "generated: { by: claude-code/1.0, at: soon }",
+        SIGNED,
+      ]),
+    },
+    {
+      description: "a draft whose sign-offs can't be read",
+      text: concept([
+        "status: draft",
+        GENERATED,
+        "verified: [{ by: human:a, at: { day: 1 } }, { by: human:b, at: soon }]",
+      ]),
+    },
+  ])("words $description as never signed off", ({ text }) => {
+    // When/Then - the plain draft notice
+    expect(findHits({ code: "T001", text })).toStrictEqual([
+      "3: info the record is a draft, so no one has signed it off as settled; okf verify signs it off",
+    ]);
+  });
+
+  describe("a draft re-stamped since its sign-off", () => {
+    const signed = concept(["status: stable", GENERATED, SIGNED]);
+    const restamped = concept([
+      "status: draft",
+      "generated: { by: claude-code/1.0, at: 2026-10-03T15:00:00Z }",
+      "verified:",
+      "  - { by: human:a, at: 2026-10-02T15:00:00Z }",
+      "  - { by: human:b, at: 2026-09-30T15:00:00Z }",
+    ]);
+    const outdated =
+      "3: info the record is a draft, and human:a's sign-off at 2026-10-02T15:00:00Z no longer counts, since generated.at is later (§5.3)";
+
+    test("names a sign-off in SQL form", () => {
+      // Given - a sign-off time that T002 reads too
+      const text = restamped.replace(
+        "at: 2026-10-02T15:00:00Z",
+        'at: "2026-10-02 15:00:00"'
+      );
+
+      // When/Then - it names that time as written
+      expect(findHits({ code: "T001", text })).toStrictEqual([
+        "3: info the record is a draft, and human:a's sign-off at 2026-10-02 15:00:00 no longer counts, since generated.at is later (§5.3); okf verify signs it off again",
+      ]);
+    });
+
+    test.each([
+      {
+        baseText: signed,
+        description: "its text changed since the base branch",
+        expected: `${outdated}; its text changed since the base branch; okf verify signs it off again`,
+        text: `${restamped}\nA new paragraph.\n`,
+      },
+      {
+        baseText: signed,
+        description: "only its frontmatter changed",
+        expected: `${outdated}; its text is the same as on the base branch, and only its frontmatter differs; okf verify signs it off again`,
+        text: restamped,
+      },
+      {
+        baseText: undefined,
+        description: "the base has no copy to compare",
+        expected: `${outdated}; okf verify signs it off again`,
+        text: restamped,
+      },
+    ])("names the last sign-off when $description", (row) => {
+      // When/Then - one notice that says why
+      expect(
+        findHits({ baseText: row.baseText, code: "T001", text: row.text })
+      ).toStrictEqual([row.expected]);
+    });
+  });
+
+  test.each([
     { description: "a stable record", text: concept(["status: stable"]) },
     { description: "a file that isn't a concept", text: "# Notes\n" },
   ])("passes $description", ({ text }) => {
