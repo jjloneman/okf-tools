@@ -472,7 +472,7 @@ pnpm okf format
   - A `resource` counts when it resolves by §6's rules to a path in the repo, in the bundle or not, such as `../../src/check.ts` for code the record describes; a URL and a scope descriptor are skipped.
   - A change is a commit to the file that isn't in the history of a commit that re-stamped or signed off the record, changing its `generated` or `verified`, or uncommitted changes to it, so a rebase that re-dates a branch's commits doesn't warn, and a branch merged after the record's re-stamp does. A commit that re-stamped the record too doesn't count, so a pull request that updates both passes.
   - An edit to the record that changes neither, such as to `tags` alone or an `okf format`, doesn't count as having seen the file, and neither does a merge that only took one side's re-stamp. A commit that added the record counts, a `git mv` included, since git's history of a path doesn't follow a rename.
-  - While the record has uncommitted changes of its own, such as a re-stamp from `okf touch`, a commit counts only when it's also later than both `generated.at` and the latest sign-off; a record no commit re-stamped or signed off, such as one not committed yet, is judged by that time alone.
+  - While the record's own `generated` or `verified` differs from `HEAD`'s, as an uncommitted re-stamp from `okf touch` leaves it, uncommitted changes to the file don't count, and a commit counts only when it's also later than both `generated.at` and the latest sign-off; a record no commit re-stamped or signed off, such as one not committed yet, is judged by that time alone. An uncommitted edit that changes neither, such as an `okf format` fix, is judged as if it weren't there.
   - It works at file level, so it stays a warning: whether the prose still holds is the reviewer's call.
   - It reads the history git has, so in CI fetch it all, as for `T006`: in a shallow checkout the oldest commit seems to change every file, the record included, so it doesn't count.
 - **`--changed` reports only on the files changed since the base branch**, from the branch diff and `git status`, and on the records whose `sources` cite a file the branch changed, for a pull request's check. Without a base to diff against, it says so on stderr and reports on uncommitted changes alone.
@@ -653,7 +653,7 @@ pnpm okf format --changed
 - **It fixes only what `okf check` reported**, so `okf.rules` and `okf.exclude` decide what it touches.
   - Under `--changed`, it fixes the files the branch changed, the indexes that list them, and the records reported for citing a changed file.
   - It fixes a record with a `T007` finding too, and once the fix is committed the warning stays, since only a re-stamp or a sign-off counts as the record having seen its sources.
-  - Until then the record has uncommitted changes of its own, so `T007` judges it as above, by `generated.at` and the latest sign-off, and an uncommitted change to the source doesn't count.
+  - It stays before the fix is committed, too: an uncommitted fix leaves `generated` and `verified` as they were, so an uncommitted change to the source still counts.
   - An index fix writes the index as `okf index` would, so its other stale lines and its tag index are synced too.
 - **It never edits `generated` or `verified`**, so a sign-off still holds after a fix, and it commits nothing.
 - **It moves text as written**, with no YAML round-trip, so a fixed record's diff shows only the fix, and every key is kept, unknown and `x-` keys included.

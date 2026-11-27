@@ -42,7 +42,7 @@ As of 2026-11-27, from `src/fix.ts`[^fix], `src/frontmatter/format.ts`[^frontmat
 - **It fixes only what `okf check` reported**, so the house rules `okf.rules` turns on and `okf.exclude` decide what it touches; then it reports what's left, with the same exit code `okf check` gives, so a refused fix counts by the findings it leaves.
   - Under `--changed`, it fixes the files the branch changed, the indexes that list them, and the records reported for citing a changed file.
   - A record with a `T007` finding, a source changed since it was written, is fixed like any other, and the warning stays: since #144, `T007` counts only a commit that changes `generated` or `verified` as the record having seen its sources, and a fix changes neither (see [How okf check judges whether a sign-off still holds](trust-rules.md)).
-    - Until the fix is committed, the record has uncommitted changes of its own, so `T007` judges it by `generated.at` and the latest sign-off, as for any uncommitted edit, and an uncommitted change to the source doesn't count.
+    - It stays before the fix is committed too: `T007` falls back to the clock only while the record's `generated` or `verified` differs from `HEAD`'s, and a fix leaves both as they were, so an uncommitted change to the source still counts (#151).
   - **Rejected:** leaving such a record unfixed, in any mode, as #130 did, which #149 reversed. Before #144, any commit to a record counted as it having caught up with its source, so a fix's commit could hide a source change; since then the guard only kept house-rule findings unfixed.
   - **Rejected:** fixing every record whatever the rules say. A repo that didn't turn `tags-sorted` on didn't choose sorted tags.
 - **The fixes, as of 2026-11-27:**
