@@ -427,8 +427,13 @@ function listCitingKeys(params: {
  *   name, and every record when git can't read the files, so the source
  *   rules skip them.
  *
- * @returns the commits, by the record's path from the repo root, and why git
- *   couldn't say, for each record.
+ * - A record counts as re-stamped in the working tree when its `generated`
+ *   or `verified` there differs from `HEAD`'s, read in the same batch; one
+ *   no commit holds yet always does.
+ *
+ * @returns the commits, by the record's path from the repo root, the records
+ *   re-stamped in the working tree, and why git couldn't say, for each
+ *   record.
  */
 function listStampCommits(params: {
   /**
@@ -463,6 +468,14 @@ function listStampCommits(params: {
   failures: string[];
 
   /**
+   * The records whose `generated` or `verified` in the working tree differs
+   * from `HEAD`'s, by path from the repo root.
+   *
+   * @example `new Set(["kb/a.md"])`
+   */
+  restamped: Set<string>;
+
+  /**
    * The full hashes of each record's re-stamps and sign-offs, by its path
    * from the repo root.
    *
@@ -487,17 +500,21 @@ function listStampCommits(params: {
       return [];
     }
 
-    return [{ filePath: file.filePath, own }];
+    return [{ file, filePath: file.filePath, own }];
   });
-  const names = records.flatMap(({ filePath, own }) =>
-    own.flatMap(({ hash, parents }) =>
+
+  // `HEAD` holds a record only when some commit does.
+  const names = records.flatMap(({ filePath, own }) => [
+    ...(own.length === 0 ? [] : [`HEAD:${filePath}`]),
+    ...own.flatMap(({ hash, parents }) =>
       [hash, ...parents].map((commit) => `${commit}:${filePath}`)
-    )
-  );
+    ),
+  ]);
   const read =
     names.length === 0
       ? { isOk: true as const, value: new Map<string, string | undefined>() }
       : readTextsAt({ names: [...new Set(names)], repoRoot });
+  const restamped = new Set<string>();
   const stamps = new Map<string, ReadonlySet<string>>();
 
   if (!read.isOk) {
@@ -509,13 +526,18 @@ function listStampCommits(params: {
             `Couldn't tell which commits re-stamped or signed off ${filePath}: ${read.reason}`
         ),
       ],
+      restamped,
       stamps,
     };
   }
 
   const texts = read.value;
 
-  for (const { filePath, own } of records) {
+  for (const { file, filePath, own } of records) {
+    if (readStamp(file.text) !== readStamp(texts.get(`HEAD:${filePath}`))) {
+      restamped.add(filePath);
+    }
+
     stamps.set(
       filePath,
       new Set(
@@ -541,7 +563,7 @@ function listStampCommits(params: {
     );
   }
 
-  return { failures, stamps };
+  return { failures, restamped, stamps };
 }
 
 /**
@@ -589,6 +611,14 @@ function listUnseenCommits(params: {
   repoRoot: string;
 
   /**
+   * The records whose `generated` or `verified` in the working tree differs
+   * from `HEAD`'s, by path from the repo root.
+   *
+   * @example `new Set(["kb/a.md"])`
+   */
+  restamped: ReadonlySet<string>;
+
+  /**
    * The full hashes of each record's re-stamps and sign-offs, by its path
    * from the repo root.
    *
@@ -603,7 +633,7 @@ function listUnseenCommits(params: {
    */
   unseen: Map<string, UnseenCommits>;
 }): string[] {
-  const { cited, order, repoRoot, stamps, unseen } = params;
+  const { cited, order, repoRoot, restamped, stamps, unseen } = params;
   const failures: string[] = [];
   const groups = new Map<
     string,
@@ -661,7 +691,11 @@ function listUnseenCommits(params: {
     }
 
     for (const { filePath, lastSeen } of records) {
-      unseen.set(filePath, { lastSeen, unseen: listed.value });
+      unseen.set(filePath, {
+        hasUncommittedStamp: restamped.has(filePath),
+        lastSeen,
+        unseen: listed.value,
+      });
     }
   }
 
@@ -842,6 +876,7 @@ function readBundles(params: {
     cited,
     order,
     repoRoot,
+    restamped: stamped.restamped,
     stamps: stamped.stamps,
     unseen,
   });

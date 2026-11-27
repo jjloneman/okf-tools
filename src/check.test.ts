@@ -1205,6 +1205,58 @@ describe("runCheck --fix", () => {
     ]);
   });
 
+  test.each([
+    {
+      description: "warns while its uncommitted fix doesn't re-stamp it",
+      expected: [
+        expect.stringMatching(
+          /^kb\/a\.md:5: warning T007 source-changed: source \.\.\/src\/a\.ts has uncommitted changes /u
+        ),
+        "2 files checked: 0 errors, 1 warning, 0 info.",
+      ],
+      generatedAt: "2026-10-01T15:00:00Z",
+    },
+    {
+      description: "passes once an uncommitted re-stamp follows its fix",
+      expected: ["2 files checked: 0 errors, 0 warnings, 0 info."],
+      generatedAt: "2026-10-03T15:00:00Z",
+    },
+  ])(
+    "judges a record with an uncommitted fix and source change: $description",
+    ({ expected, generatedAt }) => {
+      // Given - a committed record citing a source, its tags out of order,
+      // the source changed and left uncommitted, and the record's tags
+      // fixed, then perhaps re-stamped, uncommitted too
+      repo.write("kb/index.md", ROOT_INDEX);
+      repo.write("src/a.ts", "export {};\n");
+      repo.write(
+        "kb/a.md",
+        record([
+          "type: Decision",
+          "tags: [b, a]",
+          "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+          "sources: [{ resource: ../src/a.ts }]",
+        ])
+      );
+      repo.commitAll("add the record");
+      repo.write("src/a.ts", "export const a = 1;\n");
+      check({ houseRules: { "tags-sorted": "error" }, isFix: true });
+      repo.write(
+        "kb/a.md",
+        repo.read("kb/a.md").replace("2026-10-01T15:00:00Z", generatedAt)
+      );
+      infos.length = 0;
+
+      // When - checking it
+      const code = check({ houseRules: { "tags-sorted": "error" } });
+
+      // Then - the source change warns unless the record was re-stamped
+      expect(repo.read("kb/a.md")).toContain("tags: [a, b]");
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(infos).toStrictEqual(expected);
+    }
+  );
+
   test("keeps a record's source-changed warning once its fix is committed", () => {
     // Given - a record citing a source, its tags out of order, and the
     // source changed in a later commit
@@ -1235,8 +1287,8 @@ describe("runCheck --fix", () => {
 
     const code = check({ houseRules: { "tags-sorted": "error" } });
 
-    // Then - the warning while the fix is uncommitted, by the clock, and
-    // after its commit, which doesn't re-stamp the record
+    // Then - the warning while the fix is uncommitted and after its commit,
+    // since neither re-stamps the record
     const expected = [
       expect.stringMatching(/^kb\/a\.md:5: warning T007 source-changed: /u),
       "2 files checked: 0 errors, 1 warning, 0 info.",
