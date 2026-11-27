@@ -27,7 +27,7 @@ sources:
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T06:56:33Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:00:17Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
