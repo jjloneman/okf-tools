@@ -191,6 +191,14 @@ export type CheckFinding = {
    * @example "error"
    */
   severity: CheckSeverity;
+
+  /**
+   * The cited sources its message names, in the order it names them, when
+   * it names any.
+   *
+   * @example `[{ path: "src/check.ts", resource: "../../src/check.ts" }]`
+   */
+  sources?: readonly FindingSource[];
 };
 
 /**
@@ -323,6 +331,19 @@ export type FileChange = {
 /** What OKF makes of a Markdown file by its name. */
 export type FileKind = "index" | "log" | "markdown";
 
+/** A cited source a finding's message names. */
+export type FindingSource = {
+  /** The path it resolves to, from the repo root. @example "src/check.ts" */
+  path: string;
+
+  /**
+   * Its `resource`, as the record writes it and the message names it.
+   *
+   * @example "../../src/check.ts"
+   */
+  resource: string;
+};
+
 /**
  * A file's frontmatter as `okf verify` reads it: none, a block that can't be
  * read, or a parsed mapping.
@@ -410,6 +431,13 @@ export type RuleHit = {
    * @example "log.md has no frontmatter (§9)"
    */
   message: string;
+
+  /**
+   * The cited sources the message names, when it names any.
+   *
+   * @example `[{ path: "src/check.ts", resource: "../../src/check.ts" }]`
+   */
+  sources?: readonly FindingSource[];
 };
 
 /**
@@ -445,7 +473,7 @@ export type UnseenCommits = {
 };
 
 /** The version of the JSON report's shape. */
-export const CHECK_SCHEMA_VERSION = 1;
+export const CHECK_SCHEMA_VERSION = 2;
 
 /** The severities, from most to least serious. */
 export const CHECK_SEVERITIES = ["error", "warning", "info"] as const;

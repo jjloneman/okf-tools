@@ -73,6 +73,7 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 
 - When the pin moves, `SPEC_RULES` moves to that commit's `validate.py` in the same PR, as AGENTS.md's spec watch section says.
 - A change to the JSON report's shape bumps `CHECK_SCHEMA_VERSION`, and is a breaking change.
+  - Version 2 added `sources` to a finding that names cited sources, as `T001` does, for a review comment to link each one to its diff (see [How okf-check.yml posts drafts as review comments](review-comments.md)).
 
 ## Links
 

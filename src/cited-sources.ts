@@ -19,6 +19,9 @@ import { readTimestamp } from "./frontmatter/shared.ts";
 import { hasScheme } from "./markdown.ts";
 import { decodePath } from "./spec-rules.ts";
 
+/** How a phrase lists sources: `a`, `a and b`, or `a, b, and c`. */
+const LIST_FORMAT = new Intl.ListFormat("en-US", { type: "conjunction" });
+
 /** A `sources` entry whose `resource` resolves to a path in the repo. */
 export type CitedSource = {
   /**
@@ -42,6 +45,16 @@ export type CitedSource = {
    */
   resource: string;
 };
+
+/**
+ * Name a record's sources as a phrase, such as "its sources a and b", for
+ * `T001`'s message and for the review comment that links each one.
+ */
+export function nameSources(names: readonly string[]): string {
+  const noun = names.length === 1 ? "source" : "sources";
+
+  return `its ${noun} ${LIST_FORMAT.format(names)}`;
+}
 
 /**
  * Read each `sources` entry whose `resource` resolves to a path in the repo,

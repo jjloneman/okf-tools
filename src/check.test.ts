@@ -545,12 +545,17 @@ describe("runCheck", () => {
       ])
     );
     repo.commitAll("re-stamp the record");
+    const reviewFile = path.join(repo.root, "drafts.json");
 
     // When - checking every file, not only what the branch changed
-    const code = check({});
+    const code = check({ reviewFile });
 
-    // Then - the draft's notice names the source the branch changed
+    // Then - the draft's notice names the source the branch changed, and
+    // its draft carries the source for a review comment to link
     expect(code).toBe(EXIT_CODES.ok);
+    expect(JSON.parse(readFileSync(reviewFile, "utf8"))).toMatchObject([
+      { sources: [{ path: "src/a.ts", resource: "../src/a.ts" }] },
+    ]);
     expect(infos).toStrictEqual([
       `kb/a.md:3: info T001 draft: the record is a draft, and ${VERIFIED_BY}'s sign-off at 2026-10-02T13:30:00Z no longer counts, since generated.at is later (§5.3); its text is the same as on the base branch, and its source ../src/a.ts changed on this branch, so check the record still holds against it; okf verify signs it off again`,
       "2 files checked: 0 errors, 0 warnings, 1 info.",

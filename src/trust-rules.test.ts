@@ -92,8 +92,13 @@ function findHits(params: {
 
   return report.findings
     .filter((finding) => finding.code === code)
-    .map(
-      ({ line, message, severity }) => `${String(line)}: ${severity} ${message}`
+    .map(({ line, message, severity, sources }) =>
+      [
+        `${String(line)}: ${severity} ${message}`,
+        ...(sources ?? []).map(
+          ({ path, resource }) => `${resource} -> ${path}`
+        ),
+      ].join("\n")
     );
 }
 
@@ -263,17 +268,17 @@ describe("T001 draft", () => {
       test.each([
         {
           description: "one cited source changed in a branch commit",
-          expected: `${same} its source ../src/a.ts changed on this branch, so check the record still holds against it; okf verify signs it off again`,
+          expected: `${same} its source ../src/a.ts changed on this branch, so check the record still holds against it; okf verify signs it off again\n../src/a.ts -> src/a.ts`,
           resources: ["../src/a.ts", "../src/old.ts", "https://example.com/a"],
         },
         {
           description: "two cited sources changed, one uncommitted",
-          expected: `${same} its sources ../src/b.ts and ../src/a.ts changed on this branch, so check the record still holds against them; okf verify signs it off again`,
+          expected: `${same} its sources ../src/b.ts and ../src/a.ts changed on this branch, so check the record still holds against them; okf verify signs it off again\n../src/b.ts -> src/b.ts\n../src/a.ts -> src/a.ts`,
           resources: ["../src/b.ts", "../src/a.ts", "../src/b.ts#L5"],
         },
         {
           description: "three cited sources changed",
-          expected: `${same} its sources ../src/a.ts, ../src/b.ts, and ../src/d.ts changed on this branch, so check the record still holds against them; okf verify signs it off again`,
+          expected: `${same} its sources ../src/a.ts, ../src/b.ts, and ../src/d.ts changed on this branch, so check the record still holds against them; okf verify signs it off again\n../src/a.ts -> src/a.ts\n../src/b.ts -> src/b.ts\n../src/d.ts -> src/d.ts`,
           resources: ["../src/a.ts", "../src/b.ts", "../src/d.ts"],
         },
         {
@@ -288,7 +293,8 @@ describe("T001 draft", () => {
           .replace("status: draft", "status: stable")
           .replace("2026-10-03T15:00:00Z", "2026-10-01T15:00:00Z");
 
-        // When/Then - the files the branch changed, each named once
+        // When/Then - the files the branch changed, each named once, and
+        // carried with the finding
         expect(
           findHits({
             baseText,
@@ -313,7 +319,7 @@ describe("T001 draft", () => {
             text,
           })
         ).toStrictEqual([
-          `${same} its source ../src/b.ts changed on this branch, so check the record still holds against it; okf verify signs it off again`,
+          `${same} its source ../src/b.ts changed on this branch, so check the record still holds against it; okf verify signs it off again\n../src/b.ts -> src/b.ts`,
         ]);
       });
     });

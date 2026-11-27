@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { record } from "#test/repo";
 
 import { readCheckedFile } from "./check-engine.ts";
-import { readCitedSources } from "./cited-sources.ts";
+import { nameSources, readCitedSources } from "./cited-sources.ts";
 import { readParsed } from "./spec-rules.ts";
 
 /** Read the cited sources of `kb/notes/a.md`, as `resource -> path`. */
@@ -21,6 +21,21 @@ function readPaths(lines: readonly string[]): string[] {
     ({ path, resource }) => `${resource} -> ${path}`
   );
 }
+
+describe("nameSources", () => {
+  test.each([
+    { description: "one", expected: "its source a", names: ["a"] },
+    { description: "two", expected: "its sources a and b", names: ["a", "b"] },
+    {
+      description: "three",
+      expected: "its sources a, b, and c",
+      names: ["a", "b", "c"],
+    },
+  ])("names $description", ({ expected, names }) => {
+    // When/Then - the phrase
+    expect(nameSources(names)).toBe(expected);
+  });
+});
 
 describe("readCitedSources", () => {
   test("resolves each path from the record's folder or the bundle root", () => {
