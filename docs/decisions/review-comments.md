@@ -34,7 +34,7 @@ sources:
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:29:54Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
 verified: { by: human:jjloneman, at: 2026-11-27T06:03:41Z }
 ---
 

@@ -17,7 +17,7 @@ sources:
     resource: ../../src/source-rules.ts
     title: src/source-rules.ts, the rules on a record's sources
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:29:54Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 
