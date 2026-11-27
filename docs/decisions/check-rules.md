@@ -28,9 +28,9 @@ sources:
   - id: spec-rules
     resource: ../../src/spec-rules.ts
     title: src/spec-rules.ts, the rules the spec states
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
-verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
+verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }
 ---
 
 # How okf check numbers, ranks and reports its rules

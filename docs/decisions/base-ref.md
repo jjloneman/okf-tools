@@ -15,9 +15,9 @@ sources:
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
-verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
+verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }
 ---
 
 # What a record counts as changed against
