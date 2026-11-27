@@ -327,12 +327,7 @@ export type ParsedDiffArgs =
 
 /** What an `okf review-comments` run was given. */
 export type ReviewCommentsOptions = {
-  /**
-   * The file `okf check --review-file` wrote, from where the command was
-   * run.
-   *
-   * @example "/tmp/okf-drafts.json"
-   */
+  /** The file `okf check --review-file` wrote. @example "drafts.json" */
   draftsFile: string;
 };
 
@@ -737,8 +732,11 @@ acknowledge that the record merges as a draft.
 
 - A later run finds its own comment by a hidden marker, and edits it
   rather than posting again.
+
 - A resolved thread stays resolved until the record changes again.
+
 - An open thread whose draft is gone is resolved.
+
 - These print as annotations instead:
   - a draft outside the pull request's diff;
   - a comment GitHub refuses;
@@ -748,6 +746,7 @@ acknowledge that the record merges as a draft.
 It runs in GitHub Actions:
 
 - It reads GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_PATH.
+
 - The token needs pull-requests: write to post, and contents: write to
   resolve.
 

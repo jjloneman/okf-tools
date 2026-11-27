@@ -122,11 +122,7 @@ function check(params: {
    */
   isStrict?: boolean;
 
-  /**
-   * Where to write the drafts' findings.
-   *
-   * @example "/tmp/drafts.json"
-   */
+  /** Where to write the drafts' findings. @example "/tmp/drafts.json" */
   reviewFile?: string;
 }): number {
   const {

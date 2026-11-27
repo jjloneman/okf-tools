@@ -981,8 +981,13 @@ function readHistory(params: {
  * say why when the write fails.
  */
 function writeReviewFile(params: {
+  /** The drafts' findings. @example `[{ code: "T001", … }]` */
   drafts: readonly CheckFinding[];
+
+  /** Where a failed write is said. @example `createOutput("okf")` */
   output: Output;
+
+  /** The file to write. @example "/tmp/okf-drafts.json" */
   reviewFile: string;
 }): boolean {
   const { drafts, output, reviewFile } = params;

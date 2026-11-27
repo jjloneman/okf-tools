@@ -15,57 +15,6 @@ import { readArray, readPath } from "./json.ts";
 export type ReviewAction =
   | {
       /**
-       * The comment's new text.
-       *
-       * @example "**T001 draft** (info) …"
-       */
-      body: string;
-
-      /**
-       * The comment to edit.
-       *
-       * @example 2_400_000_001
-       */
-      commentId: number;
-
-      /**
-       * The draft it posts.
-       *
-       * @example `{ code: "T001", path: "docs/a.md", … }`
-       */
-      finding: CheckFinding;
-
-      /**
-       * Edit a comment of an earlier run.
-       *
-       * @example "update"
-       */
-      kind: "update";
-    }
-  | {
-      /**
-       * The comment's text.
-       *
-       * @example "**T001 draft** (info) …"
-       */
-      body: string;
-
-      /**
-       * The draft it posts.
-       *
-       * @example `{ code: "T001", path: "docs/a.md", … }`
-       */
-      finding: CheckFinding;
-
-      /**
-       * Post a new comment.
-       *
-       * @example "create"
-       */
-      kind: "create";
-    }
-  | {
-      /**
        * The comment's text with its marker's blob set to `0`.
        *
        * @example "…okf check resolved this thread…"
@@ -86,18 +35,10 @@ export type ReviewAction =
        */
       kind: "resolve";
 
-      /**
-       * The record the thread is on.
-       *
-       * @example "docs/a.md"
-       */
+      /** The record the thread is on. @example "docs/a.md" */
       path: string;
 
-      /**
-       * The thread's GraphQL node ID.
-       *
-       * @example "PRRT_kwDO…"
-       */
+      /** The thread's GraphQL node ID. @example "PRRT_kwDO…" */
       threadId: string;
     }
   | {
@@ -114,6 +55,37 @@ export type ReviewAction =
        * @example "annotate"
        */
       kind: "annotate";
+    }
+  | {
+      /** The comment's new text. @example "**T001 draft** (info) …" */
+      body: string;
+
+      /** The comment to edit. @example 2_400_000_001 */
+      commentId: number;
+
+      /**
+       * The draft it posts.
+       *
+       * @example `{ code: "T001", path: "docs/a.md", … }`
+       */
+      finding: CheckFinding;
+
+      /** Edit a comment of an earlier run. @example "update" */
+      kind: "update";
+    }
+  | {
+      /** The comment's text. @example "**T001 draft** (info) …" */
+      body: string;
+
+      /**
+       * The draft it posts.
+       *
+       * @example `{ code: "T001", path: "docs/a.md", … }`
+       */
+      finding: CheckFinding;
+
+      /** Post a new comment. @example "create" */
+      kind: "create";
     };
 
 /** A review thread an earlier run started, read back by its marker. */
@@ -125,46 +97,22 @@ export type ReviewThread = {
    */
   blob: string;
 
-  /**
-   * The finding's code its marker names.
-   *
-   * @example "T001"
-   */
+  /** The finding's code its marker names. @example "T001" */
   code: string;
 
-  /**
-   * Its first comment's text.
-   *
-   * @example "**T001 draft** (info) …"
-   */
+  /** Its first comment's text. @example "**T001 draft** (info) …" */
   commentBody: string;
 
-  /**
-   * Its first comment's REST ID.
-   *
-   * @example 2_400_000_001
-   */
+  /** Its first comment's REST ID. @example 2_400_000_001 */
   commentId: number;
 
-  /**
-   * Its GraphQL node ID.
-   *
-   * @example "PRRT_kwDO…"
-   */
+  /** Its GraphQL node ID. @example "PRRT_kwDO…" */
   id: string;
 
-  /**
-   * Whether someone resolved it.
-   *
-   * @example false
-   */
+  /** Whether someone resolved it. @example false */
   isResolved: boolean;
 
-  /**
-   * The record its marker names.
-   *
-   * @example "docs/a.md"
-   */
+  /** The record its marker names. @example "docs/a.md" */
   path: string;
 };
 
@@ -234,8 +182,8 @@ export function planReviewComments(params: {
   threads: readonly ReviewThread[];
 }): ReviewAction[] {
   const { drafts, files, threads } = params;
-  const kept = new Set<string>();
   const actions: ReviewAction[] = [];
+  const kept = new Set<string>();
 
   for (const finding of drafts) {
     const blob = files.get(finding.path);
@@ -301,9 +249,9 @@ export function readReviewThread(node: unknown): ReviewThread | undefined {
   );
   const body = readPath({ keys: ["body"], value: comment });
   const commentId = readPath({ keys: ["databaseId"], value: comment });
-  const login = readPath({ keys: ["author", "login"], value: comment });
   const id = readPath({ keys: ["id"], value: node });
   const isResolved = readPath({ keys: ["isResolved"], value: node });
+  const login = readPath({ keys: ["author", "login"], value: comment });
   const groups =
     typeof body === "string" ? MARKER.exec(body)?.groups : undefined;
   const path =
@@ -356,19 +304,15 @@ export function wordComment(params: {
    */
   blob: string;
 
-  /**
-   * The draft's finding.
-   *
-   * @example `{ code: "T001", path: "docs/a.md", … }`
-   */
+  /** The draft's finding. @example `{ code: "T001", path: "docs/a.md", … }` */
   finding: CheckFinding;
 }): string {
   const { blob, finding } = params;
   const [summary = "", ...rest] = finding.message
     .split("; ")
     .map((clause) => toSentence(formatClause(clause)));
-  const settle = rest.at(-1);
   const details = rest.slice(0, -1);
+  const settle = rest.at(-1);
 
   return [
     `**${SEVERITY_EMOJIS[finding.severity]} \`${finding.code}\` ${finding.rule}** · ${finding.severity}`,

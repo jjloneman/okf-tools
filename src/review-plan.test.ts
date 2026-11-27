@@ -41,10 +41,19 @@ function thread(params: Partial<ReviewThread>): ReviewThread {
 
 /** A review thread node, as GitHub's GraphQL API answers with it. */
 function threadNode(params: {
+  /** The blob its marker names. @example "aaaa1111" */
   blob?: string;
+
+  /** Its first comment's text, when not the draft's. @example "x" */
   body?: string;
+
+  /** Its node ID. @example "T2" */
   id?: string;
+
+  /** Whether it's resolved. @example true */
   isResolved?: boolean;
+
+  /** Who made its first comment. @example "github-actions" */
   login?: string;
 }): unknown {
   const {

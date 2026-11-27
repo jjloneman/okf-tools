@@ -27,7 +27,7 @@ sources:
     resource: ../../src/house-rules.ts
     title: src/house-rules.ts, the opt-in house rules
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:55:27Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }
 ---
 

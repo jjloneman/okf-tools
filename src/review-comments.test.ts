@@ -14,51 +14,28 @@ import { wordComment } from "./review-plan.ts";
 /** How the fake answers one request: a status and a body, or a throw. */
 type FakeAnswer =
   | {
-      /**
-       * The body, as JSON unless a string.
-       *
-       * @example `{ data: {} }`
-       */
+      /** The body, as JSON unless a string. @example `{ data: {} }` */
       body?: unknown;
 
-      /**
-       * The HTTP status.
-       *
-       * @example 200
-       */
+      /** The HTTP status. @example 200 */
       status?: number;
     }
   | Error;
 
 /** One request the fake `fetch` received. */
 type FakeRequest = {
-  /**
-   * Its JSON body, parsed.
-   *
-   * @example `{ body: "…" }`
-   */
+  /** Its JSON body, parsed. @example `{ body: "…" }` */
   body: unknown;
 
-  /**
-   * Its method.
-   *
-   * @example "POST"
-   */
+  /** Its method. @example "POST" */
   method: string;
 
-  /**
-   * Its URL.
-   *
-   * @example "https://api.github.com/graphql"
-   */
+  /** Its URL. @example "https://api.github.com/graphql" */
   url: string;
 };
 
-/** The pull request the fabricated event is for. */
+/** GitHub's REST API root. */
 const API = "https://api.github.com";
-
-/** The REST path of the fabricated pull request's comments. */
-const PULLS = `${API}/repos/acme/kb/pulls`;
 
 /** A blob the fabricated record holds at the head. */
 const BLOB = "aaaa1111";
@@ -74,15 +51,21 @@ const DRAFT: CheckFinding = {
   severity: "info",
 };
 
-let folder: string;
+/** The pull request's answer, its head where the event says. */
+const HEAD: FakeAnswer = { body: { head: { sha: "head1" } } };
+
+/** The REST path of the fabricated pull request's comments and files. */
+const PULLS = `${API}/repos/acme/kb/pulls`;
+
 let data: string[];
 let errors: string[];
+let folder: string;
 let infos: string[];
 
 beforeEach(() => {
-  folder = mkdtempSync(path.join(tmpdir(), "okf-review-"));
   data = [];
   errors = [];
+  folder = mkdtempSync(path.join(tmpdir(), "okf-review-"));
   infos = [];
 });
 
@@ -95,9 +78,16 @@ afterEach(() => {
  * request in turn from the list, and return the requests.
  */
 async function runAgainst(params: {
+  /** GitHub's answers, in the order it gets the requests. @example `[HEAD]` */
   answers: FakeAnswer[];
+
+  /** What the drafts file holds. @example `[DRAFT]` */
   drafts?: unknown;
+
+  /** The job's environment, over a token and repo. @example `{}` */
   env?: Record<string, string | undefined>;
+
+  /** The event the run is for. @example `{ push: {} }` */
   event?: unknown;
 }): Promise<{ code: number; requests: FakeRequest[] }> {
   const {
@@ -107,8 +97,8 @@ async function runAgainst(params: {
   } = params;
   const draftsFile = path.join(folder, "drafts.json");
   const eventFile = path.join(folder, "event.json");
-  const requests: FakeRequest[] = [];
   const queue = [...answers];
+  const requests: FakeRequest[] = [];
 
   writeFileSync(draftsFile, JSON.stringify(drafts));
   writeFileSync(eventFile, JSON.stringify(event));
@@ -159,15 +149,21 @@ async function runAgainst(params: {
   return { code, requests };
 }
 
-/** The pull request's answer, its head where the event says. */
-const HEAD: FakeAnswer = { body: { head: { sha: "head1" } } };
-
 /** A review thread node, as GitHub's GraphQL API answers with it. */
 function threadNode(params: {
+  /** The blob its marker names. @example "aaaa1111" */
   blob?: string;
+
+  /** Its first comment's text, when not the draft's. @example "x" */
   body?: string;
+
+  /** Its node ID. @example "T2" */
   id?: string;
+
+  /** Whether it's resolved. @example true */
   isResolved?: boolean;
+
+  /** Who made its first comment. @example "github-actions" */
   login?: string;
 }): unknown {
   const {
@@ -187,7 +183,10 @@ function threadNode(params: {
 
 /** A GraphQL answer holding one page of review threads. */
 function threadsPage(params: {
+  /** The next page's cursor, when there is one. @example "c1" */
   cursor?: string;
+
+  /** The page's thread nodes. @example `[threadNode({})]` */
   nodes: unknown[];
 }): FakeAnswer {
   return {

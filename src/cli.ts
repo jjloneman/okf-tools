@@ -633,8 +633,13 @@ function runNewCommand(params: {
  * the job's environment and `fetch`.
  */
 async function runReviewCommentsCommand(params: {
+  /** The arguments after `review-comments`. @example `["drafts.json"]` */
   args: readonly string[];
+
+  /** Where it was run, which the file is relative to. @example "/repo" */
   cwd: string;
+
+  /** Where it prints. @example `createOutput("okf")` */
   output: Output;
 }): Promise<ExitCode> {
   const { args, cwd, output } = params;

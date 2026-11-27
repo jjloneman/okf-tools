@@ -19,18 +19,10 @@ export function readArray(value: unknown): unknown[] {
 
 /** Read a nested field of parsed JSON, or nothing when a step is missing. */
 export function readPath(params: {
-  /**
-   * The keys to follow, outermost first.
-   *
-   * @example `["head", "sha"]`
-   */
+  /** The keys to follow, outermost first. @example `["head", "sha"]` */
   keys: readonly string[];
 
-  /**
-   * The parsed JSON to read from.
-   *
-   * @example `{ head: { sha: "4c2a9f0" } }`
-   */
+  /** The parsed JSON to read from. @example `{ head: { sha: "4c2a9f0" } }` */
   value: unknown;
 }): unknown {
   return params.keys.reduce<unknown>(

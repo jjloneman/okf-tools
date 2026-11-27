@@ -39,7 +39,7 @@ sources:
     resource: ../../src/git.ts
     title: src/git.ts, every git call
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:55:27Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 

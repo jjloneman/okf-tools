@@ -28,6 +28,20 @@ import { readPath } from "./json.ts";
 import { describeError, toTerminalLine } from "./output.ts";
 import { planReviewComments, readReviewThread } from "./review-plan.ts";
 
+/** How the summary words each kind of action, in the order it lists them. */
+const ACTION_VERBS: readonly {
+  /** The kind of action. @example "create" */
+  kind: ReviewAction["kind"];
+
+  /** What the summary says was done. @example "posted" */
+  verb: string;
+}[] = [
+  { kind: "create", verb: "posted" },
+  { kind: "update", verb: "edited" },
+  { kind: "resolve", verb: "resolved" },
+  { kind: "annotate", verb: "annotated" },
+];
+
 /** The severities a drafts file may name. */
 const SEVERITIES: readonly CheckSeverity[] = ["error", "info", "warning"];
 
@@ -50,18 +64,10 @@ export async function runReviewComments(params: {
    */
   env: Readonly<Record<string, string | undefined>>;
 
-  /**
-   * The `fetch` to call GitHub with.
-   *
-   * @example `globalThis.fetch`
-   */
+  /** The `fetch` to call GitHub with. @example `globalThis.fetch` */
   fetch: Fetch;
 
-  /**
-   * Where the run prints.
-   *
-   * @example `createOutput("okf")`
-   */
+  /** Where the run prints. @example `createOutput("okf")` */
   output: Output;
 }): Promise<ExitCode> {
   const { draftsFile, env, fetch, output } = params;
@@ -129,17 +135,24 @@ export async function runReviewComments(params: {
     await applyAction({ action, client, output });
   }
 
-  output.info(
-    `${countActions({ actions, kind: "create" })} posted, ${countActions({ actions, kind: "update" })} edited, ${countActions({ actions, kind: "resolve" })} resolved, ${countActions({ actions, kind: "annotate" })} annotated.`
+  const counts = ACTION_VERBS.map(
+    ({ kind, verb }) => `${countActions({ actions, kind })} ${verb}`
   );
+
+  output.info(`${counts.join(", ")}.`);
 
   return EXIT_CODES.ok;
 }
 
 /** Carry out one action, annotating the draft when GitHub refuses it. */
 async function applyAction(params: {
+  /** What to do. @example `{ finding, kind: "annotate" }` */
   action: ReviewAction;
+
+  /** The pull request's client. @example `createGitHubClient(target)` */
   client: GitHubClient;
+
+  /** Where the run prints. @example `createOutput("okf")` */
   output: Output;
 }): Promise<void> {
   const { action, client, output } = params;
@@ -188,7 +201,10 @@ async function applyAction(params: {
 
 /** Count the actions of one kind. */
 function countActions(params: {
+  /** The run's actions. @example `[{ finding, kind: "annotate" }]` */
   actions: readonly ReviewAction[];
+
+  /** The kind to count. @example "create" */
   kind: ReviewAction["kind"];
 }): number {
   return params.actions.filter(({ kind }) => kind === params.kind).length;
@@ -244,7 +260,10 @@ function readFinding(value: unknown): CheckFinding | undefined {
  * request the run is for from its event.
  */
 function readGitHubTarget(params: {
+  /** The job's environment. @example `process.env` */
   env: Readonly<Record<string, string | undefined>>;
+
+  /** The `fetch` to call GitHub with. @example `globalThis.fetch` */
   fetch: Fetch;
 }): Outcome<GitHubTarget> {
   const { env, fetch } = params;
@@ -270,11 +289,11 @@ function readGitHubTarget(params: {
     };
   }
 
-  const number = readPath({ keys: ["pull_request", "number"], value: event });
   const commitId = readPath({
     keys: ["pull_request", "head", "sha"],
     value: event,
   });
+  const number = readPath({ keys: ["pull_request", "number"], value: event });
 
   return typeof number === "number" && typeof commitId === "string"
     ? {

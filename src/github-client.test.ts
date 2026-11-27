@@ -14,22 +14,14 @@ type FakeAnswer =
        */
       body?: unknown;
 
-      /**
-       * The HTTP status.
-       *
-       * @example 404
-       */
+      /** The HTTP status. @example 404 */
       status?: number;
     }
   | Error;
 
 /** One request the fake `fetch` received. */
 type FakeRequest = {
-  /**
-   * Its JSON body, parsed, or nothing for a `GET`.
-   *
-   * @example `{ body: "…" }`
-   */
+  /** Its JSON body, parsed, or nothing for a `GET`. @example `{ body: "…" }` */
   body: unknown;
 
   /**
