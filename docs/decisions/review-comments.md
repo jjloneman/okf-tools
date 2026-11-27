@@ -33,9 +33,9 @@ sources:
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
-verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
+verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
 # How okf-check.yml posts drafts as review comments
