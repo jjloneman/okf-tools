@@ -16,8 +16,8 @@ sources:
   - id: ci-workflow
     resource: ../../.github/workflows/ci.yml
     title: .github/workflows/ci.yml, the CI workflow
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:31:16Z }
 verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
 ---
 

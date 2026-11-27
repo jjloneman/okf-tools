@@ -32,8 +32,8 @@ sources:
   - id: config
     resource: ../../src/config.ts
     title: src/config.ts, which reads the okf block of package.json
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:31:16Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
 ---
 
