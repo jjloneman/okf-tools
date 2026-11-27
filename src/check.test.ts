@@ -519,13 +519,15 @@ describe("runCheck", () => {
   test("names the cited source a branch changed under a re-stamped draft", () => {
     // Given - a signed-off record on main citing two files, and a branch
     // that changes one and re-stamps the record, leaving its text as it was
-    const signed = (lines: readonly string[]): string =>
-      record([
+    /** The record, signed off, citing both files. */
+    function signed(lines: readonly string[]): string {
+      return record([
         "type: Decision",
         ...lines,
         `verified: { by: ${VERIFIED_BY}, at: 2026-10-02T13:30:00Z }`,
         "sources: [{ resource: ../src/a.ts }, { resource: ../src/b.ts }]",
       ]);
+    }
 
     repo.write("kb/index.md", ROOT_INDEX);
     repo.write("src/a.ts", "a\n");

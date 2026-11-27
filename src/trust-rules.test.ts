@@ -243,20 +243,25 @@ describe("T001 draft", () => {
         ]);
       }
 
-      /** A commit, `base` on the base branch and the others on this one. */
-      function commitTo(hash: string): FileChange {
-        return { at: 1_790_000_000, commit: { hash, shortHash: hash } };
+      /**
+       * A commit after the sign-off, `base` on the base branch and the
+       * others on this one, or at `at`.
+       */
+      function commitTo(hash: string, at = 1_800_000_000): FileChange {
+        return { at, commit: { hash, shortHash: hash } };
       }
 
       /**
        * The changes to each path from the repo root: `src/a.ts` and
-       * `src/d.ts` in a branch commit, `src/b.ts` uncommitted, and
-       * `src/old.ts` on the base only.
+       * `src/d.ts` in a branch commit, `src/b.ts` uncommitted, `src/e.ts`
+       * in a branch commit before the sign-off, and `src/old.ts` on the base
+       * only.
        */
       const CHANGES = new Map<string, readonly FileChange[]>([
         ["src/a.ts", [commitTo("branch"), commitTo("base")]],
-        ["src/b.ts", [{ at: 1_790_000_000, commit: undefined }]],
+        ["src/b.ts", [{ at: 1_700_000_000, commit: undefined }]],
         ["src/d.ts", [commitTo("other")]],
+        ["src/e.ts", [commitTo("early", 1_790_000_000)]],
         ["src/old.ts", [commitTo("base")]],
       ]);
 
@@ -269,7 +274,7 @@ describe("T001 draft", () => {
         {
           description: "two cited sources changed, one uncommitted",
           expected: `${same} its sources ../src/b.ts and ../src/a.ts changed on this branch, so check the record still holds against them; okf verify signs it off again`,
-          resources: ["../src/b.ts", "../src/a.ts", "../src/b.ts"],
+          resources: ["../src/b.ts", "../src/a.ts", "../src/b.ts#L5"],
         },
         {
           description: "three cited sources changed",
@@ -277,9 +282,10 @@ describe("T001 draft", () => {
           resources: ["../src/a.ts", "../src/b.ts", "../src/d.ts"],
         },
         {
-          description: "no cited source changed on the branch",
+          description:
+            "no cited source changed on the branch since the sign-off",
           expected: `${same} only its frontmatter differs; okf verify signs it off again`,
-          resources: ["../src/old.ts", "../src/c.ts"],
+          resources: ["../src/old.ts", "../src/c.ts", "../src/e.ts"],
         },
       ])("names them when $description", ({ expected, resources }) => {
         // Given - the record as the base held it, signed off
@@ -288,7 +294,8 @@ describe("T001 draft", () => {
           .replace("status: draft", "status: stable")
           .replace("2026-10-03T15:00:00Z", "2026-10-01T15:00:00Z");
 
-        // When/Then - the sources the branch changed, each named once
+        // When/Then - the files the branch changed since the sign-off, each
+        // named once
         expect(
           findHits({
             baseText,

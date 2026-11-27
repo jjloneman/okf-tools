@@ -11,7 +11,12 @@
  *   the last change is, so a later spec that moves it to a new key changes
  *   one function.
  */
-import type { CheckedFile, CheckRule, RuleHit } from "./check-engine.ts";
+import type {
+  CheckedFile,
+  CheckRule,
+  FileChange,
+  RuleHit,
+} from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
 import type { ParsedFile } from "./spec-rules.ts";
 
@@ -168,7 +173,7 @@ function checkDraft(file: CheckedFile): RuleHit[] {
         message:
           last === undefined || !isOutdated
             ? "the record is a draft, so no one has signed it off as settled; okf verify signs it off"
-            : `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${describeTextChange(parsed)}; okf verify signs it off again`,
+            : `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${describeTextChange({ parsed, signedAt: Math.floor(readTime(last.at).toSeconds()) })}; okf verify signs it off again`,
       },
     ];
   });
@@ -297,8 +302,25 @@ function checkVerifiedDraft(file: CheckedFile): RuleHit[] {
  * - When only its frontmatter differs, it names the cited sources the
  *   branch changed, as the likely reason for the re-stamp, without saying
  *   they caused it, since a re-stamp's commit doesn't say why it was made.
+ *
+ * - A commit counts only when it's later than the latest sign-off, which
+ *   already saw the ones before it; a rebase, which resets every committer
+ *   time, can name one again.
+ *
+ * - Each file is named once, by its first `resource`.
  */
-function describeTextChange(parsed: ParsedFile): string {
+function describeTextChange(params: {
+  /** The draft. @example `readParsed(file)` */
+  parsed: ParsedFile;
+
+  /**
+   * When the latest sign-off was made, in whole seconds since the epoch.
+   *
+   * @example 1790000000
+   */
+  signedAt: number;
+}): string {
+  const { parsed, signedAt } = params;
   const { file } = parsed;
   const { baseText } = file;
 
@@ -310,13 +332,18 @@ function describeTextChange(parsed: ParsedFile): string {
     return "; its text changed since the base branch";
   }
 
-  const changed = [
-    ...new Set(
-      readCitedSources(parsed)
-        .filter(({ path }) => file.readChanges(path).some(file.isOnBranch))
-        .map(({ resource }) => resource)
-    ),
-  ];
+  const isUnsigned = (change: FileChange): boolean =>
+    file.isOnBranch(change) &&
+    (change.commit === undefined || change.at > signedAt);
+  const cited = readCitedSources(parsed).filter(({ path }) =>
+    file.readChanges(path).some(isUnsigned)
+  );
+  const changed = cited
+    .filter(
+      ({ path }, index) =>
+        cited.findIndex((source) => source.path === path) === index
+    )
+    .map(({ resource }) => resource);
   const same = "; its text is the same as on the base branch, and";
 
   if (changed.length === 0) {
