@@ -16,7 +16,7 @@
  */
 import { DateTime } from "luxon";
 import path from "node:path";
-import { isSeq } from "yaml";
+import { type Document, isSeq } from "yaml";
 
 import type {
   CheckedFile,
@@ -84,6 +84,27 @@ export const SOURCE_RULES: readonly CheckRule[] = [
 ];
 
 /**
+ * Read a parsed frontmatter's `generated` and `verified` as `readStamp`
+ * does, for a record already parsed, or `undefined` when its aliases can't
+ * be expanded.
+ */
+export function readDocStamp(doc: Document.Parsed): string | undefined {
+  try {
+    const data: unknown = doc.toJS();
+    const fields = new Map(
+      typeof data === "object" && data !== null ? Object.entries(data) : []
+    );
+
+    return JSON.stringify(
+      [fields.get("generated"), fields.get("verified")],
+      sortKeys
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Read the paths in the repo a record's `sources` cite, each once, or none
  * for a file that isn't a concept.
  */
@@ -116,23 +137,7 @@ export function readStamp(text: string | undefined): string | undefined {
 
   const doc = parseFrontmatter(block.text);
 
-  if (doc.errors.length > 0) {
-    return undefined;
-  }
-
-  try {
-    const data: unknown = doc.toJS();
-    const fields = new Map(
-      typeof data === "object" && data !== null ? Object.entries(data) : []
-    );
-
-    return JSON.stringify(
-      [fields.get("generated"), fields.get("verified")],
-      sortKeys
-    );
-  } catch {
-    return undefined;
-  }
+  return doc.errors.length > 0 ? undefined : readDocStamp(doc);
 }
 
 /**
@@ -146,11 +151,12 @@ export function readStamp(text: string | undefined): string | undefined {
  *   was made, and an edit that didn't re-stamp, such as to `tags` alone or
  *   an `okf format`, doesn't hide one.
  *
- * - While the record's `generated` or `verified` differs from `HEAD`'s, as
- *   an uncommitted re-stamp `okf touch` made, a commit counts only when it's
- *   also later than the later of `generated.at` and the latest sign-off,
- *   since git can't say what an uncommitted re-stamp saw; a record no commit
- *   re-stamped or signed off is judged by that time alone.
+ * - While the record has an uncommitted re-stamp or sign-off, as `okf touch`
+ *   makes, judged against `HEAD` as a commit is against its parents, a
+ *   commit counts only when it's also later than the later of
+ *   `generated.at` and the latest sign-off, since git can't say what an
+ *   uncommitted re-stamp saw; a record no commit re-stamped or signed off is
+ *   judged by that time alone.
  *
  * - Uncommitted changes count unless the record has an uncommitted re-stamp
  *   or sign-off too; an uncommitted edit that changes neither, such as an

@@ -67,7 +67,12 @@ import {
   matchExcluded,
   readRecordText,
 } from "./repo.ts";
-import { readSourcePaths, readStamp, SOURCE_RULES } from "./source-rules.ts";
+import {
+  readDocStamp,
+  readSourcePaths,
+  readStamp,
+  SOURCE_RULES,
+} from "./source-rules.ts";
 import { SPEC_RULES } from "./spec-rules.ts";
 import { buildTrustRules } from "./trust-rules.ts";
 
@@ -242,7 +247,7 @@ export function runCheck(params: {
      *   counts to `T007` as the record having seen its sources.
      *
      * - Nor does it before it's committed, since `T007` falls back to the clock
-     *   only while a record's `generated` or `verified` differs from `HEAD`'s.
+     *   only while a record has an uncommitted re-stamp or sign-off.
      */
     const fixed = applyFixes({
       bundles,
@@ -376,6 +381,38 @@ function isInsideOnDisk(params: {
   return relative !== ".." && !relative.startsWith(`..${path.sep}`);
 }
 
+/**
+ * Say whether a version of a record re-stamped or signed it off: its
+ * `generated` and `verified` can be read, and differ from those of every
+ * version it follows that held the record, each of which can be read too.
+ */
+function isRestamp(params: {
+  /**
+   * The text of each version it follows, a commit's parents or the working
+   * tree's `HEAD`, or `undefined` for one that didn't hold the record.
+   *
+   * @example `["---\ngenerated: …\n---\n"]`
+   */
+  parentTexts: readonly (string | undefined)[];
+
+  /** Its stamp, by `readStamp`. @example `'[{"at":"…","by":"…"},null]'` */
+  stamp: string | undefined;
+}): boolean {
+  const { parentTexts, stamp } = params;
+
+  return (
+    stamp !== undefined &&
+    parentTexts.every((text) => {
+      const parentStamp = readStamp(text);
+
+      return (
+        text === undefined ||
+        (parentStamp !== undefined && parentStamp !== stamp)
+      );
+    })
+  );
+}
+
 /** Whether a finding is a draft's, which `okf review-comments` posts. */
 function isReviewDraft(finding: CheckFinding): boolean {
   return finding.code === "T001";
@@ -428,10 +465,10 @@ function listCitingKeys(params: {
  *   rules skip them.
  *
  * - A record with uncommitted changes counts as re-stamped in the working
- *   tree when its `generated` or `verified` there differs from `HEAD`'s,
- *   read in the same batch, or can't be read, as the source rules judged
- *   any uncommitted record before #151; one no commit holds yet always
- *   does, and a clean one never does, so its `HEAD` isn't read.
+ *   tree by the same test, against the newest commit that changed it, which
+ *   holds it as `HEAD` does: its `generated` and `verified` there can be
+ *   read and differ from that commit's, or no commit holds it yet; a clean
+ *   one never does.
  *
  * @returns the commits, by the record's path from the repo root, the records
  *   re-stamped in the working tree, and why git couldn't say, for each
@@ -470,8 +507,8 @@ function listStampCommits(params: {
   failures: string[];
 
   /**
-   * The records whose `generated` or `verified` in the working tree differs
-   * from `HEAD`'s, by path from the repo root.
+   * The records re-stamped or signed off in the working tree, by path from
+   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
    *
    * @example `new Set(["kb/a.md"])`
    */
@@ -513,14 +550,11 @@ function listStampCommits(params: {
       },
     ];
   });
-
-  // `HEAD` holds a record only when some commit does.
-  const names = records.flatMap(({ filePath, isDirty, own }) => [
-    ...(isDirty && own.length > 0 ? [`HEAD:${filePath}`] : []),
-    ...own.flatMap(({ hash, parents }) =>
+  const names = records.flatMap(({ filePath, own }) =>
+    own.flatMap(({ hash, parents }) =>
       [hash, ...parents].map((commit) => `${commit}:${filePath}`)
-    ),
-  ]);
+    )
+  );
   const read =
     names.length === 0
       ? { isOk: true as const, value: new Map<string, string | undefined>() }
@@ -545,37 +579,38 @@ function listStampCommits(params: {
   const texts = read.value;
 
   for (const { file, filePath, isDirty, own } of records) {
-    if (isDirty) {
-      const stamp = readStamp(file.text);
+    const [newest] = own;
 
-      if (
-        stamp === undefined ||
-        stamp !== readStamp(texts.get(`HEAD:${filePath}`))
-      ) {
-        restamped.add(filePath);
-      }
+    // The newest commit to change the record holds it as `HEAD` does.
+    if (
+      isDirty &&
+      isRestamp({
+        parentTexts: [
+          newest === undefined
+            ? undefined
+            : texts.get(`${newest.hash}:${filePath}`),
+        ],
+        stamp:
+          file.frontmatter.kind === "parsed"
+            ? readDocStamp(file.frontmatter.doc)
+            : readStamp(file.text),
+      })
+    ) {
+      restamped.add(filePath);
     }
 
     stamps.set(
       filePath,
       new Set(
         own
-          .filter(({ hash, parents }) => {
-            const stamp = readStamp(texts.get(`${hash}:${filePath}`));
-
-            return (
-              stamp !== undefined &&
-              parents.every((parent) => {
-                const text = texts.get(`${parent}:${filePath}`);
-                const parentStamp = readStamp(text);
-
-                return (
-                  text === undefined ||
-                  (parentStamp !== undefined && parentStamp !== stamp)
-                );
-              })
-            );
-          })
+          .filter(({ hash, parents }) =>
+            isRestamp({
+              parentTexts: parents.map((parent) =>
+                texts.get(`${parent}:${filePath}`)
+              ),
+              stamp: readStamp(texts.get(`${hash}:${filePath}`)),
+            })
+          )
           .map(({ hash }) => hash)
       )
     );
@@ -629,8 +664,8 @@ function listUnseenCommits(params: {
   repoRoot: string;
 
   /**
-   * The records whose `generated` or `verified` in the working tree differs
-   * from `HEAD`'s, by path from the repo root.
+   * The records re-stamped or signed off in the working tree, by path from
+   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
    *
    * @example `new Set(["kb/a.md"])`
    */
