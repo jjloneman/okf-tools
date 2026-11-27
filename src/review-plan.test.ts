@@ -12,6 +12,9 @@ import {
 /** A blob the fabricated record holds at the head. */
 const BLOB = "aaaa1111";
 
+/** The head commit the fabricated run checked. */
+const HEAD = "e8da3644c0b1";
+
 /** A draft finding on the fabricated record. */
 const DRAFT: CheckFinding = {
   code: "T001",
@@ -74,46 +77,60 @@ function threadNode(params: {
 describe("wordComment", () => {
   const SPEC =
     "https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md";
+  const TRUST = "https://github.com/jjloneman/okf-tools#-trust-rules";
 
-  test("leads with the code, then the summary, then what to do", () => {
+  test("lays a draft out in an alert, with its two steps", () => {
     // When - wording a draft
     const body = wordComment({ blob: BLOB, finding: DRAFT });
 
-    // Then - code set as code, the section linked, and the marker last
+    // Then - an important alert, the code linked, and the marker after it
     expect(body.split("\n")).toStrictEqual([
-      "**📝 `T001` draft** · info",
-      "",
-      `The record is a draft, and \`human:a\`'s sign-off at \`2026-10-02T15:00:00Z\` no longer counts, since \`generated.at\` is later ([§5.3](${SPEC})).`,
-      "",
-      "**What to do:**",
-      "",
-      "- **Sign it off:** `okf verify` signs it off again.",
-      "- **Resolve this thread** to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
+      "> [!IMPORTANT]",
+      `> **[\`T001\`](${TRUST}) draft** · info`,
+      ">",
+      `> The record is a draft, and \`human:a\`'s sign-off at \`2026-10-02T15:00:00Z\` no longer counts, since \`generated.at\` is later ([§5.3](${SPEC})).`,
+      ">",
+      "> **What to do**, one or the other:",
+      ">",
+      "> - **Sign it off:** `okf verify` signs it off again, and the next run resolves this thread.",
+      "> - **Or merge it as a draft:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
       "",
       "<!-- okf-check: kb%2Fa.md T001 aaaa1111 -->",
     ]);
   });
 
-  test("lists the clauses between the summary and what to do", () => {
-    // Given - a warning with two clauses in the middle
+  test.each([
+    { alert: "> [!WARNING]", severity: "warning" as const },
+    { alert: "> [!CAUTION]", severity: "error" as const },
+  ])("picks $alert for a $severity", ({ alert, severity }) => {
+    // When/Then - the alert by severity
+    expect(
+      wordComment({ blob: BLOB, finding: { ...DRAFT, severity } }).split(
+        "\n"
+      )[0]
+    ).toBe(alert);
+  });
+
+  test("lists the clauses between the summary and what to do, linking codes", () => {
+    // Given - a draft with two clauses in the middle, one naming a code
     const finding: CheckFinding = {
       ...DRAFT,
+      code: "H002",
       message:
-        "the record is a draft; its text changed since the base branch; generated.by is new; okf verify signs it off",
-      severity: "warning",
+        "the record is a draft; its text changed, as W101 found; generated.by is new; okf verify signs it off",
     };
 
-    // When/Then - each as a bullet, under a warning's emoji
+    // When/Then - each as a bullet, every code linked to its rules
     expect(
-      wordComment({ blob: BLOB, finding }).split("\n").slice(0, 7)
+      wordComment({ blob: BLOB, finding }).split("\n").slice(1, 8)
     ).toStrictEqual([
-      "**⚠️ `T001` draft** · warning",
-      "",
-      "The record is a draft.",
-      "",
-      "- Its text changed since the base branch.",
-      "- `generated.by` is new.",
-      "",
+      "> **[`H002`](https://github.com/jjloneman/okf-tools#-house-rules) draft** · info",
+      ">",
+      "> The record is a draft.",
+      ">",
+      "> - Its text changed, as [`W101`](https://github.com/jjloneman/okf-tools#-rules) found.",
+      "> - `generated.by` is new.",
+      ">",
     ]);
   });
 
@@ -124,12 +141,11 @@ describe("wordComment", () => {
     // When - wording it
     const lines = wordComment({ blob: BLOB, finding }).split("\n");
 
-    // Then - the mention and the comment defused, and only the resolve step
-    expect(lines[2]).toBe("By @\u200Bsomeone &lt;!-- okf-check: x -->.");
-    expect(lines.slice(4, 7)).toStrictEqual([
-      "**What to do:**",
-      "",
-      "- **Resolve this thread** to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
+    // Then - the mention and the comment defused, and only the draft step
+    expect(lines.slice(3, 6)).toStrictEqual([
+      "> By @\u200Bsomeone &lt;!-- okf-check: x -->.",
+      ">",
+      "> **What to do:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
     ]);
   });
 });
@@ -171,7 +187,12 @@ describe("planReviewComments", () => {
   test("posts a draft no thread names", () => {
     // When/Then - a new comment
     expect(
-      planReviewComments({ drafts: [DRAFT], files, threads: [] })
+      planReviewComments({
+        commitId: HEAD,
+        drafts: [DRAFT],
+        files,
+        threads: [],
+      })
     ).toStrictEqual([
       {
         body: wordComment({ blob: BLOB, finding: DRAFT }),
@@ -188,6 +209,7 @@ describe("planReviewComments", () => {
     // When/Then - nothing to do
     expect(
       planReviewComments({
+        commitId: HEAD,
         drafts: [DRAFT],
         files,
         threads: [thread({ isResolved })],
@@ -199,6 +221,7 @@ describe("planReviewComments", () => {
     // When/Then - an edit to the current wording
     expect(
       planReviewComments({
+        commitId: HEAD,
         drafts: [DRAFT],
         files,
         threads: [thread({ commentBody: "old wording" })],
@@ -221,7 +244,12 @@ describe("planReviewComments", () => {
     ];
 
     // When - planning
-    const actions = planReviewComments({ drafts: [DRAFT], files, threads });
+    const actions = planReviewComments({
+      commitId: HEAD,
+      drafts: [DRAFT],
+      files,
+      threads,
+    });
 
     // Then - the newer one edited, the other resolved and released
     expect(actions.map(({ kind }) => kind)).toStrictEqual([
@@ -231,7 +259,7 @@ describe("planReviewComments", () => {
     expect(actions[0]).toMatchObject({ commentId: 8 });
     expect(actions[1]).toMatchObject({
       body: expect.stringMatching(
-        /okf check resolved this thread[\s\S]*<!-- okf-check: kb%2Fa\.md T001 0 -->$/u
+        /^> \[!NOTE\]\n> ↪️ \*\*Superseded\*\* at `e8da364`[\s\S]*<!-- okf-check: kb%2Fa\.md T001 0 -->$/u
       ) as unknown,
       threadId: "T1",
     });
@@ -241,6 +269,7 @@ describe("planReviewComments", () => {
     // When/Then - a new comment
     expect(
       planReviewComments({
+        commitId: HEAD,
         drafts: [DRAFT],
         files,
         threads: [thread({ blob: "bbbb", isResolved: true })],
@@ -252,6 +281,7 @@ describe("planReviewComments", () => {
     // When/Then - an annotation, and no resolve
     expect(
       planReviewComments({
+        commitId: HEAD,
         drafts: [DRAFT],
         files: new Map(),
         threads: [thread({})],
@@ -263,10 +293,40 @@ describe("planReviewComments", () => {
     // When/Then - only the open one resolved
     expect(
       planReviewComments({
+        commitId: HEAD,
         drafts: [],
         files,
         threads: [thread({ id: "T1" }), thread({ id: "T2", isResolved: true })],
       }).map((action) => action.kind === "resolve" && action.threadId)
     ).toStrictEqual(["T1"]);
+  });
+
+  test("words a thread whose draft is gone as resolved, the sign-off struck out", () => {
+    // When - its draft is no longer reported
+    const [action] = planReviewComments({
+      commitId: HEAD,
+      drafts: [],
+      files,
+      threads: [thread({})],
+    });
+
+    // Then - a note on top, then the finding out of its alert
+    expect(action?.kind === "resolve" && action.body.split("\n")).toStrictEqual(
+      [
+        "> [!NOTE]",
+        "> ✅ **Resolved by `okf check`** at `e8da364`: the record is no longer reported as a draft.",
+        "",
+        "**[`T001`](https://github.com/jjloneman/okf-tools#-trust-rules) draft** · info",
+        "",
+        expect.stringMatching(/^The record is a draft/u) as unknown,
+        "",
+        "**What to do**, one or the other:",
+        "",
+        "- ~~**Sign it off:** `okf verify` signs it off again, and the next run resolves this thread.~~",
+        "- **Or merge it as a draft:** resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.",
+        "",
+        "<!-- okf-check: kb%2Fa.md T001 0 -->",
+      ]
+    );
   });
 });

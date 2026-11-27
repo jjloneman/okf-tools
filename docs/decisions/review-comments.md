@@ -33,8 +33,8 @@ sources:
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:05:59Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
@@ -61,10 +61,17 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
   - every other open thread, as when the record was signed off, is resolved, with its marker's blob set to `0`, so if the record comes back as it was, a resolution the owner never made can't stand for theirs;
   - only a marker on a comment by `github-actions` counts, so no one else's comment can stand in for one.
 - **A comment is laid out to be scanned**, as the owner asked in review on PR #147[^review-plan]:
-  - a bold heading with an emoji for the severity, the code as code, and the rule, such as **📝 `T001` draft** · info;
-  - the finding's first clause as a sentence, and each clause after it, up to the last, as a bullet, splitting the message where `okf check` joins its clauses with `; `;
-  - times, actors, the `generated` and `verified` fields, and `okf` commands set as code;
-  - a bold **What to do:** with two steps: **Sign it off**, from the finding's last clause, and **Resolve this thread**.
+  - **It sits in a GitHub alert**, picked by what the reader must do: `IMPORTANT` for a draft at `info`, since its thread blocks the merge until someone acts, `WARNING` for a warning, and `CAUTION` for an error.
+    - **Rejected:** `NOTE` for `info`, which reads as optional; and an emoji in the heading, which the alert's own icon makes redundant.
+  - A bold heading with the code, linked to the README's table of its rules, then the rule and the severity.
+    - The link is to the README on `main`, not the installed version's tag, since a release's README can predate a rule, and a code is never reused.
+    - Any other code the message names is linked the same way.
+  - The finding's first clause as a sentence, and each clause after it, up to the last, as a bullet, splitting the message where `okf check` joins its clauses with `; `.
+  - Times, actors, the `generated` and `verified` fields, and `okf` commands set as code.
+  - **What to do**, worded as one or the other: **Sign it off**, from the finding's last clause, after which the next run resolves the thread, **or merge it as a draft** by resolving the thread.
+  - **A thread `okf check` resolves gets a `NOTE` on top** saying why and at which commit, and the finding below it, out of its alert, since GitHub nests no alert in another and advises against two in a row:
+    - ✅ **Resolved** when its draft is gone, as when the record was signed off, with the sign-off step struck out;
+    - ↪️ **Superseded** when the draft is still reported, as a newer thread for the record's new text replaces it.
   - Since a run edits a comment whose wording changed, a new layout reaches every open and resolved thread on the next run, and a resolved one stays resolved.
 - **The message's own text can't mention anyone or open an HTML comment**, so a record's `verified.by` can't ping someone or forge a marker; a section such as §5.3 links to the pinned spec.
 - **The comments job declares no `permissions`, so it takes the calling job's**, which must grant `contents: write` and `pull-requests: write`, and the workflow drops its workflow-wide `permissions: {}`.

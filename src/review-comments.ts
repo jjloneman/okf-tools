@@ -126,6 +126,7 @@ export async function runReviewComments(params: {
   }
 
   const actions = planReviewComments({
+    commitId: target.value.commitId,
     drafts: drafts.value,
     files: files.value,
     threads: nodes.value.flatMap((node) => readReviewThread(node) ?? []),

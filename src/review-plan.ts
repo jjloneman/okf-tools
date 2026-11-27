@@ -127,12 +127,39 @@ const MARKER =
 /** The logins a comment made with a workflow's `GITHUB_TOKEN` shows. */
 const BOT_LOGINS = new Set(["github-actions", "github-actions[bot]"]);
 
-/** The emoji a comment's heading opens with, by the finding's severity. */
-const SEVERITY_EMOJIS: Record<CheckSeverity, string> = {
-  error: "🛑",
-  info: "📝",
-  warning: "⚠️",
+/**
+ * The GitHub alert a live comment sits in, by the finding's severity.
+ *
+ * - A draft at `info` blocks the merge until someone acts on it, so it's
+ *   `IMPORTANT`, which reads as needed, not `NOTE`, which reads as optional.
+ *
+ * - `NOTE` is kept for a thread `okf check` resolved, so its blue sets it
+ *   apart from every live one.
+ */
+const SEVERITY_ALERTS: Record<CheckSeverity, string> = {
+  error: "CAUTION",
+  info: "IMPORTANT",
+  warning: "WARNING",
 };
+
+/**
+ * Where the README documents each family of codes, by the code's letter:
+ * okf-tools' own trust and house rules, and the spec rules for the rest.
+ *
+ * - It links `main`, not the installed version's tag, since a release's
+ *   README can predate a rule, and a code is never reused, so its anchor
+ *   holds.
+ */
+const RULE_DOCS: Readonly<Record<string, string>> = {
+  H: "https://github.com/jjloneman/okf-tools#-house-rules",
+  T: "https://github.com/jjloneman/okf-tools#-trust-rules",
+};
+
+/** The README section for the spec rules' `E`, `W` and `I` codes. */
+const SPEC_RULE_DOCS = "https://github.com/jjloneman/okf-tools#-rules";
+
+/** A rule code, such as `T001` or `W101`, in a finding's message. */
+const RULE_CODE = /\b[EHITW]\d{3}\b/gu;
 
 /**
  * What a comment sets as code: an RFC 3339 time, an actor before `'s`, a
@@ -160,6 +187,9 @@ const ZERO_WIDTH_SPACE = String.fromCodePoint(0x20_0b);
  *   a comment only on a file in the diff; its thread is left as it is.
  */
 export function planReviewComments(params: {
+  /** The head commit the run checked. @example "e8da3644c0b1" */
+  commitId: string;
+
   /**
    * The drafts' findings, from `okf check --review-file`.
    *
@@ -181,7 +211,7 @@ export function planReviewComments(params: {
    */
   threads: readonly ReviewThread[];
 }): ReviewAction[] {
-  const { drafts, files, threads } = params;
+  const { commitId, drafts, files, threads } = params;
   const actions: ReviewAction[] = [];
   const kept = new Set<string>();
 
@@ -220,11 +250,12 @@ export function planReviewComments(params: {
 
   for (const thread of threads) {
     if (!thread.isResolved && !kept.has(thread.id)) {
+      const isReported = drafts.some(
+        ({ code, path }) => code === thread.code && path === thread.path
+      );
+
       actions.push({
-        body: thread.commentBody.replace(
-          MARKER,
-          `okf check resolved this thread: the record no longer reads as it did here, or is no longer a draft.\n\n<!-- okf-check: ${encodeURIComponent(thread.path)} ${thread.code} 0 -->`
-        ),
+        body: wordRelease({ commitId, isReported, thread }),
         commentId: thread.commentId,
         kind: "resolve",
         path: thread.path,
@@ -284,14 +315,16 @@ export function readReviewThread(node: unknown): ReviewThread | undefined {
 }
 
 /**
- * Word a draft's comment, ending in its marker: a heading with the code, the
- * finding's first clause as its summary, the clauses between as bullets, and
- * what to do, in bold, as the last.
+ * Word a draft's comment, ending in its marker: an alert by severity,
+ * holding a heading with the linked code, the finding's first clause as
+ * its summary, the clauses between as bullets, and the two ways to settle
+ * it.
  *
  * - The finding's message joins its clauses with `; `, and ends with the
  *   command that settles it, as `T001`'s does.
  *
- * - Times, actors, fields, and `okf` commands read as code.
+ * - Times, actors, fields, and `okf` commands read as code, and a rule
+ *   code links to the README's table of its rules.
  *
  * - A record's own text can reach the message, so it can't mention anyone,
  *   open an HTML comment, or forge a marker.
@@ -313,23 +346,38 @@ export function wordComment(params: {
     .map((clause) => toSentence(formatClause(clause)));
   const details = rest.slice(0, -1);
   const settle = rest.at(-1);
-
-  return [
-    `**${SEVERITY_EMOJIS[finding.severity]} \`${finding.code}\` ${finding.rule}** · ${finding.severity}`,
+  const alert = [
+    `[!${SEVERITY_ALERTS[finding.severity]}]`,
+    `**${linkCode(finding.code)} ${finding.rule}** · ${finding.severity}`,
     "",
     summary,
     ...(details.length === 0
       ? []
       : ["", ...details.map((detail) => `- ${detail}`)]),
     "",
-    "**What to do:**",
+    ...(settle === undefined
+      ? [MERGE_AS_DRAFT]
+      : [
+          "**What to do**, one or the other:",
+          "",
+          `- **Sign it off:** ${settle.replace(/\.$/u, "")}, and the next run resolves this thread.`,
+          `- **Or merge it as a draft:** ${MERGE_AS_DRAFT_STEP}`,
+        ]),
+  ];
+
+  return [
+    ...alert.map((line) => (line === "" ? ">" : `> ${line}`)),
     "",
-    ...(settle === undefined ? [] : [`- **Sign it off:** ${settle}`]),
-    "- **Resolve this thread** to acknowledge that the record merges as a draft. It stays resolved until the record changes again.",
-    "",
-    `<!-- okf-check: ${encodeURIComponent(finding.path)} ${finding.code} ${blob} -->`,
+    formatMarker({ blob, code: finding.code, path: finding.path }),
   ].join("\n");
 }
+
+/** How to merge a draft as it is, when it's the only way to settle it. */
+const MERGE_AS_DRAFT_STEP =
+  "resolve this thread yourself to acknowledge it. It stays resolved until the record changes again.";
+
+/** The one step to take when a finding names no command that settles it. */
+const MERGE_AS_DRAFT = `**What to do:** ${MERGE_AS_DRAFT_STEP}`;
 
 /** Decode a marker's path, or nothing when it isn't valid percent-encoding. */
 function decodePath(encoded: string): string | undefined {
@@ -349,10 +397,83 @@ function formatClause(clause: string): string {
     .replaceAll("<", "&lt;")
     .replaceAll("@", `@${ZERO_WIDTH_SPACE}`)
     .replaceAll(CODE_TOKEN, (token) => `\`${token}\``)
+    .replaceAll(RULE_CODE, (code) => linkCode(code))
     .replaceAll(/§(?<section>\d+(?:\.\d+)*)/gu, `[§$<section>](${SPEC_URL})`);
+}
+
+/** Write the marker that ends a comment, for a later run to find it by. */
+function formatMarker(params: {
+  /** The record's blob, or `0` once released. @example "aaaa1111" */
+  blob: string;
+
+  /** The finding's code. @example "T001" */
+  code: string;
+
+  /** The record, from the repo root. @example "docs/a.md" */
+  path: string;
+}): string {
+  const { blob, code, path } = params;
+
+  return `<!-- okf-check: ${encodeURIComponent(path)} ${code} ${blob} -->`;
+}
+
+/** Set a rule code as code, linked to the README's table of its rules. */
+function linkCode(code: string): string {
+  return `[\`${code}\`](${RULE_DOCS[code.charAt(0)] ?? SPEC_RULE_DOCS})`;
 }
 
 /** Make a clause a sentence: a capital first letter and a full stop. */
 function toSentence(clause: string): string {
   return `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.`;
+}
+
+/**
+ * Word a thread `okf check` resolves: a note on top saying why, at which
+ * commit, then the finding as it was, out of its alert, since GitHub nests
+ * no alert in another and advises against two in a row.
+ *
+ * - When the draft is gone, as when it was signed off, the sign-off step
+ *   is struck out, as the one that settled it.
+ *
+ * - When it's still reported, a newer thread for its new text replaces
+ *   this one, so it's superseded.
+ *
+ * - Its marker's blob is set to `0`, so if the record comes back as it was,
+ *   a resolution the owner never made can't stand for theirs.
+ */
+function wordRelease(params: {
+  /** The head commit the run checked. @example "e8da3644c0b1" */
+  commitId: string;
+
+  /** Whether the run still reports the draft. @example false */
+  isReported: boolean;
+
+  /** The thread to resolve. @example `{ code: "T001", path: "a.md", … }` */
+  thread: ReviewThread;
+}): string {
+  const { commitId, isReported, thread } = params;
+  const at = `\`${commitId.slice(0, 7)}\``;
+  const note = isReported
+    ? `↪️ **Superseded** at ${at}: the record changed, so a newer thread replaces this one.`
+    : `✅ **Resolved by \`okf check\`** at ${at}: the record is no longer reported as a draft.`;
+  const finding = thread.commentBody
+    .replace(MARKER, "")
+    .trimEnd()
+    .split("\n")
+    .filter((line) => !/^> \[!\w+\]$/u.test(line))
+    .map((line) => line.replace(/^> ?/u, ""))
+    .map((line) =>
+      !isReported && line.startsWith("- **Sign it off:** ")
+        ? `- ~~${line.slice(2)}~~`
+        : line
+    );
+
+  return [
+    "> [!NOTE]",
+    `> ${note}`,
+    "",
+    ...finding,
+    "",
+    formatMarker({ blob: "0", code: thread.code, path: thread.path }),
+  ].join("\n");
 }
