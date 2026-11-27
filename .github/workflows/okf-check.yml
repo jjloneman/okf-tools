@@ -14,27 +14,38 @@ on:
     inputs:
       bundles:
         default: ""
-        description: Bundle directories to check, one per line; empty reads `okf.bundles` from package.json.
+        description: >-
+          Bundle directories to check, one per line; empty reads `okf.bundles`
+          from package.json.
         required: false
         type: string
       changed:
         default: true
-        description: Report only on the files the branch changed, as `--changed` does.
+        description: >-
+          Report only on the files the branch changed, as `--changed` does.
         required: false
         type: boolean
       node-version:
         default: "lts/*"
-        description: The Node version to run okf on, as actions/setup-node reads it.
+        description: >-
+          The Node version to run okf on, as actions/setup-node reads it.
         required: false
         type: string
       okf-version:
         default: ""
-        description: A version of @jjloneman/okf-tools to run from npm; empty runs the one the repo's own pnpm lockfile installs.
+        description: >-
+          A version of @jjloneman/okf-tools to run from npm; empty runs the one
+          the repo's own pnpm lockfile installs.
         required: false
         type: string
       review-comments:
         default: false
-        description: "On a pull request from the same repo, post each draft record's T001 finding as a review comment the owner resolves, instead of an annotation; the calling job grants `contents: write` and `pull-requests: write`, and okf-tools must be a version with `okf review-comments`."
+        description: >-
+          On a pull request from the same repo, post each draft record's T001
+          finding as a review comment the owner resolves, instead of an
+          annotation; the calling job grants `contents: write` and
+          `pull-requests: write`, and okf-tools must be a version with `okf
+          review-comments`.
         required: false
         type: boolean
       strict:
@@ -87,9 +98,13 @@ jobs:
       #
       # - actions/checkout never sets it, so `okf check` would fall back to
       #   `origin/main`, which is wrong for a PR into any other branch.
-      - if: ${{ github.base_ref != '' || github.event.repository.default_branch != '' }}
+      - if: >-
+          ${{ github.base_ref != '' ||
+          github.event.repository.default_branch != '' }}
         env:
-          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+          BASE_REF: >-
+            ${{ github.base_ref ||
+            github.event.repository.default_branch }}
         shell: bash
         run: git remote set-head origin "$BASE_REF"
 
@@ -105,21 +120,30 @@ jobs:
         env:
           BUNDLES: ${{ inputs.bundles }}
           IS_CHANGED: ${{ inputs.changed }}
-          IS_REVIEW: ${{ inputs.review-comments && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+          IS_REVIEW: >-
+            ${{ inputs.review-comments &&
+            github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name ==
+            github.repository }}
           IS_STRICT: ${{ inputs.strict }}
           OKF_VERSION: ${{ inputs.okf-version }}
         shell: bash
         run: |
+          drafts_file="$RUNNER_TEMP/okf-drafts.json"
           args=(check)
+
           if [[ "$IS_CHANGED" == true ]]; then
             args+=(--changed)
           fi
+
           if [[ "$IS_STRICT" == true ]]; then
             args+=(--strict)
           fi
+
           if [[ "$IS_REVIEW" == true ]]; then
-            args+=(--review-file "$RUNNER_TEMP/okf-drafts.json")
+            args+=(--review-file "$drafts_file")
           fi
+
           while read -r bundle; do
             if [[ -n "$bundle" ]]; then
               args+=(--bundle "$bundle")
@@ -127,20 +151,24 @@ jobs:
           done <<< "$BUNDLES"
 
           status=0
+
           if [[ -n "$OKF_VERSION" ]]; then
-            npm exec --yes --package="@jjloneman/okf-tools@$OKF_VERSION" -- okf "${args[@]}" || status=$?
+            package="@jjloneman/okf-tools@$OKF_VERSION"
+            npm exec --yes --package="$package" -- okf "${args[@]}" \
+              || status=$?
           else
             pnpm okf "${args[@]}" || status=$?
           fi
 
           # Set even when the check fails, so the drafts are still posted.
-          if [[ -f "$RUNNER_TEMP/okf-drafts.json" ]]; then
+          if [[ -f "$drafts_file" ]]; then
             {
               echo "drafts<<OKF_DRAFTS"
-              cat "$RUNNER_TEMP/okf-drafts.json"
+              cat "$drafts_file"
               echo "OKF_DRAFTS"
             } >> "$GITHUB_OUTPUT"
           fi
+
           exit "$status"
 
   # Posts each draft's `T001` as a file-level review comment, which the owner
@@ -184,13 +212,19 @@ jobs:
           OKF_VERSION: ${{ inputs.okf-version }}
         shell: bash
         run: |
-          printf '%s\n' "$DRAFTS" > "$RUNNER_TEMP/okf-drafts.json"
+          drafts_file="$RUNNER_TEMP/okf-drafts.json"
+          printf '%s\n' "$DRAFTS" > "$drafts_file"
+
           if [[ -n "$OKF_VERSION" ]]; then
-            npm exec --yes --package="@jjloneman/okf-tools@$OKF_VERSION" -- okf review-comments "$RUNNER_TEMP/okf-drafts.json"
+            package="@jjloneman/okf-tools@$OKF_VERSION"
+            npm exec --yes --package="$package" -- \
+              okf review-comments "$drafts_file"
           else
-            pnpm okf review-comments "$RUNNER_TEMP/okf-drafts.json"
+            pnpm okf review-comments "$drafts_file"
           fi
     # One run at a time for each pull request, so two never both find no
     # thread for a draft and post it twice.
     concurrency:
-      group: okf-review-comments-${{ github.repository }}-${{ github.event.pull_request.number }}
+      group: >-
+        okf-review-comments-${{ github.repository }}-${{
+        github.event.pull_request.number }}

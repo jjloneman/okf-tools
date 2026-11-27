@@ -187,6 +187,9 @@ export type MigrateOptions = {
   mode: MigrateMode;
 };
 
+/** A command `okf` runs, named by its first argument. */
+export type OkfCommand = (typeof OKF_COMMANDS)[number];
+
 /**
  * What a command's line asked for: help, a run, or nothing valid.
  *
@@ -263,21 +266,7 @@ export type ParsedCommand =
        *
        * @example "verify"
        */
-      kind:
-        | "check"
-        | "deprecate"
-        | "diff"
-        | "format"
-        | "guide"
-        | "index"
-        | "init"
-        | "migrate"
-        | "new"
-        | "review-comments"
-        | "status"
-        | "tags"
-        | "touch"
-        | "verify";
+      kind: OkfCommand;
     }
   | {
       /**
@@ -418,6 +407,27 @@ export type TagsOptions = {
 
 /** The name the verify command is called by: under `okf`, or as its alias. */
 export type VerifyCommand = "okf-verify" | "okf verify";
+
+/** The commands `okf` runs, by the name its first argument gives. */
+export const OKF_COMMANDS = [
+  "check",
+  "deprecate",
+  "diff",
+  "format",
+  "guide",
+  "index",
+  "init",
+  "migrate",
+  "new",
+  "review-comments",
+  "status",
+  "tags",
+  "touch",
+  "verify",
+] as const;
+
+/** The same names, for looking one up. */
+const OKF_COMMAND_NAMES: ReadonlySet<string> = new Set(OKF_COMMANDS);
 
 /** How to call `okf`, printed for `okf --help` and after a usage error. */
 export const OKF_USAGE = `usage: okf <command> [options]
@@ -721,22 +731,28 @@ options:
  */
 export const REVIEW_COMMENTS_USAGE = `usage: okf review-comments <file>
 
-Posts each draft's T001 finding in <file>, which okf check --review-file
-wrote, as a file-level review comment on the pull request a GitHub Actions
-run is for, so the owner can resolve it to acknowledge that the record
-merges as a draft. A hidden marker finds each comment again: a later run
-edits it rather than posting again, a resolved thread stays resolved until
-the record changes again, and an open thread whose draft is gone is
-resolved.
+Posts each draft in <file>, which okf check --review-file wrote, as a
+review comment on the pull request, so the owner can resolve it to
+acknowledge that the record merges as a draft.
 
-It reads GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_PATH, as GitHub
-Actions sets them; the token needs pull-requests: write to post, and
-contents: write to resolve. A draft outside the pull request's diff, a
-comment GitHub refuses, and every draft when the pull request can't be
-read, print as annotations instead.
+- A later run finds its own comment by a hidden marker, and edits it
+  rather than posting again.
+- A resolved thread stays resolved until the record changes again.
+- An open thread whose draft is gone is resolved.
+- These print as annotations instead:
+  - a draft outside the pull request's diff;
+  - a comment GitHub refuses;
+  - every draft, when the pull request can't be read, or a newer push
+    has replaced the one checked.
 
-It exits 1 when <file> can't be read or isn't a list of findings;
-otherwise 0. It needs this version of okf-tools or later in the job.
+It runs in GitHub Actions:
+
+- It reads GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_PATH.
+- The token needs pull-requests: write to post, and contents: write to
+  resolve.
+
+It exits 1 when <file> can't be read or isn't a list of findings, and 0
+otherwise.
 
 options:
   --help, -h  print this help`;
@@ -841,22 +857,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     return { kind: "version" };
   }
 
-  if (
-    name === "check" ||
-    name === "deprecate" ||
-    name === "diff" ||
-    name === "format" ||
-    name === "guide" ||
-    name === "index" ||
-    name === "init" ||
-    name === "migrate" ||
-    name === "new" ||
-    name === "review-comments" ||
-    name === "status" ||
-    name === "tags" ||
-    name === "touch" ||
-    name === "verify"
-  ) {
+  if (name !== undefined && isOkfCommand(name)) {
     return { args: rest, kind: name };
   }
 
@@ -1269,6 +1270,11 @@ function isHelpAsked(args: readonly string[]): boolean {
   });
 
   return values.help === true;
+}
+
+/** Whether a name is one of `okf`'s commands. */
+function isOkfCommand(name: string): name is OkfCommand {
+  return OKF_COMMAND_NAMES.has(name);
 }
 
 /** Whether a `--format` value is one `okf status` prints. */
