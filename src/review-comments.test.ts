@@ -295,6 +295,58 @@ describe("runReviewComments", () => {
     ]);
   });
 
+  test.each([
+    {
+      description: "the job's server, its trailing slash dropped",
+      host: "https://ghe.test",
+      serverUrl: "https://ghe.test/",
+    },
+    {
+      description: "github.com, when it's blank",
+      host: "https://github.com",
+      serverUrl: "",
+    },
+  ])(
+    "links a draft's cited sources into the diff, on $description",
+    async ({ host, serverUrl }) => {
+      // Given - a draft naming a source the pull request changes, beside an
+      // entry that isn't a source
+      const drafts = [
+        {
+          ...DRAFT,
+          message:
+            "the record is a draft; its source ../src/a.ts changed; okf verify signs it off",
+          sources: [{ path: "src/a.ts", resource: "../src/a.ts" }, { path: 1 }],
+        },
+      ];
+      const answers: FakeAnswer[] = [
+        HEAD,
+        threadsPage({ nodes: [] }),
+        {
+          body: [
+            { filename: "kb/a.md", sha: BLOB },
+            { filename: "src/a.ts", sha: "cccc" },
+          ],
+        },
+        { body: { id: 9 } },
+      ];
+
+      // When - running
+      const { requests } = await runAgainst({
+        answers,
+        drafts,
+        env: { GITHUB_SERVER_URL: serverUrl },
+      });
+
+      // Then - the source linked by its path's SHA-256, the other dropped
+      expect(requests[3]?.body).toMatchObject({
+        body: expect.stringContaining(
+          `> - Its source [\`../src/a.ts\`](${host}/acme/kb/pull/5/files#diff-072fc23b941d05af2383888f292b78e406e0e82a4a3f8ee698113dd9bcc79e5f) changed.`
+        ) as unknown,
+      });
+    }
+  );
+
   test("annotates a draft whose comment GitHub refuses", async () => {
     // Given - a refused comment
     const answers: FakeAnswer[] = [

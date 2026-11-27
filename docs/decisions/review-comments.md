@@ -34,8 +34,8 @@ sources:
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
-verified: { by: human:jjloneman, at: 2026-11-27T07:50:01Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T23:14:58Z }
+verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
 ---
 
 # How okf-check.yml posts drafts as review comments
@@ -68,6 +68,13 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
     - Any other code the message names is linked the same way.
   - The finding's first clause as a sentence, and each clause after it, up to the last, as a bullet, splitting the message where `okf check` joins its clauses with `; `.
   - Times, actors, the `generated` and `verified` fields, and `okf` commands set as code.
+  - **Each cited source the finding names links to its file on the Files changed tab**, as the owner asked on PR #162[^review-plan]: set as code, its fence longer than any backtick in it, and linked to `<pull request>/files#diff-<SHA-256 of its path>`, the anchor GitHub gives each file of a pull request's diff, as tried on PR #162 on 2026-11-27.
+    - The finding carries each source's path from the repo root in `sources`, since the message names it as the record wrote it; the comment finds the sources by the phrase `T001` builds with `nameSources`, so a path is never matched inside other text.
+    - A source the pull request doesn't change is set as code with no link, since its anchor isn't on the page.
+    - The pull request's page is built from `GITHUB_SERVER_URL`, a trailing slash dropped, so a GitHub Enterprise host links to itself.
+    - Only the clauses after the summary are searched, since the summary holds the signer's `by`, a record's own text.
+    - A source the pull request renamed, still cited by its old path, gets no link, since GitHub anchors the file by its new path.
+    - **Rejected:** linking in the annotations too, which print as plain text.
   - **What to do**, after the alert, worded as one or the other: **Sign it off**, from the finding's last clause, after which the next run resolves the thread, **or merge it as a draft** by resolving the thread.
     - The alert frames only the finding, as the owner asked on PR #147, so the steps read as the reader's part, not more of the warning.
   - **A thread `okf check` resolves gets a `NOTE` on top** saying why and at which commit, and the finding below it, out of its alert, since GitHub nests no alert in another and advises against two in a row:
@@ -112,6 +119,7 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 ## Links
 
 - [#146](https://github.com/jjloneman/okf-tools/issues/146) — review comments the owner can resolve.
+- [PR #162](https://github.com/jjloneman/okf-tools/pull/162) — where the owner asked for the sources to link to their diffs.
 - [How okf check judges whether a sign-off still holds](trust-rules.md) — what `T001` says.
 
 [^okf-check-yml]: `.github/workflows/okf-check.yml`, the reusable workflow.

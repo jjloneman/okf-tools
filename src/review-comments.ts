@@ -14,7 +14,11 @@
  */
 import { readFileSync } from "node:fs";
 
-import type { CheckFinding, CheckSeverity } from "./check-engine.ts";
+import type {
+  CheckFinding,
+  CheckSeverity,
+  FindingSource,
+} from "./check-engine.ts";
 import type { ExitCode } from "./exit-codes.ts";
 import type { Fetch, GitHubClient, GitHubTarget } from "./github-client.ts";
 import type { Outcome } from "./outcome.ts";
@@ -24,7 +28,7 @@ import type { ReviewAction } from "./review-plan.ts";
 import { formatAnnotation } from "./check.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { createGitHubClient } from "./github-client.ts";
-import { readPath } from "./json.ts";
+import { readArray, readPath } from "./json.ts";
 import { describeError, toTerminalLine } from "./output.ts";
 import { planReviewComments, readReviewThread } from "./review-plan.ts";
 
@@ -41,6 +45,16 @@ const ACTION_VERBS: readonly {
   { kind: "resolve", verb: "resolved" },
   { kind: "annotate", verb: "annotated" },
 ];
+
+/** The pull request a run is for, and how to reach GitHub. */
+type ReviewTarget = {
+  /**
+   * The pull request's page.
+   *
+   * @example "https://github.com/jjloneman/okf-tools/pull/162"
+   */
+  pullUrl: string;
+} & GitHubTarget;
 
 /** The severities a drafts file may name. */
 const SEVERITIES: readonly CheckSeverity[] = ["error", "info", "warning"];
@@ -129,6 +143,7 @@ export async function runReviewComments(params: {
     commitId: target.value.commitId,
     drafts: drafts.value,
     files: files.value,
+    pullUrl: target.value.pullUrl,
     threads: nodes.value.flatMap((node) => readReviewThread(node) ?? []),
   });
 
@@ -245,6 +260,9 @@ function readFinding(value: unknown): CheckFinding | undefined {
   const severity = SEVERITIES.find(
     (known) => known === readPath({ keys: ["severity"], value })
   );
+  const sources = readArray(readPath({ keys: ["sources"], value })).flatMap(
+    readSource
+  );
 
   return typeof code === "string" &&
     (line === null || typeof line === "number") &&
@@ -252,7 +270,15 @@ function readFinding(value: unknown): CheckFinding | undefined {
     typeof path === "string" &&
     typeof rule === "string" &&
     severity !== undefined
-    ? { code, line, message, path, rule, severity }
+    ? {
+        code,
+        line,
+        message,
+        path,
+        rule,
+        severity,
+        ...(sources.length === 0 ? {} : { sources }),
+      }
     : undefined;
 }
 
@@ -266,11 +292,12 @@ function readGitHubTarget(params: {
 
   /** The `fetch` to call GitHub with. @example `globalThis.fetch` */
   fetch: Fetch;
-}): Outcome<GitHubTarget> {
+}): Outcome<ReviewTarget> {
   const { env, fetch } = params;
   const token = env.GITHUB_TOKEN ?? "";
   const [owner = "", repo = ""] = (env.GITHUB_REPOSITORY ?? "").split("/");
   const apiUrl = env.GITHUB_API_URL ?? "https://api.github.com";
+  const serverUrl = (env.GITHUB_SERVER_URL ?? "").replace(/\/+$/u, "");
 
   if (token === "" || owner === "" || repo === "") {
     return {
@@ -305,9 +332,20 @@ function readGitHubTarget(params: {
           fetch,
           number,
           owner,
+          pullUrl: `${serverUrl === "" ? "https://github.com" : serverUrl}/${owner}/${repo}/pull/${String(number)}`,
           repo,
           token,
         },
       }
     : { isOk: false, reason: "The run isn't for a pull request" };
+}
+
+/** Read one source of a finding, or nothing when it isn't one. */
+function readSource(value: unknown): FindingSource[] {
+  const path = readPath({ keys: ["path"], value });
+  const resource = readPath({ keys: ["resource"], value });
+
+  return typeof path === "string" && typeof resource === "string"
+    ? [{ path, resource }]
+    : [];
 }

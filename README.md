@@ -481,7 +481,7 @@ pnpm okf format
 - **It skips what OKF leaves out of a bundle:** files and folders whose names start with `.`, and symlinks that lead out of the bundle; it skips what `okf.exclude` matches too.
 - **It exits `1` on an error, or a file it can't read,** and under `--strict` on a warning too; otherwise `0`.
 - **In GitHub Actions, text findings print as annotations too**, on the files they name, so they show on a pull request's diff; each still prints as a line, since GitHub shows only so many annotations.
-- **`--format json` prints the report for a program**, with `schemaVersion`, `filesChecked`, `counts`, `findings`, and `skipped`. Its shape is public API: a change to it bumps `schemaVersion`, and its TypeScript type is exported as `CheckReport`.
+- **`--format json` prints the report for a program**, with `schemaVersion`, `filesChecked`, `counts`, `findings`, and `skipped`. A finding that names cited sources, as `T001` can, lists them in `sources`, each with its `path` from the repo root and its `resource` as written; `schemaVersion` 2 added it. Its shape is public API: a change to it bumps `schemaVersion`, and its TypeScript type is exported as `CheckReport`.
 
 | Flag                   | Does                                                                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -517,11 +517,12 @@ jobs:
 - **Findings print as annotations** on the pull request's diff, as `okf check` does in any GitHub Actions run.
 - **`review-comments: true` posts each draft's `T001` as a review comment instead**, on the record's file, so the owner can reply to it, and resolve it to acknowledge that the record merges as a draft.
   - Grant the calling job `contents: write` and `pull-requests: write` too, since resolving a thread needs both; the comments job, `💬 OKF review comments`, takes the calling job's permissions, and the check job still reads only.
+  - Each cited source a comment names links to its file in the pull request's diff, the Files changed tab, when the pull request changes it.
   - A later run edits its own comment, found by a hidden marker, rather than posting again. A resolved thread stays resolved until the record changes again, and an open one whose draft is gone, as when the record was signed off, is resolved.
   - With a ruleset that requires conversations to be resolved, a draft merges only once someone has resolved its thread. Errors, such as `T006`, still fail the check.
   - A pull request from a fork, any other event, a draft the pull request doesn't change, and a comment GitHub refuses fall back to annotations.
   - The check job runs `okf check --review-file`, and the comments job `okf review-comments`, from the same okf: the repo's own, or `okf-version`. Both need a version of okf-tools that has them.
-  - `okf review-comments <file>` posts what `okf check --review-file` wrote, reading `GITHUB_TOKEN`, `GITHUB_REPOSITORY` and `GITHUB_EVENT_PATH` as a GitHub Actions job sets them. It exits `1` only when it can't read the file, or the file isn't a list of findings. A run whose pull request has moved on to a newer push annotates its drafts instead, leaving them to the newer run.
+  - `okf review-comments <file>` posts what `okf check --review-file` wrote, reading `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH`, and `GITHUB_SERVER_URL` for the links, as a GitHub Actions job sets them. It exits `1` only when it can't read the file, or the file isn't a list of findings. A run whose pull request has moved on to a newer push annotates its drafts instead, leaving them to the newer run.
 
 | Input             | Does                                                                                                     |
 | ----------------- | -------------------------------------------------------------------------------------------------------- |
@@ -569,16 +570,16 @@ The gaps in the numbering are upstream rules okf-tools doesn't run yet, such as 
 
 okf-tools' own rules, whose `T` codes upstream doesn't use:
 
-| Code | Rule               | Severity                 | Finds                                                                                                                              |
-| ---- | ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`; one re-stamped since a sign-off names it, and says whether its text changed since the base branch. |
-| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.                                      |
-| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes.                                |
-| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                                                        |
-| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.                                          |
-| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.                                     |
-| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed in a commit outside the history of the record's re-stamps and sign-offs.          |
-| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.                                       |
+| Code | Rule               | Severity                 | Finds                                                                                                                                                                                          |
+| ---- | ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`; one re-stamped since a sign-off names it, and says whether its text changed since the base branch, naming the cited sources the branch changed when it didn't. |
+| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.                                                                                                  |
+| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes.                                                                                            |
+| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                                                                                                                    |
+| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.                                                                                                      |
+| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.                                                                                                 |
+| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed in a commit outside the history of the record's re-stamps and sign-offs.                                                                      |
+| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.                                                                                                   |
 
 ### 🏠 House rules
 

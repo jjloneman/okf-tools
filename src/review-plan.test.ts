@@ -15,6 +15,13 @@ const BLOB = "aaaa1111";
 /** The head commit the fabricated run checked. */
 const HEAD = "e8da3644c0b1";
 
+/** The fabricated pull request's page. */
+const PULL = "https://github.com/o/r/pull/1";
+
+/** The anchor of `src/check.ts`'s diff: its path's SHA-256. */
+const CHECK_TS_ANCHOR =
+  "diff-4295313f2bea265fca91c3a1c1cab1a5926078b23aebc256a942944bdcc7e1b7";
+
 /** A draft finding on the fabricated record. */
 const DRAFT: CheckFinding = {
   code: "T001",
@@ -134,6 +141,95 @@ describe("wordComment", () => {
     ]);
   });
 
+  test("lists the cited sources a branch changed as a bullet, linking each", () => {
+    // Given - a re-stamped draft naming two sources, one in the diff
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message: `${DRAFT.message.replace("; okf verify signs it off again", "")}; its text is the same as on the base branch, and its sources ../../src/check.ts and ../../src/ changed on this branch, so check the record still holds against them; okf verify signs it off again`,
+      sources: [
+        { path: "src/check.ts", resource: "../../src/check.ts" },
+        { path: "src", resource: "../../src/" },
+      ],
+    };
+
+    // When - wording it, with only the first file in the diff
+    const lines = wordComment({
+      blob: BLOB,
+      diffUrl: (path) =>
+        path === "src/check.ts"
+          ? `${PULL}/files#${CHECK_TS_ANCHOR}`
+          : undefined,
+      finding,
+    }).split("\n");
+
+    // Then - the reason as its own bullet, each source as code, one linked
+    expect(lines.slice(3, 7)).toStrictEqual([
+      `> The record is a draft, and \`human:a\`'s sign-off at \`2026-10-02T15:00:00Z\` no longer counts, since \`generated.at\` is later ([§5.3](${SPEC})).`,
+      ">",
+      `> - Its text is the same as on the base branch, and its sources [\`../../src/check.ts\`](${PULL}/files#${CHECK_TS_ANCHOR}) and \`../../src/\` changed on this branch, so check the record still holds against them.`,
+      "",
+    ]);
+  });
+
+  test.each([
+    { description: "a backtick", expected: "``a`b.ts``", resource: "a`b.ts" },
+    {
+      description: "a leading backtick",
+      expected: "`` `a.ts ``",
+      resource: "`a.ts",
+    },
+    {
+      description: "an @ and a <",
+      expected: "`@a<b.ts`",
+      resource: "@a<b.ts",
+    },
+  ])(
+    "sets a source with $description as code it can't close",
+    ({ expected, resource }) => {
+      // Given - a draft naming the source
+      const finding: CheckFinding = {
+        ...DRAFT,
+        message: `the record is a draft; its source ${resource} changed on this branch; okf verify signs it off`,
+        sources: [{ path: "a.ts", resource }],
+      };
+
+      // When/Then - the whole resource in one code span
+      expect(wordComment({ blob: BLOB, finding }).split("\n")[5]).toBe(
+        `> - Its source ${expected} changed on this branch.`
+      );
+    }
+  );
+
+  test("links no source in the summary, which holds a record's own text", () => {
+    // Given - an actor whose name holds the phrase
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message:
+        "x its source a.ts signed it off; nothing else; okf verify signs it off",
+      sources: [{ path: "a.ts", resource: "a.ts" }],
+    };
+
+    // When/Then - the summary formatted as any other
+    expect(
+      wordComment({ blob: BLOB, diffUrl: () => PULL, finding }).split("\n")[3]
+    ).toBe("> X its source a.ts signed it off.");
+  });
+
+  test("formats the clause as before when it doesn't name its sources", () => {
+    // Given - sources the message words some other way
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message:
+        "the record is a draft; a.ts changed at 2026-10-02T15:00:00Z; okf verify signs it off",
+      sources: [{ path: "a.ts", resource: "a.ts" }],
+    };
+
+    // When/Then - no link, the time still set as code
+    expect(wordComment({ blob: BLOB, finding }).split("\n")[5]).toBe(
+      "> - A.ts changed at `2026-10-02T15:00:00Z`."
+    );
+  });
+
   test("keeps a record's text from mentioning anyone or opening a comment", () => {
     // Given - a message quoting a record's own text, with no command
     const finding = { ...DRAFT, message: "by @someone <!-- okf-check: x -->" };
@@ -191,6 +287,7 @@ describe("planReviewComments", () => {
         commitId: HEAD,
         drafts: [DRAFT],
         files,
+        pullUrl: PULL,
         threads: [],
       })
     ).toStrictEqual([
@@ -200,6 +297,36 @@ describe("planReviewComments", () => {
         kind: "create",
       },
     ]);
+  });
+
+  test("links a cited source in the diff to its file, by its path's hash", () => {
+    // Given - a draft naming a source the pull request changes, and one it
+    // doesn't
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message:
+        "the record is a draft; its sources ../../src/check.ts and ../../src/old.ts changed; okf verify signs it off",
+      sources: [
+        { path: "src/check.ts", resource: "../../src/check.ts" },
+        { path: "src/old.ts", resource: "../../src/old.ts" },
+      ],
+    };
+
+    // When - planning
+    const [action] = planReviewComments({
+      commitId: HEAD,
+      drafts: [finding],
+      files: new Map([...files, ["src/check.ts", "bbbb"]]),
+      pullUrl: PULL,
+      threads: [],
+    });
+
+    // Then - the first linked into the diff, the second only as code
+    expect(action).toMatchObject({
+      body: expect.stringContaining(
+        `> - Its sources [\`../../src/check.ts\`](${PULL}/files#${CHECK_TS_ANCHOR}) and \`../../src/old.ts\` changed.`
+      ) as unknown,
+    });
   });
 
   test.each([
@@ -212,6 +339,7 @@ describe("planReviewComments", () => {
         commitId: HEAD,
         drafts: [DRAFT],
         files,
+        pullUrl: PULL,
         threads: [thread({ isResolved })],
       })
     ).toStrictEqual([]);
@@ -224,6 +352,7 @@ describe("planReviewComments", () => {
         commitId: HEAD,
         drafts: [DRAFT],
         files,
+        pullUrl: PULL,
         threads: [thread({ commentBody: "old wording" })],
       })
     ).toStrictEqual([
@@ -248,6 +377,7 @@ describe("planReviewComments", () => {
       commitId: HEAD,
       drafts: [DRAFT],
       files,
+      pullUrl: PULL,
       threads,
     });
 
@@ -272,6 +402,7 @@ describe("planReviewComments", () => {
         commitId: HEAD,
         drafts: [DRAFT],
         files,
+        pullUrl: PULL,
         threads: [thread({ blob: "bbbb", isResolved: true })],
       }).map(({ kind }) => kind)
     ).toStrictEqual(["create"]);
@@ -284,6 +415,7 @@ describe("planReviewComments", () => {
         commitId: HEAD,
         drafts: [DRAFT],
         files: new Map(),
+        pullUrl: PULL,
         threads: [thread({})],
       })
     ).toStrictEqual([{ finding: DRAFT, kind: "annotate" }]);
@@ -296,6 +428,7 @@ describe("planReviewComments", () => {
         commitId: HEAD,
         drafts: [],
         files,
+        pullUrl: PULL,
         threads: [thread({ id: "T1" }), thread({ id: "T2", isResolved: true })],
       }).map((action) => action.kind === "resolve" && action.threadId)
     ).toStrictEqual(["T1"]);
@@ -307,6 +440,7 @@ describe("planReviewComments", () => {
       commitId: HEAD,
       drafts: [],
       files,
+      pullUrl: PULL,
       threads: [thread({})],
     });
 

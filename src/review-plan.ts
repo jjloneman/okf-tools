@@ -7,8 +7,15 @@
  *   request's head, so a later run finds its own comment by the record's
  *   text, not its line.
  */
-import type { CheckFinding, CheckSeverity } from "./check-engine.ts";
+import { createHash } from "node:crypto";
 
+import type {
+  CheckFinding,
+  CheckSeverity,
+  FindingSource,
+} from "./check-engine.ts";
+
+import { nameSources } from "./cited-sources.ts";
 import { readArray, readPath } from "./json.ts";
 
 /** One thing a run does: post, edit, resolve, or annotate instead. */
@@ -205,13 +212,27 @@ export function planReviewComments(params: {
   files: ReadonlyMap<string, string>;
 
   /**
+   * The pull request's page, which a cited source in its diff links into.
+   *
+   * @example "https://github.com/jjloneman/okf-tools/pull/162"
+   */
+  pullUrl: string;
+
+  /**
    * The threads earlier runs started.
    *
    * @example `[{ blob: "3b18e51…", code: "T001", … }]`
    */
   threads: readonly ReviewThread[];
 }): ReviewAction[] {
-  const { commitId, drafts, files, threads } = params;
+  const { commitId, drafts, files, pullUrl, threads } = params;
+
+  // GitHub anchors each file of a pull request's diff by its path's SHA-256.
+  const diffUrl = (path: string): string | undefined => {
+    const hash = createHash("sha256").update(path).digest("hex");
+
+    return files.has(path) ? `${pullUrl}/files#diff-${hash}` : undefined;
+  };
   const actions: ReviewAction[] = [];
   const kept = new Set<string>();
 
@@ -234,7 +255,7 @@ export function planReviewComments(params: {
       continue;
     }
 
-    const body = wordComment({ blob, finding });
+    const body = wordComment({ blob, diffUrl, finding });
 
     if (thread === undefined) {
       actions.push({ body, finding, kind: "create" });
@@ -326,6 +347,9 @@ export function readReviewThread(node: unknown): ReviewThread | undefined {
  * - Times, actors, fields, and `okf` commands read as code, and a rule
  *   code links to the README's table of its rules.
  *
+ * - Each cited source the finding names reads as code, linked to its file
+ *   in the pull request's diff when it's there.
+ *
  * - A record's own text can reach the message, so it can't mention anyone,
  *   open an HTML comment, or forge a marker.
  */
@@ -337,13 +361,30 @@ export function wordComment(params: {
    */
   blob: string;
 
+  /**
+   * Where a path's file is in the pull request's diff, or nothing when the
+   * diff doesn't hold it; nothing is linked, unless given.
+   *
+   * @example `(path) => "https://github.com/o/r/pull/1/files#diff-…"`
+   */
+  diffUrl?: ((path: string) => string | undefined) | undefined;
+
   /** The draft's finding. @example `{ code: "T001", path: "docs/a.md", … }` */
   finding: CheckFinding;
 }): string {
-  const { blob, finding } = params;
+  const { blob, diffUrl = () => undefined, finding } = params;
+  const sources = finding.sources ?? [];
+  // The summary holds the actor, a record's own text, so only the clauses
+  // after it are searched for the sources.
   const [summary = "", ...rest] = finding.message
     .split("; ")
-    .map((clause) => toSentence(formatClause(clause)));
+    .map((clause, index) =>
+      toSentence(
+        index === 0
+          ? formatClause(clause)
+          : formatSourcesClause({ clause, diffUrl, sources })
+      )
+    );
   const details = rest.slice(0, -1);
   const settle = rest.at(-1);
   const alert = [
@@ -403,6 +444,20 @@ function formatClause(clause: string): string {
     .replaceAll(/§(?<section>\d+(?:\.\d+)*)/gu, `[§$<section>](${SPEC_URL})`);
 }
 
+/**
+ * Set text as a code span, its fence longer than any run of backticks in
+ * it, so a record's own text can't close it early.
+ */
+function formatCode(text: string): string {
+  const runs = text.match(/`+/gu) ?? [];
+  const fence = "`".repeat(
+    Math.max(0, ...runs.map(({ length }) => length)) + 1
+  );
+  const pad = text.startsWith("`") || text.endsWith("`") ? " " : "";
+
+  return `${fence}${pad}${text}${pad}${fence}`;
+}
+
 /** Write the marker that ends a comment, for a later run to find it by. */
 function formatMarker(params: {
   /** The record's blob, or `0` once released. @example "aaaa1111" */
@@ -417,6 +472,46 @@ function formatMarker(params: {
   const { blob, code, path } = params;
 
   return `<!-- okf-check: ${encodeURIComponent(path)} ${code} ${blob} -->`;
+}
+
+/**
+ * Format a clause, setting the sources it names as code, each linked to its
+ * diff where there is one, and the rest as `formatClause` does.
+ *
+ * - It finds them by the phrase `nameSources` builds, as `T001` names them,
+ *   so a path is never matched inside other text.
+ */
+function formatSourcesClause(params: {
+  /** The clause. @example "its source ../a.ts changed on this branch" */
+  clause: string;
+
+  /** Where a path's diff is. @example `() => undefined` */
+  diffUrl: (path: string) => string | undefined;
+
+  /** The sources the finding names. @example `[{ path: "a.ts", … }]` */
+  sources: readonly FindingSource[];
+}): string {
+  const { clause, diffUrl, sources } = params;
+  const named = nameSources(sources.map(({ resource }) => resource));
+  const at = sources.length === 0 ? -1 : clause.indexOf(named);
+
+  if (at === -1) {
+    return formatClause(clause);
+  }
+
+  const linked = nameSources(
+    sources.map(({ path, resource }) => {
+      const code = formatCode(resource);
+      const url = diffUrl(path);
+
+      return url === undefined ? code : `[${code}](${url})`;
+    })
+  );
+
+  const before = formatClause(clause.slice(0, at));
+  const after = formatClause(clause.slice(at + named.length));
+
+  return `${before}${linked}${after}`;
 }
 
 /** Set a rule code as code, linked to the README's table of its rules. */

@@ -190,7 +190,7 @@ export function runCheck(params: {
     reviewFile,
   } = params;
   const { output } = context;
-  const read = readBundles({ context, isChanged });
+  const read = readBundles(context);
 
   if (!read.isOk) {
     output.error(read.reason);
@@ -418,22 +418,14 @@ function isReviewDraft(finding: CheckFinding): boolean {
  * commit the base doesn't have or by uncommitted changes, each as its
  * `toPathKey`.
  */
-function listCitingKeys(params: {
-  branchCommits: ReadonlySet<string>;
-  cited: readonly { file: CheckedFile; paths: readonly string[] }[];
-}): Set<string> {
-  const { branchCommits, cited } = params;
-
+function listCitingKeys(
+  cited: readonly { file: CheckedFile; paths: readonly string[] }[]
+): Set<string> {
   return new Set(
     cited
       .filter(({ file, paths }) =>
         paths.some((sourcePath) =>
-          file
-            .readChanges(sourcePath)
-            .some(
-              ({ commit }) =>
-                commit === undefined || branchCommits.has(commit.hash)
-            )
+          file.readChanges(sourcePath).some(file.isOnBranch)
         )
       )
       .map(({ file }) => toPathKey(file.filePath))
@@ -809,16 +801,13 @@ function placeCommits(params: {
 /**
  * Read every Markdown file in the bundles git would track, grouped by the
  * deepest bundle that holds each, the files that couldn't be read, the files
- * changed since the base branch, and under `--changed` the records citing a
- * file the branch changed.
+ * changed since the base branch, and the records citing a file the branch
+ * changed.
  *
  * - A changed file is also read as the branch's merge base holds it, or
  *   `HEAD` when there's no base to diff against.
  */
-function readBundles(params: {
-  context: BundleContext;
-  isChanged: boolean;
-}): Outcome<{
+function readBundles(context: BundleContext): Outcome<{
   bundles: CheckedBundle[];
   changedKeys: ReadonlySet<string>;
   citingKeys: ReadonlySet<string>;
@@ -826,7 +815,6 @@ function readBundles(params: {
   historyFailures: string[];
   skipped: CheckSkipped[];
 }> {
-  const { context, isChanged } = params;
   const { bundleDirs, excludeGlobs, repoRoot } = context;
   const isExcluded = matchExcluded(excludeGlobs);
   const doesExist = (filePath: string): boolean =>
@@ -855,6 +843,16 @@ function readBundles(params: {
   const base = readMergeBase(repoRoot);
   const baseCommit = base?.commit;
   const changedKeys = new Set([...changes.value.paths].map(toPathKey));
+
+  // Read on every run, not only under `--changed`, since the draft rule
+  // names the cited sources the branch changed.
+  const branchCommits = new Set(
+    base?.isBranchBase === true
+      ? listBranchCommits({ base: base.commit, repoRoot })
+      : []
+  );
+  const isOnBranch = ({ commit }: FileChange): boolean =>
+    commit === undefined || branchCommits.has(commit.hash);
 
   for (const filePath of [...listed.value].sort()) {
     const bundleDir = findOwningBundle({ bundleDirs, filePath });
@@ -891,6 +889,7 @@ function readBundles(params: {
           bundleDir,
           doesExist,
           filePath,
+          isOnBranch,
           readChanges,
           readUnseenCommits,
           text: readRecordText({ filePath, repoRoot }),
@@ -928,12 +927,6 @@ function readBundles(params: {
     unseen,
   });
 
-  const branchCommits = new Set(
-    isChanged && base?.isBranchBase === true
-      ? listBranchCommits({ base: base.commit, repoRoot })
-      : []
-  );
-
   return {
     isOk: true,
     value: {
@@ -942,7 +935,7 @@ function readBundles(params: {
         files: files.filter((file) => file.bundleDir === bundleDir),
       })),
       changedKeys,
-      citingKeys: listCitingKeys({ branchCommits, cited }),
+      citingKeys: listCitingKeys(cited),
       hasBase: base?.isBranchBase === true,
       historyFailures: [
         ...failures.values(),

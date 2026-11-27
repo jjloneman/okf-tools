@@ -11,11 +11,17 @@
  *   the last change is, so a later spec that moves it to a new key changes
  *   one function.
  */
-import type { CheckedFile, CheckRule, RuleHit } from "./check-engine.ts";
+import type {
+  CheckedFile,
+  CheckRule,
+  FindingSource,
+  RuleHit,
+} from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
 import type { ParsedFile } from "./spec-rules.ts";
 
 import { readCheckedFile, readNodeLine } from "./check-engine.ts";
+import { nameSources, readCitedSources } from "./cited-sources.ts";
 import {
   isCurrentVerification,
   isGeneratedAhead,
@@ -29,6 +35,23 @@ import {
 } from "./frontmatter/shared.ts";
 import { findBodyStart } from "./markdown.ts";
 import { readEvents, readParsed, withConcept } from "./spec-rules.ts";
+
+/** What changed in a draft's text, as a clause, with the sources it names. */
+type TextChange = {
+  /**
+   * The clause, opening with `; `, or empty without a base copy.
+   *
+   * @example "; its text changed since the base branch"
+   */
+  clause: string;
+
+  /**
+   * The cited sources the clause names, each file once.
+   *
+   * @example `[{ path: "src/check.ts", resource: "../../src/check.ts" }]`
+   */
+  sources: FindingSource[];
+};
 
 /** A `verified` event with a `by` and an `at` that can be read as text. */
 type TrustEvent = {
@@ -124,6 +147,10 @@ export function readChangedAt(parsed: ParsedFile): unknown {
  *   only its frontmatter differs, so it says what `I204` would and more,
  *   and `I204` skips drafts.
  *
+ * - When only its frontmatter differs, it names the cited sources the
+ *   branch changed, since a re-stamp with no text change usually follows
+ *   one.
+ *
  * - Without a base copy, such as a record the branch didn't change, it
  *   can't say which, so it names the sign-off alone.
  */
@@ -154,13 +181,23 @@ function checkDraft(file: CheckedFile): RuleHit[] {
           !isCurrentVerification({ at, generatedAt })
       );
 
+    if (last === undefined || !isOutdated) {
+      return [
+        {
+          line: readNodeLine({ file, node }),
+          message:
+            "the record is a draft, so no one has signed it off as settled; okf verify signs it off",
+        },
+      ];
+    }
+
+    const { clause, sources } = describeTextChange(parsed);
+
     return [
       {
         line: readNodeLine({ file, node }),
-        message:
-          last === undefined || !isOutdated
-            ? "the record is a draft, so no one has signed it off as settled; okf verify signs it off"
-            : `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${describeTextChange(file)}; okf verify signs it off again`,
+        message: `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${clause}; okf verify signs it off again`,
+        ...(sources.length === 0 ? {} : { sources }),
       },
     ];
   });
@@ -285,17 +322,52 @@ function checkVerifiedDraft(file: CheckedFile): RuleHit[] {
 /**
  * Say whether a record's text changed since the base branch, or only its
  * frontmatter differs, as a clause; nothing without a base copy.
+ *
+ * - When only its frontmatter differs, it names the cited sources the
+ *   branch changed, as the likely reason for the re-stamp, without saying
+ *   they caused it, since a re-stamp's commit doesn't say why it was made.
+ *
+ * - Every change on the branch counts, even one a sign-off made on the
+ *   branch already saw, since a committer time can't place a commit before
+ *   a sign-off: a merged branch keeps its own, and a rebase resets them.
+ *
+ * - Each file is named once, by its first `resource`, and returned with
+ *   the clause, so a review comment can link each one to its diff.
  */
-function describeTextChange(file: CheckedFile): string {
+function describeTextChange(parsed: ParsedFile): TextChange {
+  const { file } = parsed;
   const { baseText } = file;
 
   if (baseText === undefined) {
-    return "";
+    return { clause: "", sources: [] };
   }
 
-  return readBody(baseText) === readBody(file.text)
-    ? "; its text is the same as on the base branch, and only its frontmatter differs"
-    : "; its text changed since the base branch";
+  if (readBody(baseText) !== readBody(file.text)) {
+    return { clause: "; its text changed since the base branch", sources: [] };
+  }
+
+  const cited = readCitedSources(parsed).filter(({ path }) =>
+    file.readChanges(path).some(file.isOnBranch)
+  );
+  const sources = cited
+    .filter(
+      ({ path }, index) =>
+        cited.findIndex((source) => source.path === path) === index
+    )
+    .map(({ path, resource }) => ({ path, resource }));
+  const same = "; its text is the same as on the base branch, and";
+
+  if (sources.length === 0) {
+    return { clause: `${same} only its frontmatter differs`, sources };
+  }
+
+  const named = nameSources(sources.map(({ resource }) => resource));
+  const pronoun = sources.length === 1 ? "it" : "them";
+
+  return {
+    clause: `${same} ${named} changed on this branch, so check the record still holds against ${pronoun}`,
+    sources,
+  };
 }
 
 /** Read a body, everything after the frontmatter, with LF line breaks. */

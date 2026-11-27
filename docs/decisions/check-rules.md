@@ -29,8 +29,8 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
-verified: { by: human:jjloneman, at: 2026-11-27T07:50:01Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T23:14:58Z }
+verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
@@ -73,6 +73,7 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 
 - When the pin moves, `SPEC_RULES` moves to that commit's `validate.py` in the same PR, as AGENTS.md's spec watch section says.
 - A change to the JSON report's shape bumps `CHECK_SCHEMA_VERSION`, and is a breaking change.
+  - Version 2 added `sources` to a finding that names cited sources, as `T001` does, for a review comment to link each one to its diff (see [How okf-check.yml posts drafts as review comments](review-comments.md)).
 
 ## Links
 
