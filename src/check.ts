@@ -36,6 +36,7 @@ import type {
 } from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
 import type { ExitCode } from "./exit-codes.ts";
+import type { PathChanges } from "./git.ts";
 import type { HouseRules } from "./house-rules.ts";
 import type { CheckFormat } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
@@ -47,6 +48,7 @@ import { applyFixes } from "./fix.ts";
 import {
   listBranchCommits,
   listPathChanges,
+  listPathChangesTogether,
   readMergeBase,
   readTextAt,
   readWorkingPaths,
@@ -504,6 +506,9 @@ function readBundles(params: {
  * Read the history of each path into `history`: its uncommitted changes as
  * one change at the current time, then its commits, newest first.
  *
+ * - Every path's history is read at once, and one path at a time only when
+ *   that fails, as in a history with a merge, so a failure names its path.
+ *
  * - A repo with no commits yet has no history to read.
  *
  * - A path git can't read has no history, so the source rules skip it.
@@ -519,10 +524,29 @@ function readHistory(params: {
   const { filePaths, hasHead, history, repoRoot } = params;
   const failures = new Map<string, string>();
   const now = Math.floor(DateTime.utc().toSeconds());
+  const uniquePaths = [...new Set(filePaths)];
 
-  for (const filePath of new Set(filePaths)) {
-    const changes = listPathChanges({ filePath, hasHead, repoRoot });
+  if (uniquePaths.length === 0) {
+    return failures;
+  }
 
+  const together = listPathChangesTogether({
+    filePaths: uniquePaths,
+    hasHead,
+    repoRoot,
+  });
+  const read: { changes: Outcome<PathChanges>; filePath: string }[] =
+    together.isOk
+      ? together.value.map(({ changes, filePath }) => ({
+          changes: { isOk: true, value: changes },
+          filePath,
+        }))
+      : uniquePaths.map((filePath) => ({
+          changes: listPathChanges({ filePath, hasHead, repoRoot }),
+          filePath,
+        }));
+
+  for (const { changes, filePath } of read) {
     if (!changes.isOk) {
       failures.set(filePath, changes.reason);
 

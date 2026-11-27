@@ -127,6 +127,23 @@ export type GitFailure = {
   stdout: string | undefined;
 };
 
+/** The changes git knows to a path, as `listPathChanges` reads them. */
+export type PathChanges = {
+  /**
+   * The commits that changed the path or anything under it, newest first.
+   *
+   * @example `[{ committedAt: 1790000000, hash: "1a2b3c4d…", shortHash: "1a2b3c4" }]`
+   */
+  commits: PathCommit[];
+
+  /**
+   * Whether it has uncommitted changes, untracked files included.
+   *
+   * @example true
+   */
+  isDirty: boolean;
+};
+
 /** A commit that changed a path, with when it was committed. */
 export type PathCommit = {
   /**
@@ -151,6 +168,30 @@ export type PathCommit = {
    * @example "1a2b3c4"
    */
   shortHash: string;
+};
+
+/** A path `git status` reports, as `readStatusPaths` reads it. */
+type StatusPath = {
+  /**
+   * The path from the repo root, as git prints it.
+   *
+   * @example "docs/decisions/package-promise.md"
+   */
+  filePath: string;
+
+  /**
+   * Whether `HEAD` doesn't have it: untracked, or added.
+   *
+   * @example false
+   */
+  isNew: boolean;
+
+  /**
+   * The path a rename or copy came from, or `undefined` for anything else.
+   *
+   * @example "docs/decisions/old-name.md"
+   */
+  originPath: string | undefined;
 };
 
 /**
@@ -585,7 +626,7 @@ export function listPathChanges(params: {
   filePath: string;
   hasHead: boolean;
   repoRoot: string;
-}): Outcome<{ commits: PathCommit[]; isDirty: boolean }> {
+}): Outcome<PathChanges> {
   const { filePath, hasHead, repoRoot } = params;
   const status = readStatusPaths({ pathspecs: [filePath], repoRoot });
 
@@ -619,21 +660,112 @@ export function listPathChanges(params: {
   return {
     isOk: true,
     value: {
-      commits: output
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const hashEnd = line.indexOf(" ");
-          const shortHashEnd = line.indexOf(" ", hashEnd + 1);
-
-          return {
-            committedAt: Number(line.slice(shortHashEnd + 1)),
-            hash: line.slice(0, hashEnd),
-            shortHash: line.slice(hashEnd + 1, shortHashEnd),
-          };
-        }),
+      commits: output.split("\n").filter(Boolean).map(readPathCommit),
       isDirty: status.value.length > 0,
     },
+  };
+}
+
+/**
+ * List the changes git knows to each of several paths, as `listPathChanges`
+ * would for each one, in one `git status` and one `git log` over them all.
+ *
+ * - A commit counts for a path when `--name-only` names the path or a file
+ *   under it: `--no-renames`, so a rename names the path it left too, and
+ *   `--root`, so the first commit names its files whatever `log.showRoot`
+ *   says.
+ *
+ * - A rename's or copy's origin counts as uncommitted, since `git status`
+ *   asked about that path alone reports it deleted, or modified for a copy,
+ *   whose origin git finds only among modified files.
+ *
+ * - A history with a merge fails, since git simplifies history at a merge by
+ *   all the pathspecs at once, so it may follow a parent that one path's own
+ *   `git log` wouldn't.
+ *
+ * - Names are compared by `toPathKey`, since git on macOS composes the
+ *   pathspecs and the names it prints alike; elsewhere a spelling git doesn't
+ *   match names no file on disk, so the source rules skip it.
+ *
+ * @returns each path's changes, in the order given.
+ */
+export function listPathChangesTogether(params: {
+  filePaths: readonly string[];
+  hasHead: boolean;
+  repoRoot: string;
+}): Outcome<{ changes: PathChanges; filePath: string }[]> {
+  const { filePaths, hasHead, repoRoot } = params;
+
+  if (
+    hasHead &&
+    tryGit({
+      args: ["rev-list", "--merges", "--max-count=1", "HEAD"],
+      repoRoot,
+    }) !== ""
+  ) {
+    return {
+      isOk: false,
+      reason: "Couldn't rule out a merge in the history.",
+    };
+  }
+
+  const status = readStatusPaths({ pathspecs: filePaths, repoRoot });
+
+  if (!status.isOk) {
+    return status;
+  }
+
+  let output = "";
+
+  try {
+    if (hasHead) {
+      output = runGit({
+        args: [
+          "log",
+          "--no-follow",
+          "--no-renames",
+          "--no-show-signature",
+          "--root",
+          "--name-only",
+          "-z",
+          "--format=%x00%H %h %ct",
+          "--",
+          ...filePaths,
+        ],
+        repoRoot,
+      });
+    }
+  } catch (error) {
+    return {
+      isOk: false,
+      reason: `Couldn't read the history of ${filePaths.join(", ")}: ${describeGitFailure(error)}`,
+    };
+  }
+
+  const commits = readNamedCommits(output);
+  const dirtyKeys = status.value
+    .flatMap(({ filePath, originPath }) =>
+      originPath === undefined ? [filePath] : [filePath, originPath]
+    )
+    .map(toPathKey);
+
+  return {
+    isOk: true,
+    value: filePaths.map((filePath) => {
+      const key = toPathKey(filePath);
+      const isUnder = (changedKey: string): boolean =>
+        changedKey === key || changedKey.startsWith(`${key}/`);
+
+      return {
+        changes: {
+          commits: commits
+            .filter(({ pathKeys }) => pathKeys.some(isUnder))
+            .map(({ commit }) => commit),
+          isDirty: dirtyKeys.some(isUnder),
+        },
+        filePath,
+      };
+    }),
   };
 }
 
@@ -840,11 +972,58 @@ function describeGitFailure(error: unknown): string {
 }
 
 /**
+ * Read `git log -z --name-only --format=%x00%H %h %ct` into each commit and
+ * the keys of the paths it changed.
+ *
+ * - Each commit's line follows an empty field, and its first path follows a
+ *   newline, which a name of its own may also start with.
+ */
+function readNamedCommits(
+  output: string
+): { commit: PathCommit; pathKeys: string[] }[] {
+  const commits: { commit: PathCommit; pathKeys: string[] }[] = [];
+  let isCommitLine = false;
+  let isFirstPath = false;
+  let pathKeys: string[] = [];
+
+  for (const field of output.split("\0")) {
+    if (field === "") {
+      isCommitLine = true;
+    } else if (isCommitLine) {
+      pathKeys = [];
+      commits.push({ commit: readPathCommit(field), pathKeys });
+      isCommitLine = false;
+      isFirstPath = true;
+    } else {
+      pathKeys.push(toPathKey(isFirstPath ? field.slice(1) : field));
+      isFirstPath = false;
+    }
+  }
+
+  return commits;
+}
+
+/**
+ * Read a commit's `%H %h %ct` line, as `listPathChanges` and
+ * `listPathChangesTogether` ask `git log` for it.
+ */
+function readPathCommit(line: string): PathCommit {
+  const hashEnd = line.indexOf(" ");
+  const shortHashEnd = line.indexOf(" ", hashEnd + 1);
+
+  return {
+    committedAt: Number(line.slice(shortHashEnd + 1)),
+    hash: line.slice(0, hashEnd),
+    shortHash: line.slice(hashEnd + 1, shortHashEnd),
+  };
+}
+
+/**
  * List the paths `git status` reports under the pathspecs, untracked files
  * included, each marked when `HEAD` doesn't have it.
  *
  * - A rename or copy, marked in either status column, is followed by an extra
- *   entry holding its origin path, which is skipped.
+ *   entry holding its origin path, kept as the entry's `originPath`.
  *
  * - A failure names the pathspecs, so the person knows which files it was
  *   reading.
@@ -852,11 +1031,11 @@ function describeGitFailure(error: unknown): string {
 function readStatusPaths(params: {
   pathspecs: readonly string[];
   repoRoot: string;
-}): Outcome<{ filePath: string; isNew: boolean }[]> {
+}): Outcome<StatusPath[]> {
   const { pathspecs, repoRoot } = params;
-  const statusPaths: { filePath: string; isNew: boolean }[] = [];
+  const statusPaths: StatusPath[] = [];
   let output: string;
-  let isOriginPath = false;
+  let renamed: StatusPath | undefined;
 
   try {
     output = runGit({
@@ -874,17 +1053,21 @@ function readStatusPaths(params: {
     .split("\0")
     .filter(Boolean)
     .forEach((entry) => {
-      if (isOriginPath) {
-        isOriginPath = false;
+      if (renamed !== undefined) {
+        renamed.originPath = entry;
+        renamed = undefined;
 
         return;
       }
 
-      statusPaths.push({
+      const statusPath: StatusPath = {
         filePath: entry.slice(3),
         isNew: NEW_FILE.test(entry),
-      });
-      isOriginPath = RENAME_OR_COPY.test(entry);
+        originPath: undefined,
+      };
+
+      statusPaths.push(statusPath);
+      renamed = RENAME_OR_COPY.test(entry) ? statusPath : undefined;
     });
 
   return { isOk: true, value: statusPaths };

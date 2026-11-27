@@ -38,8 +38,8 @@ sources:
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:42:59Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:57:30Z }
 verified: { by: human:jjloneman, at: 2026-11-26T23:46:52Z }
 ---
 
@@ -96,7 +96,8 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 ## Consequences
 
 - Adding a trust rule is another entry in `buildTrustRules`, or `SOURCE_RULES` for one on `sources`, with the next `T` code.
-- `okf check` reads one `git status` and one `git log` for each path a record cites, and for the record, so a bundle that cites many files takes longer.
+- `okf check` reads every cited path's history, and each citing record's, in one `git status` and one `git log`, which name each commit's changed files, with a `git rev-list` to rule out a merge first: three git calls however many files a bundle cites, as of 2026-11-26.
+  - In a history with a merge, it reads one `git status` and one `git log` for each path instead, since git simplifies history at a merge by every pathspec at once, and so could follow a parent that the path's own `git log` wouldn't.
 - When the pin moves, `I201` and `I204` move with `SPEC_RULES`; the `T` rules don't.
 
 ## Links
@@ -105,6 +106,7 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - [#44](https://github.com/jjloneman/okf-tools/issues/44) — the engine they run on.
 - [#52](https://github.com/jjloneman/okf-tools/issues/52) — the rules on a record's `sources`.
 - [#77](https://github.com/jjloneman/okf-tools/issues/77) and [#92](https://github.com/jjloneman/okf-tools/issues/92) — how times ahead of the clock are handled.
+- [#137](https://github.com/jjloneman/okf-tools/issues/137) — reading every cited path's history in one `git log`.
 
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 
