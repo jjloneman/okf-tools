@@ -140,6 +140,9 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
 - `release.yml` runs on every push to `main` (see below).
 - `spec-watch.yml` runs daily and on demand, never on a PR (see [Spec watch](#-spec-watch)).
 - `product-review-reminder.yml` runs weekly and on demand, never on a PR (see [Product review](#-product-review)).
+- **Keep logic out of workflow YAML.** A step's `run` holds only calls and the plumbing between them: building arguments, and passing a file or an output to the next step. Anything that parses, calls an API, or decides something goes in a tested command under `src/` or a script under `scripts/`, under the coverage gate, as the owner asked in review on PR #147.
+  - No inline `actions/github-script` or long `run` blocks: code in YAML isn't linted, typechecked, or tested, and a reviewer reads it without the tests beside it.
+  - A reusable workflow such as `okf-check.yml` can't load a file from this repo, since it runs in the caller's checkout, so its logic ships in the package as an `okf` command, such as `okf review-comments`; `spec-watch.yml` runs `scripts/spec-watch/bin.ts`.
 - Every action is pinned to an exact `vX.Y.Z`, and every job declares its own `permissions`, but `okf-check.yml`'s review comments job.
 - **Every `ci.yml` job is a required check** in [.github/rulesets/main.json](.github/rulesets/main.json), by its display name; `spec-watch.yml` never runs on a PR, and neither does `product-review-reminder.yml`, so neither is one. Renaming a job or changing the test matrix means updating `required_status_checks` there and reapplying the ruleset, or every PR waits on a check that never reports.
 

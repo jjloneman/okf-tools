@@ -24,7 +24,7 @@ sources:
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T03:01:09Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T03:04:30Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 
@@ -64,7 +64,8 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
   - It calls GitHub with `fetch` and the job's token, with no new dependency, and reads the record's blob at the head from the pull request's file list.
   - A run whose pull request's head has moved on since its push annotates its drafts instead, since its blob would be read from a commit its check never saw; the newer push's run posts them.
   - A marker whose path isn't valid percent-encoding is skipped, as no run of its own wrote it, and an answer without the pull request's threads falls back to annotations, rather than reading as none and posting every draft again.
-  - **Rejected:** inline `actions/github-script` steps, which the first version used. Nothing tested them.
+  - **Rejected:** inline `actions/github-script` steps, which the first version used. The owner asked in review on PR #147 for them to be extracted: code in a workflow's YAML isn't linted, typechecked, or tested, so it sits outside the 100% coverage gate every other line of the repo meets, and a reviewer reads it without tests beside it.
+  - That holds for every workflow in this repo, as AGENTS.md's CI section says: a `run` step holds only calls and the plumbing between them, and logic goes in a tested command or script.
   - **Rejected:** checking out okf-tools at the workflow's own commit to run a script file, which needs a SHA GitHub doesn't clearly expose to a called workflow, and leaves the script untested.
 - **This repo opts in**[^ci-yml], with a ruleset[^ruleset] that already blocks a merge while a thread is unresolved, so a draft merges only once the owner has resolved its thread.
 
