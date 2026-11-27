@@ -16,7 +16,7 @@ sources:
     resource: ../../src/git.ts
     title: src/git.ts, every git call
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T00:28:46Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T00:38:08Z }
 verified: { by: human:jjloneman, at: 2026-11-27T00:08:02Z }
 ---
 
