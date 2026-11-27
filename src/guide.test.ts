@@ -98,12 +98,13 @@ describe("GUIDE", () => {
 
   test("skips the re-stamp for a sources reorder alone, as for tags", () => {
     // Given - the guide's re-stamp rule and its okf touch line
-    const exception = "its `tags` alone or the order of its `sources` alone";
+    const exception = "only its `tags`, the order of its `sources`, or both";
 
     // When/Then - both name the two edits that keep generated
-    expect(RECORD_RULES).toContain(`other than ${exception}, re-stamp it`);
-    expect(RECORD_RULES).toContain("A reorder of `sources` alone");
-    expect(GUIDE).toContain(`other than to ${exception}, in the same change`);
+    expect(RECORD_RULES).toContain(`changes ${exception}, re-stamp it`);
+    expect(RECORD_RULES).toContain("A reorder of `sources` keeps");
+    expect(TAG_RULES).toContain("apart from a reorder of `sources`");
+    expect(GUIDE).toContain(`one that changes ${exception}, in the same`);
   });
 
   test("prints the rules the README's Agents section shows", () => {

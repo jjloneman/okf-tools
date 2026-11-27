@@ -685,8 +685,8 @@ The Markdown files in the bundles that `okf.bundles` lists in `package.json` are
 - **Start a new record with `okf new <record> --type <type> --by <producer>/<version>`**, such as `--by claude-code/2.1.316`, which writes it as `status: draft` with `generated` stamped from the clock, and lists it in its index; then write its body.
 - **List in `sources` each repo file or folder a record was written from**, with `resource` relative to the record's folder, such as `../../src/git.ts`, and footnote each claim it rests on with a footnote whose label is the source's `id`, such as `[^git]`, so `okf check` warns when a cited file changes after the record was written or signed off.
   - Cite files, or a folder only when the record covers all of it, and leave out a file nearly every change touches, such as `package.json`, which would warn on every release.
-- **When you edit a record, other than its `tags` alone or the order of its `sources` alone, re-stamp it with `okf touch <record>... --by <producer>/<version> --draft`**, which sets `generated` from the clock and a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
-  - A reorder of `sources` alone, such as `okf format` makes, keeps `generated` and `status`, since a footnote cites its source by `id`, so the order changes no claim. Adding, removing, or editing an entry is re-stamped as usual.
+- **When you edit a record, other than an edit that changes only its `tags`, the order of its `sources`, or both, re-stamp it with `okf touch <record>... --by <producer>/<version> --draft`**, which sets `generated` from the clock and a `stable` one back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.
+  - A reorder of `sources` keeps `generated` and `status`, since a footnote cites its source by `id`, so the order changes no claim. Adding, removing, or editing an entry is re-stamped as usual.
   - Never type `generated.at` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a `verified` entry yourself.** Signing a record off is the person's call.
 - **Verify only when the person asks you to**, with `okf verify --yes <record>...`, naming the files they approved.
@@ -702,7 +702,7 @@ The Markdown files in the bundles that `okf.bundles` lists in `package.json` are
   - Never add a near-duplicate of a tag the bundle has, such as its plural or another spelling.
 - **Write `tags` as a block list**, one `- tag` per line, sorted, in kebab-case, even where upstream's examples show a one-line `[a, b]` list, which okf-tools reads as the same tags.
 - **A change to `tags` alone keeps `generated` and `status`**, so a signed-off record stays signed off: don't run `okf touch` for it.
-  - Any other change in the same edit, to the body or another field, `title` and `description` included, is re-stamped as usual.
+  - Any other change in the same edit, to the body or another field, `title` and `description` included, is re-stamped as usual, apart from a reorder of `sources`.
   - Run `okf index` after it, which syncs each tag index.
 - **Where `okf.rules` in `package.json` turns on a tag rule, it wins over these:**
   - `tags-count`'s `min` and `max` replace 5 to 10;
@@ -758,7 +758,7 @@ The full reasoning is in [How a record's tags are laid out](docs/decisions/tags-
   - The agent block, `okf guide`, and the `okf-record` skill all print the same tag rules.
 - **A change to `tags` alone keeps `generated` and `status`**, so retagging a signed-off record leaves it signed off.
   - Tags help a reader find a record; they don't change what it says.
-  - Any other change in the same edit, `title` and `description` included, is re-stamped with `okf touch` as usual.
+  - Any other change in the same edit, `title` and `description` included, is re-stamped with `okf touch` as usual, apart from a reorder of `sources`.
 - **`okf-record` audits a bundle's tags** when asked:
   - it finds records outside 5 to 10 tags, from the [`tags-count`](#-house-rules) house rule when it's on;
   - it proposes each fuller list in one table, and writes only the ones the person approves;

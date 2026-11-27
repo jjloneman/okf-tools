@@ -99,10 +99,10 @@ describe("okf-record", () => {
 
     // When/Then - its draft rule and its re-stamp step name both edits
     expect(text).toContain(
-      "unless you changed only its `tags` or the order of its `sources`"
+      "unless you changed only its `tags`, the order of its `sources`, or both"
     );
     expect(text).toContain(
-      "unless it changed only `tags` or the order of `sources`"
+      "unless it changed only `tags`, the order of `sources`, or both"
     );
   });
 
