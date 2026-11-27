@@ -1172,7 +1172,7 @@ describe("runCheck --fix", () => {
     );
   });
 
-  test("leaves a record in scope only for citing a changed file under --changed", () => {
+  test("fixes a record in scope only for citing a changed file under --changed", () => {
     // Given - a committed record citing a source, its tags out of order,
     // and the source changed since
     repo.write("kb/index.md", ROOT_INDEX);
@@ -1196,9 +1196,56 @@ describe("runCheck --fix", () => {
       isFix: true,
     });
 
-    // Then - the record left as it was, its finding still reported
-    expect(repo.read("kb/a.md")).toContain("tags: [b, a]");
-    expect(infos.some((line) => line.includes("H002 tags-sorted"))).toBe(true);
+    // Then - its tags sorted, and its source change still reported
+    expect(repo.read("kb/a.md")).toContain("tags: [a, b]");
+    expect(infos).toStrictEqual([
+      "Fixed kb/a.md.",
+      expect.stringMatching(/^kb\/a\.md:5: warning T007 source-changed: /u),
+      "1 file checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("keeps a record's source-changed warning once its fix is committed", () => {
+    // Given - a record citing a source, its tags out of order, and the
+    // source changed in a later commit
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "export {};\n");
+    repo.write(
+      "kb/a.md",
+      record([
+        "type: Decision",
+        "tags: [b, a]",
+        "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+        "sources: [{ resource: ../src/a.ts }]",
+      ])
+    );
+    repo.commitAll("add the record");
+    repo.write("src/a.ts", "export const a = 1;\n");
+    repo.commitAll("edit a");
+
+    // When - fixing it, checking it before and after committing the fix
+    check({ houseRules: { "tags-sorted": "error" }, isFix: true });
+    infos.length = 0;
+
+    const dirtyCode = check({ houseRules: { "tags-sorted": "error" } });
+    const dirtyInfos = [...infos];
+
+    infos.length = 0;
+    repo.commitAll("sort the tags");
+
+    const code = check({ houseRules: { "tags-sorted": "error" } });
+
+    // Then - the warning while the fix is uncommitted, by the clock, and
+    // after its commit, which doesn't re-stamp the record
+    const expected = [
+      expect.stringMatching(/^kb\/a\.md:5: warning T007 source-changed: /u),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
+    ];
+
+    expect(dirtyCode).toBe(EXIT_CODES.ok);
+    expect(dirtyInfos).toStrictEqual(expected);
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual(expected);
   });
 
   test.skipIf(process.getuid?.() === 0)(

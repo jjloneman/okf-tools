@@ -3,8 +3,8 @@
  * clear the house-rule findings with one obvious fix, and writes them.
  *
  * - It fixes only what `okf check` reported, so `okf.exclude` and the rules
- *   `okf.rules` turns on decide what it touches; `check.ts` passes it only
- *   the findings on files the branch changed under `--changed`.
+ *   `okf.rules` turns on decide what it touches, and under `--changed` so
+ *   does the scope `check.ts` reports on.
  *
  * - A record's fixes, sorted tags, a block `tags` list and the key order,
  *   go through `formatRecord`, which moves text by position and never edits
@@ -46,9 +46,6 @@ export type FixResult = {
    */
   written: RecordEdit[];
 };
-
-/** The trust rule on a source changed since its record was written. */
-const SOURCE_CHANGED = "source-changed";
 
 /** The house rule each kind of index drift is reported under. */
 const INDEX_RULES: Readonly<Record<IndexDrift["kind"], keyof HouseRules>> = {
@@ -230,17 +227,8 @@ function planRecordFixes(params: {
   const keyOrder = houseRules["key-order"]?.order;
   const rulesByPath = new Map<string, Set<string>>();
 
-  // A record whose source changed since it was written is left as it is:
-  // a fix would give it a change of its own, which `T007` reads as the
-  // record having caught up with its source.
-  const staleSources = new Set(
-    findings
-      .filter(({ rule }) => rule === SOURCE_CHANGED)
-      .map(({ path: filePath }) => filePath)
-  );
-
   for (const { path: filePath, rule } of findings) {
-    if (RECORD_RULES.has(rule) && !staleSources.has(filePath)) {
+    if (RECORD_RULES.has(rule)) {
       const rules = rulesByPath.get(filePath) ?? new Set<string>();
 
       rules.add(rule);

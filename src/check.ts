@@ -235,16 +235,19 @@ export function runCheck(params: {
   let report = buildReport(read.value);
 
   if (isFix) {
-    // Under `--changed`, a record in scope only for citing a changed file
-    // is left as it is, so the fix doesn't hide a source change from `T007`.
+    /*
+     * A record with a stale source is fixed like any other.
+     *
+     * - A fix never edits `generated` or `verified`, so its commit never
+     *   counts to `T007` as the record having seen its sources.
+     *
+     * - Until it's committed, a later check judges the record by the clock,
+     *   as for any uncommitted edit to a record.
+     */
     const fixed = applyFixes({
       bundles,
       context,
-      findings: isChanged
-        ? report.findings.filter(({ path: filePath }) =>
-            read.value.changedKeys.has(toPathKey(filePath))
-          )
-        : report.findings,
+      findings: report.findings,
       houseRules,
     });
 

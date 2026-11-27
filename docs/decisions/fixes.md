@@ -27,8 +27,8 @@ sources:
     resource: ../../src/house-rules.ts
     title: src/house-rules.ts, the opt-in house rules
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
-verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:39:11Z }
+verified: { by: human:jjloneman, at: 2026-11-27T06:03:41Z }
 ---
 
 # What okf check --fix fixes, and how it writes
@@ -37,11 +37,13 @@ verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 
 ## Decision
 
-As of 2026-11-26, from `src/fix.ts`[^fix], `src/frontmatter/format.ts`[^frontmatter-format], `src/check.ts`[^check], and `src/house-rules.ts`[^house-rules]:
+As of 2026-11-27, from `src/fix.ts`[^fix], `src/frontmatter/format.ts`[^frontmatter-format], `src/check.ts`[^check], and `src/house-rules.ts`[^house-rules]:
 
 - **It fixes only what `okf check` reported**, so the house rules `okf.rules` turns on and `okf.exclude` decide what it touches; then it reports what's left, with the same exit code `okf check` gives, so a refused fix counts by the findings it leaves.
-  - Under `--changed`, it fixes only the files the branch changed and the indexes that list them, not a record reported only for citing a changed file.
-  - A record with a `T007` finding, a source changed since it was written, is never fixed, in any mode: the fix would give it a change of its own, which `T007` read as the record having caught up with its source until #144, which counts only a re-stamp or a sign-off as having seen it (see [How okf check judges whether a sign-off still holds](trust-rules.md)).
+  - Under `--changed`, it fixes the files the branch changed, the indexes that list them, and the records reported for citing a changed file.
+  - A record with a `T007` finding, a source changed since it was written, is fixed like any other, and the warning stays: since #144, `T007` counts only a commit that changes `generated` or `verified` as the record having seen its sources, and a fix changes neither (see [How okf check judges whether a sign-off still holds](trust-rules.md)).
+    - Until the fix is committed, the record has uncommitted changes of its own, so `T007` judges it by `generated.at` and the latest sign-off, as for any uncommitted edit, and an uncommitted change to the source doesn't count.
+  - **Rejected:** leaving such a record unfixed, in any mode, as #130 did, which #149 reversed. Before #144, any commit to a record counted as it having caught up with its source, so a fix's commit could hide a source change; since then the guard only kept house-rule findings unfixed.
   - **Rejected:** fixing every record whatever the rules say. A repo that didn't turn `tags-sorted` on didn't choose sorted tags.
 - **The fixes, as of 2026-11-26:**
   - `tags-sorted` sorts `tags` in place, flow or block, keeping each tag's quotes;
@@ -74,6 +76,7 @@ As of 2026-11-26, from `src/fix.ts`[^fix], `src/frontmatter/format.ts`[^frontmat
 
 - [#47](https://github.com/jjloneman/okf-tools/issues/47) — `okf check --fix` and `okf format`, with the comment that aligned it with v0.3.
 - [#65](https://github.com/jjloneman/okf-tools/issues/65) — the block `tags` fix.
+- [#149](https://github.com/jjloneman/okf-tools/issues/149) — fixing records with a `T007` finding, once #144 made a fix unable to hide a source change.
 - [Which house rules okf check runs, and how a repo turns them on](house-rules.md) — the rules these fix.
 
 [^fix]: `src/fix.ts`, which plans and writes the `--fix` fixes.
