@@ -27,8 +27,8 @@ sources:
     resource: ../../src/house-rules.ts
     title: src/house-rules.ts, the opt-in house rules
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T00:02:59Z }
-verified: { by: human:jjloneman, at: 2026-11-27T00:08:02Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
+verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
 ---
 
 # What okf check --fix fixes, and how it writes

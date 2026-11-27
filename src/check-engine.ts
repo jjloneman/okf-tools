@@ -117,6 +117,20 @@ export type CheckedFile = {
   readChanges: (filePath: string) => readonly FileChange[];
 
   /**
+   * Which commits to the paths a record cites aren't in the history of any
+   * commit that changed the record, by the record's path from the repo root.
+   *
+   * - A commit is in that history when it's one of those commits or an
+   *   ancestor of one.
+   *
+   * - `undefined` when git couldn't say, or for a path that isn't a record
+   *   citing a path in the repo.
+   *
+   * @example `(filePath) => unseen.get(filePath)`
+   */
+  readUnseenCommits: (filePath: string) => ReadonlySet<string> | undefined;
+
+  /**
    * Its text, as read.
    *
    * @example `"---\ntype: Decision\n---\n"`
@@ -487,9 +501,17 @@ export function readCheckedFile(params: {
   doesExist: (filePath: string) => boolean;
   filePath: string;
   readChanges?: ((filePath: string) => readonly FileChange[]) | undefined;
+  readUnseenCommits?:
+    ((filePath: string) => ReadonlySet<string> | undefined) | undefined;
   text: string;
 }): CheckedFile {
-  const { bundleDir, filePath, readChanges = () => [], text } = params;
+  const {
+    bundleDir,
+    filePath,
+    readChanges = () => [],
+    readUnseenCommits = () => undefined,
+    text,
+  } = params;
   const name = filePath.slice(filePath.lastIndexOf("/") + 1);
   const folder = filePath.includes("/")
     ? filePath.slice(0, filePath.lastIndexOf("/"))
@@ -509,6 +531,7 @@ export function readCheckedFile(params: {
     isAtBundleRoot: folder === bundleDir,
     kind: readKind(name),
     readChanges,
+    readUnseenCommits,
   };
 }
 

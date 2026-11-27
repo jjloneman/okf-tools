@@ -151,6 +151,27 @@ function check(params: {
   });
 }
 
+/**
+ * Commit everything in the scratch repo, authored and committed at a time,
+ * as a rebase or a back-dated commit leaves it.
+ */
+function commitAt(params: {
+  /** When it was authored and committed. @example "2026-10-05T15:00:00Z" */
+  at: string;
+
+  /** The commit message. @example "edit a" */
+  message: string;
+}): void {
+  const { at, message } = params;
+
+  repo.git("add", "--all");
+  execFileSync("git", ["commit", "--quiet", "-m", message], {
+    cwd: repo.root,
+    env: { ...process.env, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
 /** A finding with the given fields over a warning on line 3 of `kb/a.md`. */
 function finding(fields: Partial<CheckFinding>): CheckFinding {
   return {
@@ -507,6 +528,61 @@ describe("runCheck", () => {
     expect(infos).toStrictEqual([
       expect.stringMatching(
         /^kb\/a\.md:4: warning T007 source-changed: source \.\.\/src\/a\.ts changed in [\da-f]+, at 2026-10-02T15:00:00Z, /u
+      ),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("passes a source changed before its record's re-stamp, rebased to land after it", () => {
+    // Given - a source's commit and then its record's re-stamp, both
+    // committed after the re-stamp's time, as a rebase leaves them
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record");
+    repo.write("src/a.ts", "a2\n");
+    commitAt({ at: "2026-10-05T15:00:00Z", message: "edit a" });
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+    commitAt({ at: "2026-10-05T15:00:01Z", message: "re-stamp the record" });
+
+    // When - checking it
+    const code = check({});
+
+    // Then - the record built on the source's commit, so nothing
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      "2 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("warns about a source changed on a branch merged after its record's re-stamp", () => {
+    // Given - a source changed on a side branch before its record's re-stamp
+    // on main, then merged with a merge commit
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    commitAt({ at: "2026-09-01T15:00:00Z", message: "add the record" });
+    repo.git("switch", "--quiet", "-c", "side");
+    repo.write("src/a.ts", "a2\n");
+    commitAt({ at: "2026-09-02T15:00:00Z", message: "edit a" });
+    repo.git("switch", "--quiet", "main");
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+    commitAt({ at: "2026-10-03T15:00:00Z", message: "re-stamp the record" });
+    repo.git("merge", "--quiet", "--no-ff", "--no-edit", "side");
+    const record = repo.git("log", "-1", "--format=%h", "--", "kb/a.md").trim();
+
+    // When - checking it
+    const code = check({});
+
+    // Then - a warning, though the branch's commit is older than the
+    // re-stamp
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        new RegExp(
+          String.raw`^kb/a\.md:4: warning T007 source-changed: source \.\./src/a\.ts changed in [\da-f]+, at 2026-09-02T15:00:00Z, which isn't in the history of the record's last commit, ${record}; `,
+          "u"
+        )
       ),
       "2 files checked: 0 errors, 1 warning, 0 info.",
     ]);

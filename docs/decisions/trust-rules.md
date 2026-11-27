@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: How okf check judges whether a sign-off still holds
-description: "`okf check` runs okf-tools' own `T` trust rules beside the spec rules: a draft is a notice unless `okf.drafts` says allow, warn or block, a sign-off counts only while current as OKF v0.3 defines it, a body changed since the base branch under a sign-off the base already held that still counts is an error, and a file in the repo that a record's `sources` cite warns when it changed after the record was written or signed off, and fails when it's gone; `--changed` reports only on what the branch changed."
+description: "`okf check` runs okf-tools' own `T` trust rules beside the spec rules: a draft is a notice unless `okf.drafts` says allow, warn or block, a sign-off counts only while current as OKF v0.3 defines it, a body changed since the base branch under a sign-off the base already held that still counts is an error, and a file in the repo that a record's `sources` cite warns when a commit outside the history of the record's own commits changed it, and fails when it's gone; `--changed` reports only on what the branch changed."
 tags:
   - change-detection
   - ci
@@ -39,8 +39,8 @@ sources:
     resource: ../../src/git.ts
     title: src/git.ts, every git call
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T00:02:59Z }
-verified: { by: human:jjloneman, at: 2026-11-27T00:08:02Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
+verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
 ---
 
 # How okf check judges whether a sign-off still holds
@@ -68,14 +68,17 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
   - The body is everything after the frontmatter, its line breaks compared as LF.
   - A sign-off made on the branch came after the change, so it covers it.
   - **Rejected:** comparing the frontmatter too. Re-stamping and signing off change it themselves, and a key-by-key list of what counts as content would drift from the spec.
-- **`T007 source-changed` warns when a file in the repo that `sources` cites changed after the record was last written or signed off**, as #52 asked, so a record written from code shows when the code moved on.
+- **`T007 source-changed` warns when a file in the repo that `sources` cites changed since the record was last written or signed off**, as #52 asked, so a record written from code shows when the code moved on.
   - A `resource` counts when it resolves by §6's rules[^okf-spec] to a path in the repo, a folder included, even outside the bundle: a record about code cites the code. Only the path's git history and whether it exists are read, never its text, which §6 keeps a consumer from reading outside the bundle.
   - A URL is skipped, and so is a value with a space, which §6 has a path percent-encode, so it's a scope descriptor.
-  - A change is a commit to the path, or uncommitted changes to it, later than both `generated.at` and the latest sign-off, to the whole second, by the commit's committer time[^git], as #136 asked: when it landed, not when it was written.
+  - A commit counts when it isn't in the history of any commit that changed the record, being neither one of them nor an ancestor of one[^source-rules], as #140 asked: what the record was built on, not when either commit landed.
+    - **Rejected:** the committer time, which #136 had chosen. A rebase resets it, so a source's commit made before the record's re-stamp in a later commit read as newer than the re-stamp and warned falsely, failing `--strict`; and `git log` on a path leaves out a merge that took the path from one side, so a branch's commit made before the re-stamp and merged after it read as seen.
     - **Rejected:** the author time. A rebase or a cherry-pick keeps it, so a commit written before the record was re-stamped but landed after it read as already seen, and the record never warned about a change it never saw.
-    - A merge commit still dates the change by the branch's commit, since `git log` on a path leaves out a merge that took the path from one side, so a branch commit made before the re-stamp and merged after it still reads as seen.
-    - A rebase, a cherry-pick, or an amend resets the committer time to when it ran, so after a rebase, a branch's commit that changes a source but not its record reads as newer than the record's re-stamp in an earlier commit, and warns until the record is re-stamped again; the squash merge this repo uses changes both in one commit, which the next rule leaves out.
-  - A commit that changed the record too doesn't count, since the record kept up with it, as a squash-merged pull request does; nor do uncommitted changes while the record has some too.
+    - **Rejected:** counting a commit when either its ancestry or its time says it's new. The time alone is what warned after a rebase, so it still would.
+    - A commit that changed the record too is in its history, so it doesn't count, as a squash-merged pull request changes both in one commit.
+    - Any commit that changed the record counts as having seen what came before it, even one that changed only its `tags`, which keeps `generated` as it was, since the rule can't tell an edit that checked the sources from one that didn't.
+  - Uncommitted changes to the path count, unless the record has some too.
+  - While the record has uncommitted changes, such as a re-stamp from `okf touch` not committed yet, a commit counts only when it's also later than both `generated.at` and the latest sign-off, to the whole second, by its committer time[^git], since git can't say what the record saw; a record git has no commits of is judged by that time alone.
   - It's a warning, not an error: it works at file level, so a change that leaves the record true still warns, and judging the prose is the review skill's audit mode.
   - A `generated.at` or sign-off later than now doesn't count, as `T003` and `T004` warn, so it can't hide a source change until the clock passes it.
   - **Rejected:** comparing `sources[].last_modified`. It's the source's own recency signal, written by hand, and goes stale the same way.
@@ -84,7 +87,7 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - **The base is the merge base with the ref `okf verify --changed` diffs against**, as [What a record counts as changed against](base-ref.md) says; with none, such as a repo with no `main` or remote, uncommitted changes are compared with `HEAD`.
 - **The gate runs on every `okf check`**, over the files changed since the base, so a hook catches the change before a pull request does.
 - **`--changed` reports only on the files changed since the base branch**, a bundle-wide rule's findings included, and on the records whose `sources` cite a path changed on the branch, by a commit the base doesn't have or uncommitted changes, and counts only those as checked. Without a base to diff against, it says so on stderr, in every format, and reports on uncommitted changes alone, so a shallow CI checkout under `--changed` isn't silently a pass; plain `okf check` prints nothing, and the README says to fetch the base in CI.
-- **A changed file whose base copy git can't read is skipped**, which fails the run, as a file that can't be read does. A history git can't read, a record's or a cited path's, such as a path in a submodule, is said on stderr and leaves the source rules without it; it doesn't fail the run, since the record's other rules don't need it.
+- **A changed file whose base copy git can't read is skipped**, which fails the run, as a file that can't be read does. A history git can't read, a record's or a cited path's, such as a path in a submodule, is said on stderr and leaves the source rules without it, and so is a record whose commits git can't place, which the source rules then skip; neither fails the run, since the record's other rules don't need it.
 - **Deciding who may verify stays guidance**, in `okf guide` and the agent block, not a rule.
 
 ## Why
@@ -96,8 +99,10 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 ## Consequences
 
 - Adding a trust rule is another entry in `buildTrustRules`, or `SOURCE_RULES` for one on `sources`, with the next `T` code.
-- `okf check` reads every cited path's history, and each citing record's, in one `git status` and one `git log`, which name each commit's changed files, with a `git rev-list` to rule out a merge first: three git calls however many files a bundle cites, as of 2026-11-26.
+- `okf check` reads every cited path's history, and each citing record's, in one `git status` and one `git log`, which name each commit's changed files, with a `git rev-list` to rule out a merge first: three git calls however many files a bundle cites, as of 2026-11-27.
+  - With no merge, that `git log` lists every commit in the history's own order, so a source's commit is in a record's history when it comes no earlier than the record's newest commit, and placing it needs no more git.
   - In a history with a merge, it reads one `git status` and one `git log` for each path instead, since git simplifies history at a merge by every pathspec at once, and so could follow a parent that the path's own `git log` wouldn't.
+    - It then places a source's commits with one `git rev-list` for each set of records changed in the same commits, which reads about as many commits as landed since they last changed and takes the hashes on stdin, so no list of them outgrows a command line.
 - When the pin moves, `I201` and `I204` move with `SPEC_RULES`; the `T` rules don't.
 
 ## Links
@@ -106,7 +111,9 @@ As of 2026-11-26, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - [#44](https://github.com/jjloneman/okf-tools/issues/44) — the engine they run on.
 - [#52](https://github.com/jjloneman/okf-tools/issues/52) — the rules on a record's `sources`.
 - [#77](https://github.com/jjloneman/okf-tools/issues/77) and [#92](https://github.com/jjloneman/okf-tools/issues/92) — how times ahead of the clock are handled.
+- [#136](https://github.com/jjloneman/okf-tools/issues/136) — dating a source's change by its committer time.
 - [#137](https://github.com/jjloneman/okf-tools/issues/137) — reading every cited path's history in one `git log`.
+- [#140](https://github.com/jjloneman/okf-tools/issues/140) — judging a source's change by commit ancestry instead of a clock.
 
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 

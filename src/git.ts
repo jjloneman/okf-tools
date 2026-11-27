@@ -144,6 +144,34 @@ export type PathChanges = {
   isDirty: boolean;
 };
 
+/**
+ * The changes git knows to several paths, as `listPathChangesTogether` reads
+ * them from one history with no merge.
+ */
+export type PathChangesTogether = {
+  /**
+   * The full hash of every commit that changed any of the paths, newest
+   * first, which with no merge is also each one's place in the history: a
+   * commit is an ancestor of every commit before it.
+   *
+   * @example `["1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"]`
+   */
+  order: string[];
+
+  /**
+   * Each path's changes, in the order given.
+   *
+   * @example `[{ changes: { commits: [], isDirty: true }, filePath: "a.md" }]`
+   */
+  paths: {
+    /** The path's changes. @example `{ commits: [], isDirty: true }` */
+    changes: PathChanges;
+
+    /** The path, as given. @example "a.md" */
+    filePath: string;
+  }[];
+};
+
 /** A commit that changed a path, with when it was committed. */
 export type PathCommit = {
   /**
@@ -687,13 +715,14 @@ export function listPathChanges(params: {
  *   pathspecs and the names it prints alike; elsewhere a spelling git doesn't
  *   match names no file on disk, so the source rules skip it.
  *
- * @returns each path's changes, in the order given.
+ * @returns each path's changes, in the order given, and the commits'
+ *   order.
  */
 export function listPathChangesTogether(params: {
   filePaths: readonly string[];
   hasHead: boolean;
   repoRoot: string;
-}): Outcome<{ changes: PathChanges; filePath: string }[]> {
+}): Outcome<PathChangesTogether> {
   const { filePaths, hasHead, repoRoot } = params;
 
   if (
@@ -751,22 +780,65 @@ export function listPathChangesTogether(params: {
 
   return {
     isOk: true,
-    value: filePaths.map((filePath) => {
-      const key = toPathKey(filePath);
-      const isUnder = (changedKey: string): boolean =>
-        changedKey === key || changedKey.startsWith(`${key}/`);
+    value: {
+      order: commits.map(({ commit }) => commit.hash),
+      paths: filePaths.map((filePath) => {
+        const key = toPathKey(filePath);
+        const isUnder = (changedKey: string): boolean =>
+          changedKey === key || changedKey.startsWith(`${key}/`);
 
-      return {
-        changes: {
-          commits: commits
-            .filter(({ pathKeys }) => pathKeys.some(isUnder))
-            .map(({ commit }) => commit),
-          isDirty: dirtyKeys.some(isUnder),
-        },
-        filePath,
-      };
-    }),
+        return {
+          changes: {
+            commits: commits
+              .filter(({ pathKeys }) => pathKeys.some(isUnder))
+              .map(({ commit }) => commit),
+            isDirty: dirtyKeys.some(isUnder),
+          },
+          filePath,
+        };
+      }),
+    },
   };
+}
+
+/**
+ * List which of some commits aren't in the history of any of others, being
+ * neither one of them nor an ancestor of one, in one `git rev-list`.
+ *
+ * - The hashes go in on stdin, so no list of them outgrows a command line.
+ *
+ * - Git walks only what the commits reach and the others don't, so it reads
+ *   about as many commits as landed since the others.
+ *
+ * @returns the commits given that none of the others reach, by full hash.
+ */
+export function listUnreachedCommits(params: {
+  /** The full hashes of the commits to sort out. @example `["1a2b3c4d…"]` */
+  commits: readonly string[];
+
+  /** The full hashes to reach them from. @example `["5e6f7a8b…"]` */
+  from: readonly string[];
+
+  /** The repo's root folder. @example "/home/me/repo" */
+  repoRoot: string;
+}): Outcome<Set<string>> {
+  const { commits, from, repoRoot } = params;
+  const wanted = new Set(commits);
+
+  try {
+    const output = runGit({
+      args: ["rev-list", "--stdin"],
+      input: [...commits, ...from.map((hash) => `^${hash}`), ""].join("\n"),
+      repoRoot,
+    });
+
+    return {
+      isOk: true,
+      value: new Set(output.split("\n").filter((hash) => wanted.has(hash))),
+    };
+  } catch (error) {
+    return { isOk: false, reason: describeGitFailure(error) };
+  }
 }
 
 /**
@@ -941,14 +1013,20 @@ export function readWorkingPaths(repoRoot: string): Outcome<string[]> {
  */
 export function runGit(params: {
   args: readonly string[];
+
+  /** What to write to its stdin, closed without it. @example "1a2b3c4d…" */
+  input?: string | undefined;
   repoRoot: string;
 }): string {
-  const { args, repoRoot } = params;
+  const { args, input, repoRoot } = params;
 
   // Literal, so a record named `[ab].md` names only itself, never `a.md`.
   return execFileSync("git", ["--literal-pathspecs", ...args], {
     ...GIT_EXEC_OPTIONS,
     cwd: repoRoot,
+    ...(input === undefined
+      ? {}
+      : { input, stdio: ["pipe", "pipe", "pipe"] as const }),
   });
 }
 

@@ -17,8 +17,8 @@ sources:
     resource: ../../.github/workflows/ci.yml
     title: .github/workflows/ci.yml, the CI workflow
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:54:47Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
+verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
 ---
 
 # Which repo files a decision record cites in sources

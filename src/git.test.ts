@@ -16,6 +16,7 @@ import {
   listIndexPaths,
   listPathChanges,
   listPathChangesTogether,
+  listUnreachedCommits,
   listWorkingPaths,
   readBaseRef,
   readCommittedText,
@@ -605,8 +606,14 @@ describe("listPathChangesTogether", () => {
       return { changes: changes.isOk ? changes.value : changes, filePath };
     });
 
-    // Then - the same changes for every path
-    expect(together).toStrictEqual({ isOk: true, value: alone });
+    // Then - the same changes for every path, and every commit in order
+    expect(together).toStrictEqual({
+      isOk: true,
+      value: {
+        order: repo.git("rev-list", "--max-count=3", "HEAD").trim().split("\n"),
+        paths: alone,
+      },
+    });
   });
 
   test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
@@ -633,7 +640,10 @@ describe("listPathChangesTogether", () => {
       // Then - the same commit and uncommitted change
       expect(together).toStrictEqual({
         isOk: true,
-        value: [{ changes: alone.isOk ? alone.value : alone, filePath }],
+        value: {
+          order: [repo.git("rev-parse", "HEAD").trim()],
+          paths: [{ changes: alone.isOk ? alone.value : alone, filePath }],
+        },
       });
       expect(alone).toMatchObject({ value: { isDirty: true } });
     }
@@ -654,10 +664,13 @@ describe("listPathChangesTogether", () => {
     // Then - no commits, and the untracked one
     expect(changes).toStrictEqual({
       isOk: true,
-      value: [
-        { changes: { commits: [], isDirty: true }, filePath: "src/a.ts" },
-        { changes: { commits: [], isDirty: false }, filePath: "b.md" },
-      ],
+      value: {
+        order: [],
+        paths: [
+          { changes: { commits: [], isDirty: true }, filePath: "src/a.ts" },
+          { changes: { commits: [], isDirty: false }, filePath: "b.md" },
+        ],
+      },
     });
   });
 
@@ -726,6 +739,57 @@ describe("listPathChangesTogether", () => {
     expect(changes.isOk ? undefined : changes.reason).toMatch(
       /^Couldn't read the history of src\/a\.ts, b\.md: /u
     );
+  });
+});
+
+describe("listUnreachedCommits", () => {
+  test("lists the commits no other given commit has in its history", () => {
+    // Given - a main line, and a side branch off its first commit, merged
+    // back
+    repo.write("a.md", "a\n");
+    repo.commitAll("add a");
+    const first = repo.git("rev-parse", "HEAD").trim();
+    repo.git("switch", "--quiet", "-c", "side");
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    const side = repo.git("rev-parse", "HEAD").trim();
+    repo.git("switch", "--quiet", "main");
+    repo.write("c.md", "c\n");
+    repo.commitAll("add c");
+    const main = repo.git("rev-parse", "HEAD").trim();
+    repo.git("merge", "--quiet", "--no-ff", "--no-edit", "side");
+    const merge = repo.git("rev-parse", "HEAD").trim();
+
+    // When - asking which of them main's commit reaches
+    const unreached = listUnreachedCommits({
+      commits: [first, side, main, merge],
+      from: [main],
+      repoRoot: repo.root,
+    });
+
+    // Then - the side branch's commit and the merge, but not main's commit
+    // or its ancestor
+    expect(unreached).toStrictEqual({
+      isOk: true,
+      value: new Set([merge, side]),
+    });
+  });
+
+  test("says why when git can't read a commit", () => {
+    // Given - a hash no commit has
+    repo.write("a.md", "a\n");
+    repo.commitAll("add a");
+    const head = repo.git("rev-parse", "HEAD").trim();
+
+    // When - asking whether the commit reaches it
+    const unreached = listUnreachedCommits({
+      commits: ["0".repeat(40)],
+      from: [head],
+      repoRoot: repo.root,
+    });
+
+    // Then - git's reason
+    expect(unreached.isOk ? undefined : unreached.reason).toMatch(/\S/u);
   });
 });
 
