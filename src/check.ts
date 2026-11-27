@@ -527,7 +527,12 @@ function listStampCommits(params: {
   const records = cited.flatMap(({ file, paths }) => {
     const own = commits.get(file.filePath);
 
-    if (paths.length === 0 || own === undefined) {
+    // A record cites a path only from frontmatter that parsed.
+    if (
+      paths.length === 0 ||
+      own === undefined ||
+      file.frontmatter.kind !== "parsed"
+    ) {
       return [];
     }
 
@@ -541,7 +546,7 @@ function listStampCommits(params: {
 
     return [
       {
-        file,
+        doc: file.frontmatter.doc,
         filePath: file.filePath,
         isDirty: file
           .readChanges(file.filePath)
@@ -578,7 +583,7 @@ function listStampCommits(params: {
 
   const texts = read.value;
 
-  for (const { file, filePath, isDirty, own } of records) {
+  for (const { doc, filePath, isDirty, own } of records) {
     const [newest] = own;
 
     // The newest commit to change the record holds it as `HEAD` does.
@@ -590,10 +595,7 @@ function listStampCommits(params: {
             ? undefined
             : texts.get(`${newest.hash}:${filePath}`),
         ],
-        stamp:
-          file.frontmatter.kind === "parsed"
-            ? readDocStamp(file.frontmatter.doc)
-            : readStamp(file.text),
+        stamp: readDocStamp(doc),
       })
     ) {
       restamped.add(filePath);
