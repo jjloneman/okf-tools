@@ -29,8 +29,8 @@ sources:
     resource: ../../src/spec-rules.ts
     title: src/spec-rules.ts, the rules the spec states
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
-verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
+verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
@@ -61,6 +61,7 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 - **It reads every Markdown file git would track in the bundles**, records, `index.md` and `log.md` alike, skipping dot-paths, `okf.exclude`, and symlinks that lead out of the bundle (§3.2).
 - **Exit codes:** `1` on an error, or a file it can't read, and under `--strict` on a warning too; otherwise `0`. `--strict` is upstream's flag name.
 - **Output:** a line a finding, `path:line: severity code rule: message`, then a summary; `--format json` prints a versioned report; in GitHub Actions, text findings print as workflow annotations too, `info` as a notice, and still as lines, since GitHub shows only so many annotations.
+  - Under `--review-file`, each draft's `T001` is written to that file as JSON for `okf review-comments` instead of annotated, and still prints as a line; a write that fails leaves it annotated, and fails the run (see [How okf-check.yml posts drafts as review comments](review-comments.md)).
 
 ## Why
 

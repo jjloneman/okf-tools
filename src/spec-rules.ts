@@ -220,7 +220,10 @@ export const SPEC_RULES: readonly CheckRule[] = [
           .map(({ at }) => readTimestamp(at) ?? "")
           .filter(isValidTimestamp);
 
-        return generatedAt === undefined ||
+        // `T001` says the same of a draft, and why, so only one finding
+        // tells the owner the record needs signing off again.
+        return readTimestamp(parsed.get("status")) === "draft" ||
+          generatedAt === undefined ||
           !isValidTimestamp(generatedAt) ||
           times.length === 0 ||
           times.some(

@@ -27,8 +27,8 @@ sources:
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:38:03Z }
-verified: { by: human:jjloneman, at: 2026-11-26T23:48:39Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:55:27Z }
+verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
 # What `okf init` writes, and how it keeps the agent block current

@@ -12,6 +12,7 @@ import {
   parseInitArgs,
   parseMigrateArgs,
   parseNewArgs,
+  parseReviewCommentsArgs,
   parseStatusArgs,
   parseTagsArgs,
   parseTouchArgs,
@@ -652,6 +653,7 @@ describe("parseFormatArgs", () => {
         isChanged: true,
         isFix: false,
         isStrict: false,
+        reviewFile: undefined,
       },
     });
     expect(parseFormatArgs(["kb/a.md"])).toStrictEqual({
@@ -672,6 +674,19 @@ describe("parseCheckArgs", () => {
         isChanged: false,
         isFix: false,
         isStrict: false,
+        reviewFile: undefined,
+      },
+    },
+    {
+      args: ["--review-file", "drafts.json"],
+      description: "--review-file",
+      options: {
+        bundles: [],
+        format: "text",
+        isChanged: false,
+        isFix: false,
+        isStrict: false,
+        reviewFile: "drafts.json",
       },
     },
     {
@@ -693,6 +708,7 @@ describe("parseCheckArgs", () => {
         isChanged: true,
         isFix: true,
         isStrict: true,
+        reviewFile: undefined,
       },
     },
   ])("reads $description", ({ args, options }) => {
@@ -729,6 +745,11 @@ describe("parseCheckArgs", () => {
       message: '--format takes json or text, not "sarif".',
     },
     {
+      args: ["--review-file", "d.json", "--format", "json"],
+      description: "--review-file with --format json",
+      message: "--review-file takes the text format, not --format json.",
+    },
+    {
       args: ["docs/decisions/a.md"],
       description: "a path",
       message: "okf check takes no paths, but was given docs/decisions/a.md.",
@@ -741,6 +762,51 @@ describe("parseCheckArgs", () => {
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why
     expect(parseCheckArgs(args)).toStrictEqual({ kind: "invalid", message });
+  });
+});
+
+describe("parseReviewCommentsArgs", () => {
+  test("reads the drafts file", () => {
+    // When/Then - the file
+    expect(parseReviewCommentsArgs(["drafts.json"])).toStrictEqual({
+      kind: "options",
+      options: { draftsFile: "drafts.json" },
+    });
+  });
+
+  test.each([
+    { args: ["--help"], description: "--help" },
+    {
+      args: ["-h", "--check"],
+      description: "-h beside a flag it doesn't take",
+    },
+  ])("asks for help with $description", ({ args }) => {
+    // When/Then - help, whatever else was passed
+    expect(parseReviewCommentsArgs(args)).toStrictEqual({ kind: "help" });
+  });
+
+  test.each([
+    {
+      args: [],
+      description: "no file",
+      message: "Name one file, as okf check --review-file wrote.",
+    },
+    {
+      args: ["a.json", "b.json"],
+      description: "two files",
+      message: "Name one file, as okf check --review-file wrote.",
+    },
+    {
+      args: ["--check"],
+      description: "a flag it doesn't take",
+      message: expect.stringContaining("--check") as unknown,
+    },
+  ])("rejects $description", ({ args, message }) => {
+    // When/Then - a usage error saying why
+    expect(parseReviewCommentsArgs(args)).toStrictEqual({
+      kind: "invalid",
+      message,
+    });
   });
 });
 

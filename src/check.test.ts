@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -115,6 +121,9 @@ function check(params: {
    * @example false
    */
   isStrict?: boolean;
+
+  /** Where to write the drafts' findings. @example "/tmp/drafts.json" */
+  reviewFile?: string;
 }): number {
   const {
     bundleDirs = ["kb"],
@@ -126,6 +135,7 @@ function check(params: {
     isFix = false,
     isGitHubActions = false,
     isStrict = false,
+    reviewFile,
   } = params;
   const context: BundleContext = {
     bundleDirs,
@@ -148,6 +158,7 @@ function check(params: {
     isFix,
     isGitHubActions,
     isStrict,
+    reviewFile,
   });
 }
 
@@ -356,6 +367,56 @@ describe("runCheck", () => {
     expect(infos).toStrictEqual([
       'kb/log.md:3: error E005 log-date-heading: a log.md date heading must be YYYY-MM-DD (§9); found "May 1"',
       "2 files checked: 1 error, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("writes the drafts to --review-file instead of annotating them", () => {
+    // Given - a draft beside a log with a bad heading
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("kb/a.md", record(["type: Decision", "status: draft"]));
+    repo.write("kb/log.md", "# Log\n\n## May 1\n");
+    const reviewFile = path.join(repo.root, "drafts.json");
+
+    // When - checking it in GitHub Actions with a review file
+    const code = check({ isGitHubActions: true, reviewFile });
+
+    // Then - the draft in the file and as a line, but not as an annotation
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(JSON.parse(readFileSync(reviewFile, "utf8"))).toStrictEqual([
+      {
+        code: "T001",
+        line: 3,
+        message:
+          "the record is a draft, so no one has signed it off as settled; okf verify signs it off",
+        path: "kb/a.md",
+        rule: "draft",
+        severity: "info",
+      },
+    ]);
+    expect(data).toStrictEqual([
+      '::error file=kb/log.md,line=3,title=E005 log-date-heading::a log.md date heading must be YYYY-MM-DD (§9); found "May 1"',
+    ]);
+    expect(infos).toContain(
+      "kb/a.md:3: info T001 draft: the record is a draft, so no one has signed it off as settled; okf verify signs it off"
+    );
+  });
+
+  test("fails and annotates the drafts when --review-file can't be written", () => {
+    // Given - a draft, and a review file whose folder doesn't exist
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("kb/a.md", record(["type: Decision", "status: draft"]));
+    const reviewFile = path.join(repo.root, "missing", "drafts.json");
+
+    // When - checking it in GitHub Actions
+    const code = check({ isGitHubActions: true, reviewFile });
+
+    // Then - the failure said, and the draft still an annotation
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors).toStrictEqual([
+      expect.stringMatching(/^Couldn't write .*drafts\.json: /u),
+    ]);
+    expect(data).toStrictEqual([
+      "::notice file=kb/a.md,line=3,title=T001 draft::the record is a draft, so no one has signed it off as settled; okf verify signs it off",
     ]);
   });
 

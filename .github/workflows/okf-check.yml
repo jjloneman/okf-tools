@@ -14,32 +14,55 @@ on:
     inputs:
       bundles:
         default: ""
-        description: Bundle directories to check, one per line; empty reads `okf.bundles` from package.json.
+        description: >-
+          Bundle directories to check, one per line; empty reads `okf.bundles`
+          from package.json.
         required: false
         type: string
       changed:
         default: true
-        description: Report only on the files the branch changed, as `--changed` does.
+        description: >-
+          Report only on the files the branch changed, as `--changed` does.
         required: false
         type: boolean
       node-version:
         default: "lts/*"
-        description: The Node version to run okf on, as actions/setup-node reads it.
+        description: >-
+          The Node version to run okf on, as actions/setup-node reads it.
         required: false
         type: string
       okf-version:
         default: ""
-        description: A version of @jjloneman/okf-tools to run from npm; empty runs the one the repo's own pnpm lockfile installs.
+        description: >-
+          A version of @jjloneman/okf-tools to run from npm; empty runs the one
+          the repo's own pnpm lockfile installs.
         required: false
         type: string
+      review-comments:
+        default: false
+        description: >-
+          On a pull request from the same repo, post each draft record's T001
+          finding as a review comment the owner resolves, instead of an
+          annotation; the calling job grants `contents: write` and
+          `pull-requests: write`, and okf-tools must be a version with `okf
+          review-comments`.
+        required: false
+        type: boolean
       strict:
         default: false
         description: Fail on warnings too, as `--strict` does.
         required: false
         type: boolean
 
-# Nothing by default; the job grants only what it uses.
-permissions: {}
+# No workflow-wide `permissions`, so a job that declares none, the review
+# comments job, gets what the calling job grants.
+#
+# - A called job that asks for more than its caller grants fails the whole
+#   run before it starts, even when its `if` is false, so asking here for
+#   `contents: write` and `pull-requests: write`, which resolving a thread
+#   needs, would break every caller that doesn't grant them.
+#
+# - The check job still declares only what it uses.
 
 jobs:
   check:
@@ -47,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      drafts: ${{ steps.run.outputs.drafts }}
     steps:
       # The full history, so the base branch exists to diff against: a shallow
       # checkout has no base, and the trust rules' gate would see no change.
@@ -73,36 +98,133 @@ jobs:
       #
       # - actions/checkout never sets it, so `okf check` would fall back to
       #   `origin/main`, which is wrong for a PR into any other branch.
-      - if: ${{ github.base_ref != '' || github.event.repository.default_branch != '' }}
+      - if: >-
+          ${{ github.base_ref != '' ||
+          github.event.repository.default_branch != '' }}
         env:
-          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+          BASE_REF: >-
+            ${{ github.base_ref ||
+            github.event.repository.default_branch }}
         shell: bash
         run: git remote set-head origin "$BASE_REF"
 
       # The inputs reach the shell only through the environment, never spliced
       # into the script, so no value can run as code.
-      - env:
+      #
+      # - Review comments need a pull request whose token can write, which a
+      #   fork's never can, so anywhere else the drafts stay annotations.
+      #
+      # - For review comments, `--review-file` writes the drafts for the
+      #   comments job, and leaves them out of the annotations.
+      - id: run
+        env:
           BUNDLES: ${{ inputs.bundles }}
           IS_CHANGED: ${{ inputs.changed }}
+          IS_REVIEW: >-
+            ${{ inputs.review-comments &&
+            github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name ==
+            github.repository }}
           IS_STRICT: ${{ inputs.strict }}
           OKF_VERSION: ${{ inputs.okf-version }}
         shell: bash
         run: |
+          drafts_file="$RUNNER_TEMP/okf-drafts.json"
           args=(check)
+
           if [[ "$IS_CHANGED" == true ]]; then
             args+=(--changed)
           fi
+
           if [[ "$IS_STRICT" == true ]]; then
             args+=(--strict)
           fi
+
+          if [[ "$IS_REVIEW" == true ]]; then
+            args+=(--review-file "$drafts_file")
+          fi
+
           while read -r bundle; do
             if [[ -n "$bundle" ]]; then
               args+=(--bundle "$bundle")
             fi
           done <<< "$BUNDLES"
 
+          status=0
+
           if [[ -n "$OKF_VERSION" ]]; then
-            npm exec --yes --package="@jjloneman/okf-tools@$OKF_VERSION" -- okf "${args[@]}"
+            package="@jjloneman/okf-tools@$OKF_VERSION"
+            npm exec --yes --package="$package" -- okf "${args[@]}" \
+              || status=$?
           else
-            pnpm okf "${args[@]}"
+            pnpm okf "${args[@]}" || status=$?
           fi
+
+          # Set even when the check fails, so the drafts are still posted.
+          if [[ -f "$drafts_file" ]]; then
+            {
+              echo "drafts<<OKF_DRAFTS"
+              cat "$drafts_file"
+              echo "OKF_DRAFTS"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+          exit "$status"
+
+  # Posts each draft's `T001` as a file-level review comment, which the owner
+  # resolves to acknowledge that the record merges as a draft, with
+  # `okf review-comments` (see its `--help`).
+  #
+  # - No `permissions`, so it gets the calling job's, which must include
+  #   `contents: write` and `pull-requests: write` (see the note above
+  #   `jobs`).
+  #
+  # - It runs the same okf as the check job: the repo's own, or
+  #   `okf-version` from npm.
+  comments:
+    name: 💬 OKF review comments
+    if: ${{ !cancelled() && needs.check.outputs.drafts != '' }}
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ inputs.okf-version == '' }}
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - if: ${{ inputs.okf-version == '' }}
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          cache: true
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      # No install scripts, since this job holds a token that can write.
+      - if: ${{ inputs.okf-version == '' }}
+        shell: bash
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - env:
+          DRAFTS: ${{ needs.check.outputs.drafts }}
+          GITHUB_TOKEN: ${{ github.token }}
+          OKF_VERSION: ${{ inputs.okf-version }}
+        shell: bash
+        run: |
+          drafts_file="$RUNNER_TEMP/okf-drafts.json"
+          printf '%s\n' "$DRAFTS" > "$drafts_file"
+
+          if [[ -n "$OKF_VERSION" ]]; then
+            package="@jjloneman/okf-tools@$OKF_VERSION"
+            npm exec --yes --package="$package" -- \
+              okf review-comments "$drafts_file"
+          else
+            pnpm okf review-comments "$drafts_file"
+          fi
+    # One run at a time for each pull request, so two never both find no
+    # thread for a draft and post it twice.
+    concurrency:
+      group: >-
+        okf-review-comments-${{ github.repository }}-${{
+        github.event.pull_request.number }}

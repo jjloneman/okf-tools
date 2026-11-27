@@ -22,7 +22,11 @@ import {
   isVerifiedAhead,
   readLatestByActor,
 } from "./frontmatter/read.ts";
-import { readTimestamp } from "./frontmatter/shared.ts";
+import {
+  findLatestIndex,
+  readTime,
+  readTimestamp,
+} from "./frontmatter/shared.ts";
 import { findBodyStart } from "./markdown.ts";
 import { readEvents, readParsed, withConcept } from "./spec-rules.ts";
 
@@ -111,20 +115,54 @@ export function readChangedAt(parsed: ParsedFile): unknown {
   return parsed.read(parsed.get("generated"), "at");
 }
 
-/** Note a record that's still a draft. */
+/**
+ * Note a record that's still a draft, and why it needs signing off again
+ * when it was signed off before.
+ *
+ * - A draft whose every sign-off is older than `generated.at` names the
+ *   latest one, and says whether its text changed since the base branch or
+ *   only its frontmatter differs, so it says what `I204` would and more,
+ *   and `I204` skips drafts.
+ *
+ * - Without a base copy, such as a record the branch didn't change, it
+ *   can't say which, so it names the sign-off alone.
+ */
 function checkDraft(file: CheckedFile): RuleHit[] {
   return withConcept(file, (parsed) => {
     const node = parsed.get("status");
 
-    return readTimestamp(node) === "draft"
-      ? [
-          {
-            line: readNodeLine({ file, node }),
-            message:
-              "the record is a draft, so no one has signed it off as settled; okf verify signs it off",
-          },
-        ]
-      : [];
+    if (readTimestamp(node) !== "draft") {
+      return [];
+    }
+
+    // Only times that can be read count, as `T002` reads them, so the two
+    // never disagree about a sign-off; `W101` reports the rest.
+    const generatedAt = readTimestamp(readChangedAt(parsed));
+    const events = readEvents(parsed)
+      .flatMap(readTrustEvent)
+      .filter(({ at }) => readTime(at).isValid);
+    const last = events[findLatestIndex(events.map(({ at }) => at))];
+
+    // A sign-off ahead of the clock isn't current either, but for another
+    // reason, which `T004` names.
+    const isOutdated =
+      generatedAt !== undefined &&
+      readTime(generatedAt).isValid &&
+      readLatestByActor(events).every(
+        ({ at }) =>
+          !isVerifiedAhead({ generatedAt: undefined, verifiedAt: at }) &&
+          !isCurrentVerification({ at, generatedAt })
+      );
+
+    return [
+      {
+        line: readNodeLine({ file, node }),
+        message:
+          last === undefined || !isOutdated
+            ? "the record is a draft, so no one has signed it off as settled; okf verify signs it off"
+            : `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${describeTextChange(file)}; okf verify signs it off again`,
+      },
+    ];
   });
 }
 
@@ -242,6 +280,22 @@ function checkVerifiedDraft(file: CheckedFile): RuleHit[] {
         ]
       : [];
   });
+}
+
+/**
+ * Say whether a record's text changed since the base branch, or only its
+ * frontmatter differs, as a clause; nothing without a base copy.
+ */
+function describeTextChange(file: CheckedFile): string {
+  const { baseText } = file;
+
+  if (baseText === undefined) {
+    return "";
+  }
+
+  return readBody(baseText) === readBody(file.text)
+    ? "; its text is the same as on the base branch, and only its frontmatter differs"
+    : "; its text changed since the base branch";
 }
 
 /** Read a body, everything after the frontmatter, with LF line breaks. */

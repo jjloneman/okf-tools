@@ -23,7 +23,7 @@
  *   by the findings it leaves.
  */
 import { DateTime } from "luxon";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type {
@@ -42,6 +42,7 @@ import type { PathChanges, PathCommit } from "./git.ts";
 import type { HouseRules } from "./house-rules.ts";
 import type { CheckFormat } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
+import type { Output } from "./output.ts";
 import type { BundleContext } from "./run-context.ts";
 
 import { buildCheckReport, readCheckedFile } from "./check-engine.ts";
@@ -168,6 +169,14 @@ export function runCheck(params: {
    * @example false
    */
   isStrict: boolean;
+
+  /**
+   * Where to write each draft's `T001` finding as JSON, for
+   * `okf review-comments`, which posts them instead of the annotations.
+   *
+   * @example "/tmp/okf-drafts.json"
+   */
+  reviewFile: string | undefined;
 }): ExitCode {
   const {
     context,
@@ -178,6 +187,7 @@ export function runCheck(params: {
     isFix,
     isGitHubActions,
     isStrict,
+    reviewFile,
   } = params;
   const { output } = context;
   const read = readBundles({ context, isChanged });
@@ -285,6 +295,8 @@ export function runCheck(params: {
           });
   }
 
+  let isReviewFailed = false;
+
   if (format === "json") {
     output.data(JSON.stringify(report, undefined, 2));
   } else {
@@ -292,10 +304,20 @@ export function runCheck(params: {
       output.error(toTerminalLine(`Skipped: ${reason}`));
     }
 
+    const drafts = report.findings.filter(isReviewDraft);
+
+    // Written before anything prints, so a write that fails leaves the
+    // drafts as annotations rather than nowhere.
+    const isWritten =
+      reviewFile !== undefined &&
+      writeReviewFile({ drafts, output, reviewFile });
+
+    isReviewFailed = reviewFile !== undefined && !isWritten;
+
     // GitHub shows only so many annotations, and hides an annotation's
     // path in the log, so each finding prints as a line too.
     for (const finding of report.findings) {
-      if (isGitHubActions) {
+      if (isGitHubActions && !(isWritten && isReviewDraft(finding))) {
         output.data(formatAnnotation(finding));
       }
 
@@ -306,6 +328,7 @@ export function runCheck(params: {
   }
 
   const isFailed =
+    isReviewFailed ||
     report.counts.error > 0 ||
     report.skipped.length > 0 ||
     (isStrict && report.counts.warning > 0);
@@ -348,6 +371,11 @@ function isInsideOnDisk(params: {
   const relative = path.relative(root, target);
 
   return relative !== ".." && !relative.startsWith(`..${path.sep}`);
+}
+
+/** Whether a finding is a draft's, which `okf review-comments` posts. */
+function isReviewDraft(finding: CheckFinding): boolean {
+  return finding.code === "T001";
 }
 
 /**
@@ -946,4 +974,33 @@ function readHistory(params: {
   }
 
   return { failures, order: together.isOk ? together.value.order : undefined };
+}
+
+/**
+ * Write the drafts' findings as a JSON list, for `okf review-comments`, and
+ * say why when the write fails.
+ */
+function writeReviewFile(params: {
+  /** The drafts' findings. @example `[{ code: "T001", … }]` */
+  drafts: readonly CheckFinding[];
+
+  /** Where a failed write is said. @example `createOutput("okf")` */
+  output: Output;
+
+  /** The file to write. @example "/tmp/okf-drafts.json" */
+  reviewFile: string;
+}): boolean {
+  const { drafts, output, reviewFile } = params;
+
+  try {
+    writeFileSync(reviewFile, `${JSON.stringify(drafts, undefined, 2)}\n`);
+
+    return true;
+  } catch (error) {
+    output.error(
+      toTerminalLine(`Couldn't write ${reviewFile}: ${describeError(error)}`)
+    );
+
+    return false;
+  }
 }

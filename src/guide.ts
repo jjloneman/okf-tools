@@ -55,6 +55,7 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
   - \`okf migrate --check\` writes nothing, and fails while a bundle still needs migrating.
 - **\`okf init\`** writes the \`okf\` config, the agent block, and the okf skills in \`.claude/skills\`. Run it only when the person asks you to set up okf-tools, or to refresh the block or the skills.
   - \`okf init --check\` writes nothing, so run it whenever you like.
+- **\`okf review-comments <file>\`** posts each draft that \`okf check --review-file\` wrote to \`<file>\` as a pull request review comment, for the reusable \`okf-check.yml\` workflow in GitHub Actions. Never run it yourself: it posts to GitHub.
 - **\`okf guide\`** prints this guide.`;
 
 /**

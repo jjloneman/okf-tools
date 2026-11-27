@@ -224,6 +224,62 @@ describe("run as okf, before a command runs", () => {
   });
 });
 
+describe("run as okf review-comments", () => {
+  beforeEach(() => {
+    vi.stubEnv("GITHUB_TOKEN", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** Run `okf review-comments` from the repo root. */
+  function runReviewComments(args: string[]): Promise<number> {
+    return run({
+      args: ["review-comments", ...args],
+      cwd: repo.root,
+      isInteractive: false,
+      program: "okf",
+    });
+  }
+
+  test("prints its usage for --help", async () => {
+    // When - asking for help
+    const code = await runReviewComments(["--help"]);
+
+    // Then - its own usage on stdout
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos.join("\n")).toContain(
+      "[okf] usage: okf review-comments <file>"
+    );
+  });
+
+  test("prints why and its usage for a usage error", async () => {
+    // When - naming no file
+    const code = await runReviewComments([]);
+
+    // Then - a usage error, with the usage
+    expect(code).toBe(EXIT_CODES.failure);
+    expect(errors.join("\n")).toMatch(
+      /Name one file[\s\S]*usage: okf review-comments/u
+    );
+  });
+
+  test("annotates the drafts outside GitHub Actions", async () => {
+    // Given - a drafts file, and no token
+    repo.write("drafts.json", "[]\n");
+
+    // When - posting them
+    const code = await runReviewComments(["drafts.json"]);
+
+    // Then - it says why it can't post, and passes
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([
+      "[okf] GITHUB_TOKEN and GITHUB_REPOSITORY must be set; each draft is an annotation instead.",
+    ]);
+  });
+});
+
 describe.each([
   {
     command: "index",
@@ -424,6 +480,25 @@ describe("run as okf check", () => {
     expect(infos).toStrictEqual([
       "[okf] 3 files checked: 0 errors, 0 warnings, 0 info.",
     ]);
+  });
+
+  test("writes --review-file from where it was run", async () => {
+    // Given - a draft record
+    repo.write("docs/decisions/index.md", rootIndex);
+    repo.write(
+      "docs/decisions/a.md",
+      record(["type: Decision", "status: draft"])
+    );
+    repo.write("docs/references/index.md", rootIndex);
+
+    // When - checking with a review file
+    const code = await runCheck(["--review-file", "drafts.json"]);
+
+    // Then - the draft in the file at the repo root
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(readFileSync(path.join(repo.root, "drafts.json"), "utf8")).toContain(
+      '"code": "T001"'
+    );
   });
 
   test("runs the house rules okf.rules turns on", async () => {
