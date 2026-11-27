@@ -107,8 +107,8 @@ export function readSourcePaths(file: CheckedFile): string[] {
  *
  * - Uncommitted changes count unless the record has some too.
  *
- * - When git couldn't say which commits a committed record's history holds,
- *   it's skipped, as `okf check` says on stderr.
+ * - When git couldn't read the record's history, or say which commits it
+ *   holds, the record is skipped, as `okf check` says on stderr.
  *
  * - A path that no longer exists is `T008`'s.
  */
@@ -127,13 +127,14 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
     )?.commit;
     const unseen = file.readUnseenCommits(file.filePath);
 
-    if (unseen === undefined && lastCommit !== undefined) {
+    if (unseen === undefined) {
       return [];
     }
     const isUnseen = ({ at, commit }: FileChange): boolean =>
       commit === undefined
         ? !isDirty
-        : unseen?.has(commit.hash) === true && (!isDirty || at > writtenAt);
+        : unseen.has(commit.hash) &&
+          ((!isDirty && lastCommit !== undefined) || at > writtenAt);
 
     return readCitedSources(parsed).flatMap(({ node, path, resource }) => {
       if (!file.doesExist(path)) {

@@ -319,6 +319,15 @@ describe("T007 source-changed", () => {
       lines: [],
     },
     {
+      description:
+        "a source changed before the record was written, for a record git lists no changes to",
+      history: {
+        "kb/notes/a.md": [],
+        "src/a.ts": [{ at: toSeconds(GENERATED_AT), commit: commit("a") }],
+      },
+      lines: [],
+    },
+    {
       description: "a source changed before a later sign-off",
       history: {
         "src/a.ts": [
