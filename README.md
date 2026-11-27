@@ -649,8 +649,9 @@ pnpm okf format --changed
 | `index-entry-order`   | The same.                                                                                |
 
 - **It fixes only what `okf check` reported**, so `okf.rules` and `okf.exclude` decide what it touches.
-  - Under `--changed`, it fixes only the files the branch changed, and the indexes that list them, not a record reported only for citing a changed file.
-  - It never fixes a record with a `T007` finding, so the fix doesn't hide that source change.
+  - Under `--changed`, it fixes the files the branch changed, the indexes that list them, and the records reported for citing a changed file.
+  - It fixes a record with a `T007` finding too, and once the fix is committed the warning stays, since only a re-stamp or a sign-off counts as the record having seen its sources.
+  - Until then the record has uncommitted changes of its own, so `T007` judges it as above, by `generated.at` and the latest sign-off, and an uncommitted change to the source doesn't count.
   - An index fix writes the index as `okf index` would, so its other stale lines and its tag index are synced too.
 - **It never edits `generated` or `verified`**, so a sign-off still holds after a fix, and it commits nothing.
 - **It moves text as written**, with no YAML round-trip, so a fixed record's diff shows only the fix, and every key is kept, unknown and `x-` keys included.

@@ -95,7 +95,7 @@ function readFile(params: { filePath: string; text: string }): CheckedFile {
 }
 
 describe("applyFixes", () => {
-  test("leaves a record whose source changed since it was written", () => {
+  test("fixes a record whose source changed since it was written", () => {
     // Given - a record with unsorted tags and a changed source
     repo.write("kb/a.md", UNSORTED);
 
@@ -110,10 +110,19 @@ describe("applyFixes", () => {
       houseRules: { "tags-sorted": "warn" },
     });
 
-    // Then - nothing written
+    // Then - its tags sorted, as for any other record
     expect(fixed).toStrictEqual({
       isOk: true,
-      value: { refusals: [], written: [] },
+      value: {
+        refusals: [],
+        written: [
+          {
+            filePath: "kb/a.md",
+            originalText: UNSORTED,
+            text: record(["type: Decision", "tags: [a, b]"]),
+          },
+        ],
+      },
     });
   });
 
