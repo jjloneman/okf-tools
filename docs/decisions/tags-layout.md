@@ -28,8 +28,8 @@ sources:
     resource: ../../src/tags.ts
     title: src/tags.ts, the okf tags command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:44:00Z }
-verified: { by: human:jjloneman, at: 2026-11-27T06:09:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:00:17Z }
+verified: { by: human:jjloneman, at: 2026-11-27T07:03:48Z }
 ---
 
 # How a record's tags are laid out

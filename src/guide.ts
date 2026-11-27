@@ -27,7 +27,8 @@ export const RECORD_RULES: string = [
   `- **Start a new record with \`okf new <record> --type <type> --by <producer>/<version>\`**, such as \`--by claude-code/2.1.316\`, which writes it as \`status: draft\` with \`generated\` stamped from the clock, and lists it in its index; then write its body.
 - **List in \`sources\` each repo file or folder a record was written from**, with \`resource\` relative to the record's folder, such as \`../../src/git.ts\`, and footnote each claim it rests on with a footnote whose label is the source's \`id\`, such as \`[^git]\`, so \`okf check\` warns when a cited file changes after the record was written or signed off.
   - Cite files, or a folder only when the record covers all of it, and leave out a file nearly every change touches, such as \`package.json\`, which would warn on every release.
-- **When you edit a record, other than its \`tags\` alone, re-stamp it with \`okf touch <record>... --by <producer>/<version> --draft\`**, which sets \`generated\` from the clock and a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
+- **When you edit a record, other than an edit that changes only its \`tags\`, the order of its \`sources\`, or both, re-stamp it with \`okf touch <record>... --by <producer>/<version> --draft\`**, which sets \`generated\` from the clock and a \`stable\` one back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.
+  - A reorder of \`sources\` keeps \`generated\` and \`status\`, since a footnote cites its source by \`id\`, so the order changes no claim. Adding, removing, or editing an entry is re-stamped as usual.
   - Never type \`generated.at\` by hand; a wrong time makes a record look changed, or not.
 - **Never add or change a \`verified\` entry yourself.** Signing a record off is the person's call.
 - **Verify only when the person asks you to**, with \`okf verify --yes <record>...\`, naming the files they approved.
@@ -49,7 +50,7 @@ const COMMAND_RULES = `- **\`okf status\`** lists every record's trust state, an
 - **\`okf index\`** rewrites each \`index.md\` line that links to a record from the record's title and description, and lists records no line does. Run it after you add, remove, retitle, or retag a record, in the same change.
   - \`okf index --check\` writes nothing, so run it whenever you like.
 - **\`okf new <record>\`** writes a draft record's frontmatter, stamped from the clock, and its index line. Run it whenever you start a record, before writing its body.
-- **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, other than to its \`tags\` alone, in the same change.
+- **\`okf touch <record>...\`** re-stamps \`generated\` from the clock, and with \`--draft\` sets a \`stable\` record back to draft. Run it after every edit to a record, other than one that changes only its \`tags\`, the order of its \`sources\`, or both, in the same change.
 - **\`okf deprecate <record>... --by <producer>/<version>\`** marks records \`status: deprecated\`, kept for links and history, and re-stamps \`generated\` as \`okf touch\` does; \`--superseded-by <record>\` names the record that replaces them. Run it when a change retires or replaces a record, in place of deleting it.
 - **\`okf migrate\`** prints the changes that move each bundle from OKF v0.1 or v0.2 to v0.3, and writes nothing; \`--write\` applies them. Run it bare whenever you like, but pass \`--write\` only when the person asks you to migrate.
   - \`okf migrate --check\` writes nothing, and fails while a bundle still needs migrating.
