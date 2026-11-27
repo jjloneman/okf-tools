@@ -33,8 +33,8 @@ sources:
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:13:59Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:32:51Z }
 verified: { by: human:jjloneman, at: 2026-11-27T05:21:23Z }
 ---
 

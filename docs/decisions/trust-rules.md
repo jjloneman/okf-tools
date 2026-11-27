@@ -38,8 +38,8 @@ sources:
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:32:51Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 

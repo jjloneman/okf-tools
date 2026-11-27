@@ -28,8 +28,8 @@ sources:
   - id: spec-rules
     resource: ../../src/spec-rules.ts
     title: src/spec-rules.ts, the rules the spec states
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:37:50Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:32:51Z }
 verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
 ---
 
