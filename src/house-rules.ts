@@ -85,6 +85,13 @@ export type HouseRules = {
   "source-uncited"?: HouseLevel;
 
   /**
+   * A `sources` entry whose `id` sorts before the one above it.
+   *
+   * @example "error"
+   */
+  "sources-sorted"?: HouseLevel;
+
+  /**
    * How many tags a record has, at least `min` and at most `max`.
    *
    * @example `{ level: "warn", max: 10, min: 5 }`
@@ -173,7 +180,7 @@ export type TagsLayout = (typeof TAGS_LAYOUTS)[number];
 /** A house rule's name. */
 type HouseRuleName = keyof HouseRules;
 
-/** A tag as written: its node, for the line, and its text. */
+/** A tag or source `id` as written: its node, for the line, and its text. */
 type TagItem = {
   /**
    * The item's node.
@@ -279,6 +286,22 @@ const HOUSE_RULES: {
     }),
     code: "H010",
   },
+  "sources-sorted": {
+    build: () => ({
+      checkFile: (file) =>
+        withConcept(file, (parsed) =>
+          findUnsorted({
+            file,
+            items: readSourceIds(parsed).map(({ id, node }) => ({
+              node,
+              value: id,
+            })),
+            what: "sources aren't sorted by `id`",
+          })
+        ),
+    }),
+    code: "H013",
+  },
   "tags-count": {
     build: ({ max, min }) => {
       return {
@@ -364,28 +387,13 @@ const HOUSE_RULES: {
   "tags-sorted": {
     build: () => ({
       checkFile: (file) =>
-        withConcept(file, (parsed) => {
-          let previous: string | undefined;
-
-          for (const { node, value } of readTags(parsed)) {
-            if (value === undefined) {
-              continue;
-            }
-
-            if (previous !== undefined && previous > value) {
-              return [
-                {
-                  line: readNodeLine({ file, node }),
-                  message: `tags aren't sorted: "${value}" comes after "${previous}"`,
-                },
-              ];
-            }
-
-            previous = value;
-          }
-
-          return [];
-        }),
+        withConcept(file, (parsed) =>
+          findUnsorted({
+            file,
+            items: readTags(parsed),
+            what: "tags aren't sorted",
+          })
+        ),
     }),
     code: "H002",
   },
@@ -638,6 +646,38 @@ function findNearestIndex(params: {
   return folder === bundle.bundleDir
     ? undefined
     : findNearestIndex({ ...params, folder: path.posix.dirname(folder) });
+}
+
+/**
+ * Report the first item that sorts before the one above it, by code unit,
+ * passing over an item that isn't a single value.
+ */
+function findUnsorted(params: {
+  file: CheckedFile;
+  items: readonly TagItem[];
+  what: string;
+}): RuleHit[] {
+  const { file, items, what } = params;
+  let previous: string | undefined;
+
+  for (const { node, value } of items) {
+    if (value === undefined) {
+      continue;
+    }
+
+    if (previous !== undefined && previous > value) {
+      return [
+        {
+          line: readNodeLine({ file, node }),
+          message: `${what}: "${value}" comes after "${previous}"`,
+        },
+      ];
+    }
+
+    previous = value;
+  }
+
+  return [];
 }
 
 /** Whether a value is a whole number of at least zero. */

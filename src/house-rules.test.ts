@@ -145,7 +145,7 @@ describe("readHouseRules", () => {
     {
       description: "an unknown rule",
       reason:
-        "`okf.rules` in package.json: there's no house rule \"tag-case\"; they're index-entry-missing, index-entry-order, index-entry-stale, key-order, source-uncited, tags-count, tags-kebab-case, tags-layout, tags-required, tags-sorted, tags-vocabulary, wikilink.",
+        "`okf.rules` in package.json: there's no house rule \"tag-case\"; they're index-entry-missing, index-entry-order, index-entry-stale, key-order, source-uncited, sources-sorted, tags-count, tags-kebab-case, tags-layout, tags-required, tags-sorted, tags-vocabulary, wikilink.",
       value: { "tag-case": "warn" },
     },
     {
@@ -670,5 +670,80 @@ describe("H011 wikilink", () => {
     expect(
       findLines({ files: { "kb/a.md": text }, rules: { wikilink: "warn" } })
     ).toStrictEqual(expected);
+  });
+});
+
+describe("H013 sources-sorted", () => {
+  test.each([
+    {
+      description: "sources sorted by id",
+      expected: [],
+      text: concept(["sources:", "  - id: a", "  - id: b"]),
+    },
+    {
+      description: "sources out of order, at the first",
+      expected: ["kb/a.md:7 H013"],
+      text: concept([
+        "sources:",
+        "  - id: a",
+        "    resource: https://example.com",
+        "  - id: c",
+        "  - id: b",
+        "  - id: a",
+      ]),
+    },
+    {
+      description: "a source with no id between sorted ones",
+      expected: [],
+      text: concept([
+        "sources:",
+        "  - id: a",
+        "  - resource: https://example.com",
+        "  - id: b",
+      ]),
+    },
+    { description: "no sources", expected: [], text: concept([]) },
+  ])("checks $description", ({ expected, text }) => {
+    // When/Then - what it reports
+    expect(
+      findLines({
+        files: { "kb/a.md": text },
+        rules: { "sources-sorted": "warn" },
+      })
+    ).toStrictEqual(expected);
+  });
+
+  test("names the source out of place and the one above it", () => {
+    // Given - two sources out of order
+    const text = concept(["sources:", "  - id: b", "  - id: a"]);
+
+    // When - checking it
+    const report = buildCheckReport({
+      bundles: [
+        {
+          bundleDir: "kb",
+          files: [
+            readCheckedFile({
+              bundleDir: "kb",
+              doesExist: () => true,
+              filePath: "kb/a.md",
+              text,
+            }),
+          ],
+        },
+      ],
+      rules: buildHouseRules({ "sources-sorted": "error" }),
+      skipped: [],
+    });
+
+    // Then - the message, at error
+    expect(
+      report.findings.map(({ message, severity }) => ({ message, severity }))
+    ).toStrictEqual([
+      {
+        message: 'sources aren\'t sorted by `id`: "a" comes after "b"',
+        severity: "error",
+      },
+    ]);
   });
 });

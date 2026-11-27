@@ -612,6 +612,7 @@ Conventions the spec leaves open, which a repo turns on in `okf.rules`; their `H
 | H010 | `source-uncited`      |                                          | A `sources` entry no footnote in the body cites by its `id`.                           |
 | H011 | `wikilink`            |                                          | A `[[wikilink]]` in a record's body, which OKF doesn't read as a link (§6.1).          |
 | H012 | `key-order`           | `order`, the keys to put first; required | A top-level key out of that order; keys it doesn't list belong after it, as they were. |
+| H013 | `sources-sorted`      |                                          | A `sources` entry whose `id` sorts before the one above it, at the first out of place. |
 
 - **`warn` reports a warning, and `error` an error,** which fails the run.
 - **A name, level, or option `okf check` doesn't know is refused**, so a typo can't turn a rule off unnoticed.
@@ -643,6 +644,7 @@ pnpm okf format --changed
 | --------------------- | ---------------------------------------------------------------------------------------- |
 | `tags-sorted`         | Sorts `tags` in place, flow or block, keeping each tag's quotes.                         |
 | `tags-layout`         | With `block`, rewrites a flow list as a block list; a comment after it moves to `tags:`. |
+| `sources-sorted`      | Sorts `sources` by `id`, moving each entry as written, comments inside it included.      |
 | `key-order`           | Moves each top-level key, with its lines, into the order `order` lists.                  |
 | `index-entry-missing` | Writes the record's nearest `index.md` as `okf index` would.                             |
 | `index-entry-stale`   | The same.                                                                                |
@@ -658,6 +660,7 @@ pnpm okf format --changed
 - **It refuses what it can't move safely**, naming the file and why on stderr, and keeps its findings, which decide the exit code:
   - frontmatter `okf verify` would refuse, such as YAML that isn't valid;
   - a `tags` list that's an alias, has an anchor, a tag or a comment among its tags, or holds anything but single values on one line each;
+  - a `sources` list that's an alias or a flow list, has a comment among its entries, or has entries at different columns; or an entry with no `id`, a tag, an anchor or an alias inside it, or a block scalar last;
   - keys with a comment line between two of them.
 - **It writes as `okf verify` does:** never through a symlink, only over a file still holding the text it checked, and all or nothing.
 - **Prettier leaves its output alone,** at Prettier's defaults, so a repo can run both.
