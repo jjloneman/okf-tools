@@ -228,10 +228,11 @@ export function planReviewComments(params: {
   const { commitId, drafts, files, pullUrl, threads } = params;
 
   // GitHub anchors each file of a pull request's diff by its path's SHA-256.
-  const diffUrl = (path: string): string | undefined =>
-    files.has(path)
-      ? `${pullUrl}/files#diff-${createHash("sha256").update(path).digest("hex")}`
-      : undefined;
+  const diffUrl = (path: string): string | undefined => {
+    const hash = createHash("sha256").update(path).digest("hex");
+
+    return files.has(path) ? `${pullUrl}/files#diff-${hash}` : undefined;
+  };
   const actions: ReviewAction[] = [];
   const kept = new Set<string>();
 
@@ -373,10 +374,16 @@ export function wordComment(params: {
 }): string {
   const { blob, diffUrl = () => undefined, finding } = params;
   const sources = finding.sources ?? [];
+  // The summary holds the actor, a record's own text, so only the clauses
+  // after it are searched for the sources.
   const [summary = "", ...rest] = finding.message
     .split("; ")
-    .map((clause) =>
-      toSentence(formatSourcesClause({ clause, diffUrl, sources }))
+    .map((clause, index) =>
+      toSentence(
+        index === 0
+          ? formatClause(clause)
+          : formatSourcesClause({ clause, diffUrl, sources })
+      )
     );
   const details = rest.slice(0, -1);
   const settle = rest.at(-1);
@@ -501,7 +508,10 @@ function formatSourcesClause(params: {
     })
   );
 
-  return `${formatClause(clause.slice(0, at))}${linked}${formatClause(clause.slice(at + named.length))}`;
+  const before = formatClause(clause.slice(0, at));
+  const after = formatClause(clause.slice(at + named.length));
+
+  return `${before}${linked}${after}`;
 }
 
 /** Set a rule code as code, linked to the README's table of its rules. */

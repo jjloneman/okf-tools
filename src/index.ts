@@ -9,6 +9,7 @@ export type {
   CheckReport,
   CheckSeverity,
   CheckSkipped,
+  FindingSource,
 } from "./check-engine.ts";
 export type { RunParams } from "./cli.ts";
 export { run } from "./cli.ts";

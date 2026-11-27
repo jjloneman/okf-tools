@@ -297,7 +297,7 @@ function readGitHubTarget(params: {
   const token = env.GITHUB_TOKEN ?? "";
   const [owner = "", repo = ""] = (env.GITHUB_REPOSITORY ?? "").split("/");
   const apiUrl = env.GITHUB_API_URL ?? "https://api.github.com";
-  const serverUrl = env.GITHUB_SERVER_URL ?? "https://github.com";
+  const serverUrl = (env.GITHUB_SERVER_URL ?? "").replace(/\/+$/u, "");
 
   if (token === "" || owner === "" || repo === "") {
     return {
@@ -332,7 +332,7 @@ function readGitHubTarget(params: {
           fetch,
           number,
           owner,
-          pullUrl: `${serverUrl}/${owner}/${repo}/pull/${String(number)}`,
+          pullUrl: `${serverUrl === "" ? "https://github.com" : serverUrl}/${owner}/${repo}/pull/${String(number)}`,
           repo,
           token,
         },

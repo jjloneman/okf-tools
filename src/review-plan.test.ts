@@ -200,6 +200,21 @@ describe("wordComment", () => {
     }
   );
 
+  test("links no source in the summary, which holds a record's own text", () => {
+    // Given - an actor whose name holds the phrase
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message:
+        "x its source a.ts signed it off; nothing else; okf verify signs it off",
+      sources: [{ path: "a.ts", resource: "a.ts" }],
+    };
+
+    // When/Then - the summary formatted as any other
+    expect(
+      wordComment({ blob: BLOB, diffUrl: () => PULL, finding }).split("\n")[3]
+    ).toBe("> X its source a.ts signed it off.");
+  });
+
   test("formats the clause as before when it doesn't name its sources", () => {
     // Given - sources the message words some other way
     const finding: CheckFinding = {
