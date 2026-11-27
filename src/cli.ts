@@ -45,15 +45,18 @@ import {
   parseIndexArgs,
   parseMigrateArgs,
   parseNewArgs,
+  parseReviewCommentsArgs,
   parseStatusArgs,
   parseTagsArgs,
   parseTouchArgs,
+  REVIEW_COMMENTS_USAGE,
   STATUS_USAGE,
   TAGS_USAGE,
   TOUCH_USAGE,
 } from "./options.ts";
 import { createOutput, describeError } from "./output.ts";
 import { resolveBundleDirs } from "./repo.ts";
+import { runReviewComments } from "./review-comments.ts";
 import { runStatus } from "./status.ts";
 import { runTags } from "./tags.ts";
 import { runTouch } from "./touch.ts";
@@ -98,7 +101,8 @@ export type RunParams = {
 /**
  * Run `okf` or `okf-verify`: read the arguments, then dispatch to a command:
  * `okf check`, `okf deprecate`, `okf diff`, `okf guide`, `okf index`,
- * `okf init`, `okf migrate`, `okf new`, `okf status`, `okf tags`,
+ * `okf init`, `okf migrate`, `okf new`, `okf review-comments`,
+ * `okf status`, `okf tags`,
  * `okf touch`, or `okf verify`; `okf --version` prints the installed
  * version.
  *
@@ -159,6 +163,10 @@ export async function run(params: RunParams): Promise<ExitCode> {
 
   if (parsed.kind === "tags") {
     return runTagsCommand({ args: parsed.args, cwd, output });
+  }
+
+  if (parsed.kind === "review-comments") {
+    return runReviewCommentsCommand({ args: parsed.args, cwd, output });
   }
 
   if (parsed.kind === "check" || parsed.kind === "format") {
@@ -371,6 +379,10 @@ function runCheckCommand(params: {
       isFix: isFormat || options.isFix,
       isGitHubActions: process.env.GITHUB_ACTIONS === "true",
       isStrict: options.isStrict,
+      reviewFile:
+        options.reviewFile === undefined
+          ? undefined
+          : path.resolve(cwd, options.reviewFile),
     });
   } catch (error) {
     output.error(describeError(error));
@@ -615,6 +627,39 @@ function runNewCommand(params: {
 
     return EXIT_CODES.failure;
   }
+}
+
+/**
+ * Run `okf review-comments`: read its argument, then post the drafts with
+ * the job's environment and `fetch`.
+ */
+async function runReviewCommentsCommand(params: {
+  args: readonly string[];
+  cwd: string;
+  output: Output;
+}): Promise<ExitCode> {
+  const { args, cwd, output } = params;
+  const parsed = parseReviewCommentsArgs(args);
+
+  if (parsed.kind === "help") {
+    output.info(REVIEW_COMMENTS_USAGE);
+
+    return EXIT_CODES.ok;
+  }
+
+  if (parsed.kind === "invalid") {
+    output.error(`${parsed.message}\n\n${REVIEW_COMMENTS_USAGE}`);
+
+    return EXIT_CODES.failure;
+  }
+
+  // It returns every failure as a reason, so it never throws.
+  return runReviewComments({
+    draftsFile: path.resolve(cwd, parsed.options.draftsFile),
+    env: process.env,
+    fetch: globalThis.fetch,
+    output,
+  });
 }
 
 /**

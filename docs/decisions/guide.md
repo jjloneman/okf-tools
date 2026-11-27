@@ -18,8 +18,8 @@ sources:
   - id: agent-block
     resource: ../../src/agent-block.ts
     title: src/agent-block.ts, the agent block's text and markers
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T23:38:03Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:55:27Z }
 verified: { by: human:jjloneman, at: 2026-11-26T23:48:39Z }
 ---
 
@@ -33,7 +33,7 @@ As of 2026-11-25, from `src/guide.ts`[^guide], `src/agent-block.ts`[^agent-block
 
 - **`okf guide` prints, as Markdown, what the records are, the rules for writing and verifying them, then each command and when an agent may run it.**
   - `okf verify --yes` signs as the configured `okf.verifiedBy`, the person, so an agent never passes `--by` with its own name.
-  - Each command's line says when an agent may run it, as of 2026-11-26: the read-only ones (`okf status`, `okf diff`, `okf check`, `okf tags`, `okf index --check`, `okf init --check`, `okf migrate` without `--write`, `okf guide`) whenever it likes; the ones that edit records (`okf new`, `okf touch`, `okf format`, `okf index`, `okf deprecate`) as part of its own change to them; `okf verify --yes`, `okf init`, and `okf migrate --write` only when the person asks; and `okf verify` without `--yes` is the person's.
+  - Each command's line says when an agent may run it, as of 2026-11-26: the read-only ones (`okf status`, `okf diff`, `okf check`, `okf tags`, `okf index --check`, `okf init --check`, `okf migrate` without `--write`, `okf guide`) whenever it likes; the ones that edit records (`okf new`, `okf touch`, `okf format`, `okf index`, `okf deprecate`) as part of its own change to them; `okf verify --yes`, `okf init`, and `okf migrate --write` only when the person asks; `okf verify` without `--yes` is the person's; and `okf review-comments`, which posts to GitHub, is the reusable workflow's, never an agent's.
   - It reads nothing, needs no repo or config, takes no arguments but `--help`, and exits `0`; an argument is a usage error that exits `1`.
   - It ends with each skill `okf init` installs and when to load it, built from the skills' own descriptions (#51); see [Which skills okf-tools ships](skills.md).
 - **The guide prints with no `[okf]` prefix,** like `okf status --format json`, so it reads, and pastes, as the Markdown it is. Its `--help` and usage errors are prefixed like any other line.

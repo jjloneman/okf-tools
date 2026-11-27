@@ -71,6 +71,7 @@ describe("runCheck when git can't place a source's commits", () => {
       isFix: false,
       isGitHubActions: false,
       isStrict: false,
+      reviewFile: undefined,
     });
 
     // Then - the failure on stderr, and no source finding on the record

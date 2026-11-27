@@ -14,11 +14,17 @@ sources:
   - id: ci-yml
     resource: ../../.github/workflows/ci.yml
     title: .github/workflows/ci.yml, which calls it on this repo's records
+  - id: check
+    resource: ../../src/check.ts
+    title: src/check.ts, the okf check command
+  - id: review-comments
+    resource: ../../src/review-comments.ts
+    title: src/review-comments.ts, the okf review-comments command
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:15:34Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T03:01:09Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 
@@ -36,7 +42,7 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
   - When the threads can't be read, such as when the calling job grants no `pull-requests` access, every draft is an annotation.
 - **Only `T001` becomes a comment**, the one finding that's about whether a record may merge as it is.
   - Every other finding stays an annotation, and an error such as `T006` or `T008` still fails the check job, so resolving a thread can't wave it through.
-  - With `review-comments` on, the check job runs `okf check --format json`, then annotates each other finding and prints each as a line, as `okf check` would, and fails as `okf check` exited.
+  - With `review-comments` on, the check job runs `okf check --review-file`, which writes the drafts as JSON and leaves them out of the annotations, and prints every finding as a line as before[^check].
 - **A file-level comment, not a line comment**, so it never needs a line inside the diff, and never moves with one.
 - **A hidden marker, `<!-- okf-check: <path> <code> <blob> -->`, finds a comment again**, with the record's git blob at the pull request's head, so a run tells a changed record from an acknowledged one by its text, not its line, and a change to the record on the base branch, which the merge checkout holds, asks for no new acknowledgment:
   - a thread for the same blob is kept as it is, resolved or not, its text edited only when the wording changed;
@@ -47,13 +53,19 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 - **The message's own text can't mention anyone or open an HTML comment**, so a record's `verified.by` can't ping someone or forge a marker; a section such as §5.3 links to the pinned spec.
 - **The comments job declares no `permissions`, so it takes the calling job's**, which must grant `contents: write` and `pull-requests: write`, and the workflow drops its workflow-wide `permissions: {}`.
   - `pull-requests: write` posts and edits comments; resolving a thread also needs `contents: write`, as GitHub refused it with "Resource not accessible by integration" without it on PR #147, as of 2026-11-27.
-  - The comments job checks nothing out and runs only its own inline script, so the write access reaches no code from the pull request.
+  - The comments job runs the pull request's own okf, as the check job does, so the write access reaches the pull request's code. A same-repo author can already push to the repo, and a fork never gets here; the job installs with `--ignore-scripts`, so no dependency's install script runs with the token.
   - **Rejected:** asking for these in the workflow. A called job that asks for more than its caller grants fails the whole run before it starts, even when its `if` is false, so every caller that doesn't grant it would break.
   - The check job still declares `contents: read` alone.
   - **Rejected:** a second reusable workflow. The issue asked for an input, and a second call would run `okf check` twice.
 - **One comments run at a time for each pull request**, by a `concurrency` group, so two runs never both post the same draft.
 - **The check job keeps its name, `🩺 OKF check`**, so no caller's required check moves; the comments job is a new one, `💬 OKF review comments`, which falls back to annotations rather than failing, so it needn't be required.
-- **Comments are posted with `actions/github-script`**, inline, since the workflow runs against the caller's checkout and can't load a script from this repo.
+- **Comments are posted by `okf review-comments`**, okf-tools' own command, tested like the rest of the package[^review-comments], as the owner asked in review on PR #147.
+  - The workflow runs against the caller's checkout, so it can't load a script from this repo; the command reaches it as okf does, from the repo's own lockfile or `okf-version`, and the comments job installs it the same way the check job does.
+  - It calls GitHub with `fetch` and the job's token, with no new dependency, and reads the record's blob at the head from the pull request's file list.
+  - A run whose pull request's head has moved on since its push annotates its drafts instead, since its blob would be read from a commit its check never saw; the newer push's run posts them.
+  - A marker whose path isn't valid percent-encoding is skipped, as no run of its own wrote it, and an answer without the pull request's threads falls back to annotations, rather than reading as none and posting every draft again.
+  - **Rejected:** inline `actions/github-script` steps, which the first version used. Nothing tested them.
+  - **Rejected:** checking out okf-tools at the workflow's own commit to run a script file, which needs a SHA GitHub doesn't clearly expose to a called workflow, and leaves the script untested.
 - **This repo opts in**[^ci-yml], with a ruleset[^ruleset] that already blocks a merge while a thread is unresolved, so a draft merges only once the owner has resolved its thread.
 
 ## Why
@@ -63,8 +75,9 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 
 ## Consequences
 
-- The inline scripts are covered by no test; this repo's own pull requests run them first, as `ci.yml`'s `okf` job calls the workflow from the same commit.
-- A spec pin moves the spec link in the comments job with every other spec link.
+- A caller needs a version of okf-tools with `okf check --review-file` and `okf review-comments` before it turns `review-comments` on.
+- This repo's own pull requests run the workflow first, as `ci.yml`'s `okf` job calls it from the same commit.
+- A spec pin moves the spec link in `src/review-comments.ts` with every other spec link.
 
 ## Links
 
@@ -72,6 +85,10 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 - [How okf check judges whether a sign-off still holds](trust-rules.md) — what `T001` says.
 
 [^okf-check-yml]: `.github/workflows/okf-check.yml`, the reusable workflow.
+
+[^check]: `src/check.ts`, the `okf check` command.
+
+[^review-comments]: `src/review-comments.ts`, the `okf review-comments` command.
 
 [^ci-yml]: `.github/workflows/ci.yml`, which calls it on this repo's records.
 

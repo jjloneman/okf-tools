@@ -47,6 +47,15 @@ export type CheckOptions = {
    * @example true
    */
   isStrict: boolean;
+
+  /**
+   * Where `--review-file` asked to write each draft's `T001` finding, for
+   * `okf review-comments`, from where the command was run; those findings
+   * then print as lines but not as annotations.
+   *
+   * @example "/tmp/okf-drafts.json"
+   */
+  reviewFile: string | undefined;
 };
 
 /** The flags and record paths a run was given. */
@@ -264,6 +273,7 @@ export type ParsedCommand =
         | "init"
         | "migrate"
         | "new"
+        | "review-comments"
         | "status"
         | "tags"
         | "touch"
@@ -325,6 +335,17 @@ export type ParsedDiffArgs =
        */
       options: DiffOptions;
     };
+
+/** What an `okf review-comments` run was given. */
+export type ReviewCommentsOptions = {
+  /**
+   * The file `okf check --review-file` wrote, from where the command was
+   * run.
+   *
+   * @example "/tmp/okf-drafts.json"
+   */
+  draftsFile: string;
+};
 
 /** Which records `okf status` lists; with none, it lists them all. */
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
@@ -420,6 +441,9 @@ commands:
           whose meaning changes; a dry run unless --write
   new     write a new draft record's frontmatter, stamped from the clock,
           and its index line
+  review-comments
+          post okf check --review-file's drafts as pull request review
+          comments, in GitHub Actions
   status  list every record's trust state, writing nothing
   tags    list every tag in the bundles with its record count
   touch   re-stamp records' \`generated\` from the clock after an edit
@@ -660,6 +684,10 @@ options:
   --changed          report only on files changed since the base branch
   --fix              fix what has one obvious fix, then report the rest
   --format <format>  text (the default) or json
+  --review-file <file>
+                     write each draft's T001 finding to <file> as JSON,
+                     for okf review-comments, and leave it out of the
+                     annotations; text format only
   --strict           fail on warnings too
   --help, -h         print this help`;
 
@@ -681,8 +709,37 @@ options:
   --changed          fix only the files changed since the base branch,
                      and their indexes, and report on those
   --format <format>  text (the default) or json
+  --review-file <file>
+                     write each draft's T001 finding to <file> as JSON,
+                     for okf review-comments; text format only
   --strict           fail on warnings too
   --help, -h         print this help`;
+
+/**
+ * How to call `okf review-comments`, printed for `--help` and after a usage
+ * error.
+ */
+export const REVIEW_COMMENTS_USAGE = `usage: okf review-comments <file>
+
+Posts each draft's T001 finding in <file>, which okf check --review-file
+wrote, as a file-level review comment on the pull request a GitHub Actions
+run is for, so the owner can resolve it to acknowledge that the record
+merges as a draft. A hidden marker finds each comment again: a later run
+edits it rather than posting again, a resolved thread stays resolved until
+the record changes again, and an open thread whose draft is gone is
+resolved.
+
+It reads GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_EVENT_PATH, as GitHub
+Actions sets them; the token needs pull-requests: write to post, and
+contents: write to resolve. A draft outside the pull request's diff, a
+comment GitHub refuses, and every draft when the pull request can't be
+read, print as annotations instead.
+
+It exits 1 when <file> can't be read or isn't a list of findings;
+otherwise 0. It needs this version of okf-tools or later in the job.
+
+options:
+  --help, -h  print this help`;
 
 /** How to call `okf tags`, printed for `--help` and after a usage error. */
 export const TAGS_USAGE = `usage: okf tags [options]
@@ -794,6 +851,7 @@ export function parseCommand(args: readonly string[]): ParsedCommand {
     name === "init" ||
     name === "migrate" ||
     name === "new" ||
+    name === "review-comments" ||
     name === "status" ||
     name === "tags" ||
     name === "touch" ||
@@ -1019,6 +1077,39 @@ export function parseMigrateArgs(
   return { kind: "options", options: { bundles: values.bundle ?? [], mode } };
 }
 
+/**
+ * Read `okf review-comments`' command line into the drafts file it posts,
+ * or say why it can't run.
+ */
+export function parseReviewCommentsArgs(
+  args: readonly string[]
+): ParsedArgs<ReviewCommentsOptions> {
+  let parsed: ReturnType<typeof parseReviewCommentsLine>;
+
+  try {
+    parsed = parseReviewCommentsLine(args);
+  } catch (error) {
+    return isHelpAsked(args)
+      ? { kind: "help" }
+      : { kind: "invalid", message: describeError(error) };
+  }
+
+  const { positionals, values } = parsed;
+
+  if (values.help === true) {
+    return { kind: "help" };
+  }
+
+  const [draftsFile] = positionals;
+
+  return draftsFile === undefined || positionals.length > 1
+    ? {
+        kind: "invalid",
+        message: "Name one file, as okf check --review-file wrote.",
+      }
+    : { kind: "options", options: { draftsFile } };
+}
+
 /** Read `okf status`'s command line into options, or say why it can't run. */
 export function parseStatusArgs(
   args: readonly string[]
@@ -1220,22 +1311,34 @@ function parseCheckCommandArgs(params: {
   }
 
   const format = values.format ?? "text";
+  const reviewFile = values["review-file"];
 
-  return isStatusFormat(format)
-    ? {
-        kind: "options",
-        options: {
-          bundles,
-          format,
-          isChanged: values.changed === true,
-          isFix: values.fix === true,
-          isStrict: values.strict === true,
-        },
-      }
-    : {
-        kind: "invalid",
-        message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
-      };
+  if (!isStatusFormat(format)) {
+    return {
+      kind: "invalid",
+      message: `--format takes ${STATUS_FORMATS.join(" or ")}, not "${format}".`,
+    };
+  }
+
+  // A JSON report already holds every finding, drafts included.
+  if (reviewFile !== undefined && format === "json") {
+    return {
+      kind: "invalid",
+      message: "--review-file takes the text format, not --format json.",
+    };
+  }
+
+  return {
+    kind: "options",
+    options: {
+      bundles,
+      format,
+      isChanged: values.changed === true,
+      isFix: values.fix === true,
+      isStrict: values.strict === true,
+      reviewFile,
+    },
+  };
 }
 
 /**
@@ -1489,6 +1592,7 @@ function parseCheckLine(args: readonly string[]) {
       fix: { type: "boolean" },
       format: { type: "string" },
       help: { short: "h", type: "boolean" },
+      "review-file": { type: "string" },
       strict: { type: "boolean" },
     },
     strict: true,
@@ -1551,6 +1655,20 @@ function parseMigrateLine(args: readonly string[]) {
       help: { short: "h", type: "boolean" },
       write: { type: "boolean" },
     },
+    strict: true,
+  });
+}
+
+/**
+ * Run `parseArgs` over `okf review-comments`' flags.
+ *
+ * - It throws on an unknown flag, which the caller turns into a usage error.
+ */
+function parseReviewCommentsLine(args: readonly string[]) {
+  return parseArgs({
+    allowPositionals: true,
+    args: [...args],
+    options: { help: { short: "h", type: "boolean" } },
     strict: true,
   });
 }

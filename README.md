@@ -483,14 +483,15 @@ pnpm okf format
 - **In GitHub Actions, text findings print as annotations too**, on the files they name, so they show on a pull request's diff; each still prints as a line, since GitHub shows only so many annotations.
 - **`--format json` prints the report for a program**, with `schemaVersion`, `filesChecked`, `counts`, `findings`, and `skipped`. Its shape is public API: a change to it bumps `schemaVersion`, and its TypeScript type is exported as `CheckReport`.
 
-| Flag                | Does                                                              |
-| ------------------- | ----------------------------------------------------------------- |
-| `--bundle <dir>`    | A bundle to check, relative to where you run it; repeat for more. |
-| `--changed`         | Report only on what changed since the base branch.                |
-| `--fix`             | Fix what has one obvious fix first, then report the rest.         |
-| `--format <format>` | `text`, the default, or `json`.                                   |
-| `--strict`          | Exit `1` on a warning too.                                        |
-| `--help`, `-h`      | Print the usage.                                                  |
+| Flag                   | Does                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `--bundle <dir>`       | A bundle to check, relative to where you run it; repeat for more.                                                               |
+| `--changed`            | Report only on what changed since the base branch.                                                                              |
+| `--fix`                | Fix what has one obvious fix first, then report the rest.                                                                       |
+| `--format <format>`    | `text`, the default, or `json`.                                                                                                 |
+| `--review-file <file>` | Write each draft's `T001` to `<file>` as JSON for `okf review-comments`, and leave it out of the annotations; text format only. |
+| `--strict`             | Exit `1` on a warning too.                                                                                                      |
+| `--help`, `-h`         | Print the usage.                                                                                                                |
 
 ### 🤖 In GitHub Actions
 
@@ -519,6 +520,8 @@ jobs:
   - A later run edits its own comment, found by a hidden marker, rather than posting again. A resolved thread stays resolved until the record changes again, and an open one whose draft is gone, as when the record was signed off, is resolved.
   - With a ruleset that requires conversations to be resolved, a draft merges only once someone has resolved its thread. Errors, such as `T006`, still fail the check.
   - A pull request from a fork, any other event, a draft the pull request doesn't change, and a comment GitHub refuses fall back to annotations.
+  - The check job runs `okf check --review-file`, and the comments job `okf review-comments`, from the same okf: the repo's own, or `okf-version`. Both need a version of okf-tools that has them.
+  - `okf review-comments <file>` posts what `okf check --review-file` wrote, reading `GITHUB_TOKEN`, `GITHUB_REPOSITORY` and `GITHUB_EVENT_PATH` as a GitHub Actions job sets them. It exits `1` only when it can't read the file, or the file isn't a list of findings. A run whose pull request has moved on to a newer push annotates its drafts instead, leaving them to the newer run.
 
 | Input             | Does                                                                                                     |
 | ----------------- | -------------------------------------------------------------------------------------------------------- |
