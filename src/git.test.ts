@@ -4,7 +4,7 @@ import { rmSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 
-import { useTestRepo } from "#test/repo";
+import { DISK_SPELLING, useTestRepo } from "#test/repo";
 
 import {
   checkCommittable,
@@ -15,6 +15,7 @@ import {
   listDirtyPaths,
   listIndexPaths,
   listPathChanges,
+  listPathChangesTogether,
   listWorkingPaths,
   readBaseRef,
   readCommittedText,
@@ -554,6 +555,176 @@ describe("listPathChanges", () => {
     // Then - it names the path
     expect(changes.isOk ? undefined : changes.reason).toMatch(
       /^Couldn't read the history of src\/a\.ts: /u
+    );
+  });
+});
+
+describe("listPathChangesTogether", () => {
+  test("reads each path's changes as listPathChanges reads them alone", () => {
+    // Given - a folder, a file beside a longer name, a deleted file, a file
+    // renamed away in the index, an untracked one, another case, and a commit
+    // that changes several of them at once
+    repo.write("src/a.ts", "a\n");
+    repo.write("src/ab.ts", "ab\n");
+    repo.write("gone.md", "gone\n");
+    repo.write("old.md", "old\n");
+    repo.commitAll("add files");
+    repo.write("src/a.ts", "a2\n");
+    repo.write("b.md", "b\n");
+    repo.commitAll("edit a, add b");
+    rmSync(path.join(repo.root, "gone.md"));
+    repo.commitAll("remove gone");
+    repo.git("mv", "old.md", "new.md");
+    repo.write("untracked.md", "u\n");
+    const filePaths = [
+      "src",
+      "src/a",
+      "src/a.ts",
+      "b.md",
+      "gone.md",
+      "old.md",
+      "new.md",
+      "untracked.md",
+      "SRC/a.ts",
+      "missing.md",
+    ];
+
+    // When - reading them together, and each one alone
+    const together = listPathChangesTogether({
+      filePaths,
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+    const alone = filePaths.map((filePath) => {
+      const changes = listPathChanges({
+        filePath,
+        hasHead: true,
+        repoRoot: repo.root,
+      });
+
+      return { changes: changes.isOk ? changes.value : changes, filePath };
+    });
+
+    // Then - the same changes for every path
+    expect(together).toStrictEqual({ isOk: true, value: alone });
+  });
+
+  test.skipIf(!DISK_SPELLING.isNormalizationInsensitive)(
+    "matches a decomposed spelling, as git composes it on this disk",
+    () => {
+      // Given - a file committed and edited, named in its composed form
+      repo.write("caf\u00e9.md", "cafe\n");
+      repo.commitAll("add cafe");
+      repo.write("caf\u00e9.md", "cafe2\n");
+      const filePath = "cafe\u0301.md";
+
+      // When - reading its decomposed spelling together, and alone
+      const together = listPathChangesTogether({
+        filePaths: [filePath],
+        hasHead: true,
+        repoRoot: repo.root,
+      });
+      const alone = listPathChanges({
+        filePath,
+        hasHead: true,
+        repoRoot: repo.root,
+      });
+
+      // Then - the same commit and uncommitted change
+      expect(together).toStrictEqual({
+        isOk: true,
+        value: [{ changes: alone.isOk ? alone.value : alone, filePath }],
+      });
+      expect(alone).toMatchObject({ value: { isDirty: true } });
+    }
+  );
+
+  test("reads no commits on a branch that has none", () => {
+    // Given - a branch with no commit, and an untracked file
+    repo.git("update-ref", "-d", "HEAD");
+    repo.write("src/a.ts", "a\n");
+
+    // When - reading two paths' changes
+    const changes = listPathChangesTogether({
+      filePaths: ["src/a.ts", "b.md"],
+      hasHead: false,
+      repoRoot: repo.root,
+    });
+
+    // Then - no commits, and the untracked one
+    expect(changes).toStrictEqual({
+      isOk: true,
+      value: [
+        { changes: { commits: [], isDirty: true }, filePath: "src/a.ts" },
+        { changes: { commits: [], isDirty: false }, filePath: "b.md" },
+      ],
+    });
+  });
+
+  test("fails on a history with a merge", () => {
+    // Given - a side branch merged back with a merge commit
+    repo.git("switch", "--quiet", "-c", "side");
+    repo.write("src/a.ts", "a\n");
+    repo.commitAll("add a");
+    repo.git("switch", "--quiet", "main");
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    repo.git("merge", "--quiet", "--no-edit", "side");
+
+    // When - reading a path's changes
+    const changes = listPathChangesTogether({
+      filePaths: ["src/a.ts"],
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - it fails, so its caller reads each path alone
+    expect(changes).toStrictEqual({
+      isOk: false,
+      reason: "Couldn't rule out a merge in the history.",
+    });
+  });
+
+  test("fails naming the paths when git status fails", () => {
+    // Given - an index git can't read
+    repo.write(".git/index", "garbage\n");
+
+    // When - reading two paths' changes
+    const changes = listPathChangesTogether({
+      filePaths: ["src/a.ts", "b.md"],
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - it names what it was reading
+    expect(changes).toStrictEqual({
+      isOk: false,
+      reason:
+        "Couldn't read git status for src/a.ts, b.md: fatal: .git/index: index file smaller than expected",
+    });
+  });
+
+  test("fails naming the paths when git log fails", () => {
+    // Given - a history git has lost a tree of
+    repo.write("src/a.ts", "a\n");
+    repo.commitAll("add a");
+    const tree = repo.git("rev-parse", "HEAD^{tree}").trim();
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    rmSync(
+      path.join(repo.root, ".git/objects", tree.slice(0, 2), tree.slice(2))
+    );
+
+    // When - reading two paths' changes
+    const changes = listPathChangesTogether({
+      filePaths: ["src/a.ts", "b.md"],
+      hasHead: true,
+      repoRoot: repo.root,
+    });
+
+    // Then - it names the paths
+    expect(changes.isOk ? undefined : changes.reason).toMatch(
+      /^Couldn't read the history of src\/a\.ts, b\.md: /u
     );
   });
 });

@@ -452,6 +452,34 @@ describe("runCheck", () => {
     ]);
   });
 
+  test("warns about a source changed on a merged branch, reading each path alone", () => {
+    // Given - a record, then its cited file edited on a side branch merged
+    // back with a merge commit
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record");
+    repo.git("switch", "--quiet", "-c", "side");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    repo.git("switch", "--quiet", "main");
+    repo.write("b.md", "b\n");
+    repo.commitAll("add b");
+    repo.git("merge", "--quiet", "--no-edit", "side");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - the same warning as on a history with no merge
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        /^kb\/a\.md:4: warning T007 source-changed: source \.\.\/src\/a\.ts changed in [\da-f]+, at /u
+      ),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
   test("warns about a source commit authored before the record but committed after it", () => {
     // Given - a record generated between its cited file's commit's author
     // time and its committer time, as a rebase-merged commit lands
