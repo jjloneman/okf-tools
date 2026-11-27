@@ -34,7 +34,7 @@ on:
         type: string
       review-comments:
         default: false
-        description: "On a pull request from the same repo, post each draft record's T001 finding as a review comment the owner resolves, instead of an annotation; the calling job grants `pull-requests: write`."
+        description: "On a pull request from the same repo, post each draft record's T001 finding as a review comment the owner resolves, instead of an annotation; the calling job grants `contents: write` and `pull-requests: write`."
         required: false
         type: boolean
       strict:
@@ -47,9 +47,9 @@ on:
 # comments job, gets what the calling job grants.
 #
 # - A called job that asks for more than its caller grants fails the whole
-#   run before it starts, even when its `if` is false, so asking for
-#   `pull-requests: write` here would break every caller that doesn't grant
-#   it.
+#   run before it starts, even when its `if` is false, so asking here for
+#   `contents: write` and `pull-requests: write`, which resolving a thread
+#   needs, would break every caller that doesn't grant them.
 #
 # - The check job still declares only what it uses.
 
@@ -204,7 +204,8 @@ jobs:
   # resolves to acknowledge that the record merges as a draft.
   #
   # - No `permissions`, so it gets the calling job's, which must include
-  #   `pull-requests: write` (see the note above `jobs`).
+  #   `contents: write` and `pull-requests: write` (see the note above
+  #   `jobs`).
   #
   # - A hidden marker names the record, the code and the blob it was found
   #   in. A thread for the same blob is kept as it is, resolved or not; an

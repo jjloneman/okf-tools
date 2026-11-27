@@ -515,7 +515,7 @@ jobs:
 - **Its status check is named `<calling job's name> / 🩺 OKF check`**, such as `📚 OKF records / 🩺 OKF check`; a required check names it that way.
 - **Findings print as annotations** on the pull request's diff, as `okf check` does in any GitHub Actions run.
 - **`review-comments: true` posts each draft's `T001` as a review comment instead**, on the record's file, so the owner can reply to it, and resolve it to acknowledge that the record merges as a draft.
-  - Grant the calling job `pull-requests: write` too; the comments job, `💬 OKF review comments`, takes the calling job's permissions.
+  - Grant the calling job `contents: write` and `pull-requests: write` too, since resolving a thread needs both; the comments job, `💬 OKF review comments`, takes the calling job's permissions, and the check job still reads only.
   - A later run edits its own comment, found by a hidden marker, rather than posting again. A resolved thread stays resolved until the record changes again, and an open one whose draft is gone, as when the record was signed off, is resolved.
   - With a ruleset that requires conversations to be resolved, a draft merges only once someone has resolved its thread. Errors, such as `T006`, still fail the check.
   - A pull request from a fork, any other event, a draft the pull request doesn't change, and a comment GitHub refuses fall back to annotations.

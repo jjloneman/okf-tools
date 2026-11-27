@@ -17,8 +17,8 @@ sources:
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:48:07Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:15:34Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:05:49Z }
 ---
 
@@ -45,8 +45,10 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
   - every other open thread, as when the record was signed off, is resolved, with its marker's blob set to `0`, so if the record comes back as it was, a resolution the owner never made can't stand for theirs;
   - only a marker on a comment by `github-actions` counts, so no one else's comment can stand in for one.
 - **The message's own text can't mention anyone or open an HTML comment**, so a record's `verified.by` can't ping someone or forge a marker; a section such as §5.3 links to the pinned spec.
-- **The comments job declares no `permissions`, so it takes the calling job's**, which must grant `pull-requests: write`, and the workflow drops its workflow-wide `permissions: {}`.
-  - **Rejected:** asking for `pull-requests: write` in the workflow. A called job that asks for more than its caller grants fails the whole run before it starts, even when its `if` is false, so every caller that doesn't grant it would break.
+- **The comments job declares no `permissions`, so it takes the calling job's**, which must grant `contents: write` and `pull-requests: write`, and the workflow drops its workflow-wide `permissions: {}`.
+  - `pull-requests: write` posts and edits comments; resolving a thread also needs `contents: write`, as GitHub refused it with "Resource not accessible by integration" without it on PR #147, as of 2026-11-27.
+  - The comments job checks nothing out and runs only its own inline script, so the write access reaches no code from the pull request.
+  - **Rejected:** asking for these in the workflow. A called job that asks for more than its caller grants fails the whole run before it starts, even when its `if` is false, so every caller that doesn't grant it would break.
   - The check job still declares `contents: read` alone.
   - **Rejected:** a second reusable workflow. The issue asked for an input, and a second call would run `okf check` twice.
 - **One comments run at a time for each pull request**, by a `concurrency` group, so two runs never both post the same draft.

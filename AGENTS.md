@@ -135,7 +135,7 @@ Conventions for any AI agent (or human) working in this repo. Read top to bottom
   - It runs against the caller's checkout, so it never uses `./.github/actions/setup`, which would name a file in the caller's repo.
   - `ci.yml`'s `okf` job calls it from this commit, so a change to it runs here first.
   - Its job's name is part of every caller's status check, `<caller's job> / 🩺 OKF check`, so renaming it breaks their required checks: treat it as a breaking change.
-  - Its `💬 OKF review comments` job, for `review-comments: true`, is the one job that declares no `permissions`, so it takes the calling job's `pull-requests: write`; asking for it would fail every caller that doesn't grant it (see [How okf-check.yml posts drafts as review comments](docs/decisions/review-comments.md)).
+  - Its `💬 OKF review comments` job, for `review-comments: true`, is the one job that declares no `permissions`, so it takes the calling job's `contents: write` and `pull-requests: write`, which resolving a thread needs; asking for it would fail every caller that doesn't grant it (see [How okf-check.yml posts drafts as review comments](docs/decisions/review-comments.md)).
 - `release.yml` runs on every push to `main` (see below).
 - `spec-watch.yml` runs daily and on demand, never on a PR (see [Spec watch](#-spec-watch)).
 - `product-review-reminder.yml` runs weekly and on demand, never on a PR (see [Product review](#-product-review)).
