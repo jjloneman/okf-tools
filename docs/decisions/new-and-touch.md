@@ -26,9 +26,9 @@ sources:
   - id: touch
     resource: ../../src/touch.ts
     title: src/touch.ts, the okf touch command
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:00:17Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+verified: { by: human:jjloneman, at: 2026-11-27T07:03:48Z }
 ---
 
 # How okf new and okf touch stamp generated

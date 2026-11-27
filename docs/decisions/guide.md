@@ -18,9 +18,9 @@ sources:
   - id: guide
     resource: ../../src/guide.ts
     title: src/guide.ts, the okf guide text and record rules
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:00:17Z }
-verified: { by: human:jjloneman, at: 2026-11-27T04:41:52Z }
+verified: { by: human:jjloneman, at: 2026-11-27T07:03:48Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written

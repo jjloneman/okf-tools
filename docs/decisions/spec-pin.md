@@ -26,9 +26,9 @@ sources:
   - id: version
     resource: ../../src/version.ts
     title: src/version.ts, the spec version okf-tools supports
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T06:56:33Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+verified: { by: human:jjloneman, at: 2026-11-27T07:03:48Z }
 ---
 
 # Which OKF spec okf-tools follows
