@@ -13,7 +13,8 @@
  *   the records whose `sources` cite a file the branch changed.
  *
  * - Each path a record's `sources` cite in the repo has its history read
- *   once, with the record's own, for the source rules.
+ *   once, with the record's own, and the record's frontmatter at each of its
+ *   commits and their parents, for the source rules.
  *
  * - It writes nothing, unless `--fix` (or `okf format`) asks it to fix what
  *   it found that has one obvious fix, then report what's left. It exits `1`
@@ -33,10 +34,11 @@ import type {
   CheckSeverity,
   CheckSkipped,
   FileChange,
+  UnseenCommits,
 } from "./check-engine.ts";
 import type { DraftPolicy } from "./config.ts";
 import type { ExitCode } from "./exit-codes.ts";
-import type { PathChanges } from "./git.ts";
+import type { PathChanges, PathCommit } from "./git.ts";
 import type { HouseRules } from "./house-rules.ts";
 import type { CheckFormat } from "./options.ts";
 import type { Outcome } from "./outcome.ts";
@@ -52,6 +54,7 @@ import {
   listUnreachedCommits,
   readMergeBase,
   readTextAt,
+  readTextsAt,
   readWorkingPaths,
   toPathKey,
 } from "./git.ts";
@@ -63,7 +66,7 @@ import {
   matchExcluded,
   readRecordText,
 } from "./repo.ts";
-import { readSourcePaths, SOURCE_RULES } from "./source-rules.ts";
+import { readSourcePaths, readStamp, SOURCE_RULES } from "./source-rules.ts";
 import { SPEC_RULES } from "./spec-rules.ts";
 import { buildTrustRules } from "./trust-rules.ts";
 
@@ -375,19 +378,157 @@ function listCitingKeys(params: {
 }
 
 /**
+ * List, for each record that cites a path, the commits that re-stamped or
+ * signed it off: changed its `generated` or `verified` from what every
+ * parent held, by `readStamp`, in one `git cat-file --batch` for them all.
+ *
+ * - A commit that added the record counts, and one that deleted it doesn't.
+ *
+ * - A commit whose parent held frontmatter that can't be read doesn't count,
+ *   since what changed can't be told, so repairing a broken frontmatter
+ *   isn't a re-stamp.
+ *
+ * - A merge that took the record from one side doesn't count, since that
+ *   side's own commit did.
+ *
+ * - A record whose own history couldn't be read gets nothing, and so does
+ *   one whose path has a line break, which `git cat-file --batch` can't
+ *   name, and every record when git can't read the files, so the source
+ *   rules skip them.
+ *
+ * @returns the commits, by the record's path from the repo root, and why git
+ *   couldn't say, for each record.
+ */
+function listStampCommits(params: {
+  /**
+   * Each file read, with the paths in the repo its `sources` cite.
+   *
+   * @example `[{ file, paths: ["src/check.ts"] }]`
+   */
+  cited: readonly {
+    /** The file. @example `readCheckedFile({ … })` */
+    file: CheckedFile;
+
+    /** The paths it cites, from the repo root. @example `["src/a.ts"]` */
+    paths: readonly string[];
+  }[];
+
+  /**
+   * The commits git knows to each path, newest first, by path from the repo
+   * root.
+   *
+   * @example `new Map([["kb/a.md", [{ committedAt: 1790000000, … }]]])`
+   */
+  commits: ReadonlyMap<string, readonly PathCommit[]>;
+
+  /** The repo's root folder. @example "/home/me/repo" */
+  repoRoot: string;
+}): {
+  /**
+   * Why git couldn't say, one line a record.
+   *
+   * @example `["Couldn't tell which commits re-stamped or signed off kb/a.md: …"]`
+   */
+  failures: string[];
+
+  /**
+   * The full hashes of each record's re-stamps and sign-offs, by its path
+   * from the repo root.
+   *
+   * @example `new Map([["kb/a.md", new Set(["1a2b3c4d…"])]])`
+   */
+  stamps: Map<string, ReadonlySet<string>>;
+} {
+  const { cited, commits, repoRoot } = params;
+  const failures: string[] = [];
+  const records = cited.flatMap(({ file, paths }) => {
+    const own = commits.get(file.filePath);
+
+    if (paths.length === 0 || own === undefined) {
+      return [];
+    }
+
+    if (file.filePath.includes("\n")) {
+      failures.push(
+        `Couldn't tell which commits re-stamped or signed off ${file.filePath}: git cat-file can't read a path with a line break`
+      );
+
+      return [];
+    }
+
+    return [{ filePath: file.filePath, own }];
+  });
+  const names = records.flatMap(({ filePath, own }) =>
+    own.flatMap(({ hash, parents }) =>
+      [hash, ...parents].map((commit) => `${commit}:${filePath}`)
+    )
+  );
+  const read =
+    names.length === 0
+      ? { isOk: true as const, value: new Map<string, string | undefined>() }
+      : readTextsAt({ names: [...new Set(names)], repoRoot });
+  const stamps = new Map<string, ReadonlySet<string>>();
+
+  if (!read.isOk) {
+    return {
+      failures: [
+        ...failures,
+        ...records.map(
+          ({ filePath }) =>
+            `Couldn't tell which commits re-stamped or signed off ${filePath}: ${read.reason}`
+        ),
+      ],
+      stamps,
+    };
+  }
+
+  const texts = read.value;
+
+  for (const { filePath, own } of records) {
+    stamps.set(
+      filePath,
+      new Set(
+        own
+          .filter(({ hash, parents }) => {
+            const stamp = readStamp(texts.get(`${hash}:${filePath}`));
+
+            return (
+              stamp !== undefined &&
+              parents.every((parent) => {
+                const text = texts.get(`${parent}:${filePath}`);
+                const parentStamp = readStamp(text);
+
+                return (
+                  text === undefined ||
+                  (parentStamp !== undefined && parentStamp !== stamp)
+                );
+              })
+            );
+          })
+          .map(({ hash }) => hash)
+      )
+    );
+  }
+
+  return { failures, stamps };
+}
+
+/**
  * Read into `unseen`, for each record that cites a path, which commits to the
- * paths it cites aren't in the history of any commit that changed it.
+ * paths it cites aren't in the history of any commit that re-stamped or
+ * signed it off, and the newest such commit.
  *
  * - With the commits' `order` from a history with no merge, a commit is in
  *   a record's history when it comes no earlier than the record's newest
- *   commit, so no more git is run.
+ *   re-stamp or sign-off, so no more git is run.
  *
- * - Otherwise records changed in the same commits share one `git rev-list`.
+ * - Otherwise records with the same re-stamps and sign-offs share one
+ *   `git rev-list`.
  *
- * - A record git has no commits of has seen none of them.
+ * - A record no commit re-stamped or signed off has seen none of them.
  *
- * - A record whose own history couldn't be read gets nothing, and so does
- *   one whose commits git couldn't place, so the source rules skip it.
+ * - A record with no `stamps` gets nothing, and so does one whose commits
+ *   git couldn't place, so the source rules skip it.
  *
  * @returns why git couldn't say, for each record.
  */
@@ -406,13 +547,6 @@ function listUnseenCommits(params: {
   }[];
 
   /**
-   * The changes git knows to each path, by path from the repo root.
-   *
-   * @example `new Map([["src/a.ts", [{ at: 1790000000, commit }]]])`
-   */
-  history: ReadonlyMap<string, readonly FileChange[]>;
-
-  /**
    * Every commit read, newest first, from a history with no merge; else
    * `undefined`.
    *
@@ -424,55 +558,70 @@ function listUnseenCommits(params: {
   repoRoot: string;
 
   /**
+   * The full hashes of each record's re-stamps and sign-offs, by its path
+   * from the repo root.
+   *
+   * @example `new Map([["kb/a.md", new Set(["1a2b3c4d…"])]])`
+   */
+  stamps: ReadonlyMap<string, ReadonlySet<string>>;
+
+  /**
    * Where each record's unseen commits go, by its path from the repo root.
    *
    * @example `new Map()`
    */
-  unseen: Map<string, ReadonlySet<string>>;
+  unseen: Map<string, UnseenCommits>;
 }): string[] {
-  const { cited, history, order, repoRoot, unseen } = params;
+  const { cited, order, repoRoot, stamps, unseen } = params;
   const failures: string[] = [];
   const groups = new Map<
     string,
-    { candidates: Set<string>; filePaths: string[]; from: string[] }
+    {
+      candidates: Set<string>;
+      from: string[];
+      records: { filePath: string; lastSeen: FileChange["commit"] }[];
+    }
   >();
 
   for (const { file, paths } of cited) {
-    if (paths.length === 0 || !history.has(file.filePath)) {
+    const stamped = stamps.get(file.filePath);
+
+    if (paths.length === 0 || stamped === undefined) {
       continue;
     }
 
-    const readHashes = (filePath: string): string[] =>
-      file
-        .readChanges(filePath)
-        .flatMap(({ commit }) => (commit === undefined ? [] : [commit.hash]));
-
-    const from = readHashes(file.filePath);
-    const own = new Set(from);
+    const seen = file
+      .readChanges(file.filePath)
+      .flatMap(({ commit }) =>
+        commit !== undefined && stamped.has(commit.hash) ? [commit] : []
+      );
+    const from = seen.map(({ hash }) => hash);
     const key = from.join(" ");
     const group = groups.get(key) ?? {
       candidates: new Set<string>(),
-      filePaths: [],
       from,
+      records: [],
     };
 
-    for (const hash of paths.flatMap(readHashes)) {
-      if (!own.has(hash)) {
-        group.candidates.add(hash);
+    for (const { commit } of paths.flatMap((filePath) =>
+      file.readChanges(filePath)
+    )) {
+      if (commit !== undefined) {
+        group.candidates.add(commit.hash);
       }
     }
 
-    group.filePaths.push(file.filePath);
+    group.records.push({ filePath: file.filePath, lastSeen: seen[0] });
     groups.set(key, group);
   }
 
-  for (const { candidates, filePaths, from } of groups.values()) {
+  for (const { candidates, from, records } of groups.values()) {
     const listed = placeCommits({ candidates, from, order, repoRoot });
 
     if (!listed.isOk) {
       failures.push(
-        ...filePaths.map(
-          (filePath) =>
+        ...records.map(
+          ({ filePath }) =>
             `Couldn't tell which commits are in the history of ${filePath}: ${listed.reason}`
         )
       );
@@ -480,8 +629,8 @@ function listUnseenCommits(params: {
       continue;
     }
 
-    for (const filePath of filePaths) {
-      unseen.set(filePath, listed.value);
+    for (const { filePath, lastSeen } of records) {
+      unseen.set(filePath, { lastSeen, unseen: listed.value });
     }
   }
 
@@ -490,9 +639,9 @@ function listUnseenCommits(params: {
 
 /**
  * Say which of some commits aren't in the history of any of a record's
- * commits.
+ * re-stamps and sign-offs.
  *
- * - All of them, when the record has no commits.
+ * - All of them, when it has none.
  *
  * - By their place in `order`, when the history has no merge.
  *
@@ -507,7 +656,7 @@ function placeCommits(params: {
   candidates: ReadonlySet<string>;
 
   /**
-   * The full hashes of the record's commits, newest first.
+   * The full hashes of the record's re-stamps and sign-offs, newest first.
    *
    * @example `["5e6f7a8b…"]`
    */
@@ -574,10 +723,9 @@ function readBundles(params: {
   const history = new Map<string, readonly FileChange[]>();
   const readChanges = (filePath: string): readonly FileChange[] =>
     history.get(filePath) ?? [];
-  const unseen = new Map<string, ReadonlySet<string>>();
-  const readUnseenCommits = (
-    filePath: string
-  ): ReadonlySet<string> | undefined => unseen.get(filePath);
+  const unseen = new Map<string, UnseenCommits>();
+  const readUnseenCommits = (filePath: string): undefined | UnseenCommits =>
+    unseen.get(filePath);
   const skipped: CheckSkipped[] = [];
 
   const listed = readWorkingPaths(repoRoot);
@@ -648,7 +796,9 @@ function readBundles(params: {
     file,
     paths: readSourcePaths(file),
   }));
+  const commits = new Map<string, readonly PathCommit[]>();
   const { failures, order } = readHistory({
+    commits,
     filePaths: cited.flatMap(({ file, paths }) =>
       paths.length === 0 ? [] : [file.filePath, ...paths]
     ),
@@ -656,11 +806,12 @@ function readBundles(params: {
     history,
     repoRoot,
   });
+  const stamped = listStampCommits({ cited, commits, repoRoot });
   const unseenFailures = listUnseenCommits({
     cited,
-    history,
     order,
     repoRoot,
+    stamps: stamped.stamps,
     unseen,
   });
 
@@ -680,7 +831,11 @@ function readBundles(params: {
       changedKeys,
       citingKeys: listCitingKeys({ branchCommits, cited }),
       hasBase: base?.isBranchBase === true,
-      historyFailures: [...failures.values(), ...unseenFailures],
+      historyFailures: [
+        ...failures.values(),
+        ...stamped.failures,
+        ...unseenFailures,
+      ],
       skipped,
     },
   };
@@ -688,7 +843,8 @@ function readBundles(params: {
 
 /**
  * Read the history of each path into `history`: its uncommitted changes as
- * one change at the current time, then its commits, newest first.
+ * one change at the current time, then its commits, newest first, and its
+ * commits as git read them, parents included, into `commits`.
  *
  * - Every path's history is read at once, and one path at a time only when
  *   that fails, as in a history with a merge, so a failure names its path.
@@ -700,6 +856,14 @@ function readBundles(params: {
  * @returns why git couldn't read a path's history, and the commits' order.
  */
 function readHistory(params: {
+  /**
+   * Where each path's commits go, as git read them, by path from the repo
+   * root.
+   *
+   * @example `new Map()`
+   */
+  commits: Map<string, readonly PathCommit[]>;
+
   /** The paths to read, from the repo root. @example `["src/a.ts"]` */
   filePaths: readonly string[];
 
@@ -731,7 +895,13 @@ function readHistory(params: {
    */
   order: readonly string[] | undefined;
 } {
-  const { filePaths, hasHead, history, repoRoot } = params;
+  const {
+    commits: pathCommits,
+    filePaths,
+    hasHead,
+    history,
+    repoRoot,
+  } = params;
   const failures = new Map<string, string>();
   const now = Math.floor(DateTime.utc().toSeconds());
   const uniquePaths = [...new Set(filePaths)];
@@ -765,6 +935,7 @@ function readHistory(params: {
 
     const { commits, isDirty } = changes.value;
 
+    pathCommits.set(filePath, commits);
     history.set(filePath, [
       ...(isDirty ? [{ at: now, commit: undefined }] : []),
       ...commits.map(({ committedAt, hash, shortHash }) => ({
