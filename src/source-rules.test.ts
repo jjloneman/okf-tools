@@ -40,6 +40,15 @@ function findHits(params: {
   code: string;
 
   /**
+   * Whether the record has an uncommitted re-stamp or sign-off; without it,
+   * whether it has uncommitted changes, the same thing for a record no
+   * commit holds yet.
+   *
+   * @example false
+   */
+  hasUncommittedStamp?: boolean;
+
+  /**
    * The changes git knows to each path, by path from the repo root; without
    * the record's own, it has uncommitted changes from when it was generated
    * and no commits, as a record not committed yet has.
@@ -76,6 +85,11 @@ function findHits(params: {
     [RECORD_PATH]: [{ at: toSeconds(GENERATED_AT), commit: undefined }],
     ...params.history,
   };
+  const {
+    hasUncommittedStamp = history[RECORD_PATH]?.some(
+      ({ commit }) => commit === undefined
+    ) === true,
+  } = params;
   const own = new Set(history[RECORD_PATH]?.map(({ commit }) => commit?.hash));
   const lastSeen = history[RECORD_PATH]?.find(
     ({ commit }) => commit !== undefined
@@ -103,7 +117,11 @@ function findHits(params: {
               : {
                   readUnseenCommits: (filePath: string) =>
                     filePath === RECORD_PATH
-                      ? { lastSeen, unseen: new Set(unseen) }
+                      ? {
+                          hasUncommittedStamp,
+                          lastSeen,
+                          unseen: new Set(unseen),
+                        }
                       : undefined,
                 }),
             text,
@@ -457,7 +475,8 @@ describe("T007 source-changed", () => {
       lines: [],
     },
     {
-      description: "uncommitted changes while the record has some too",
+      description:
+        "uncommitted changes while the record has an uncommitted re-stamp too",
       history: {
         "kb/notes/a.md": [
           { at: toSeconds("2026-10-05T00:00:00Z"), commit: undefined },
@@ -483,6 +502,50 @@ describe("T007 source-changed", () => {
     // Then - nothing
     expect(hits).toStrictEqual([]);
   });
+
+  test.each([
+    {
+      description: "uncommitted changes",
+      expected:
+        "4: warning source ../../src/a.ts has uncommitted changes since the record was last written or signed off, at 2026-10-01T15:00:00Z; check the record still holds, then re-stamp generated with okf touch",
+      source: { at: toSeconds("2026-10-06T00:00:00Z"), commit: undefined },
+    },
+    {
+      description: "a commit missing from the record's history",
+      expected:
+        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-09-20T00:00:00Z, which isn't in the history of the record's last re-stamp or sign-off, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
+      source: { at: toSeconds("2026-09-20T00:00:00Z"), commit: commit("a") },
+    },
+  ])(
+    "warns about $description while the record's uncommitted edit doesn't re-stamp it",
+    ({ expected, source }) => {
+      // Given - a record with an uncommitted edit that leaves generated and
+      // verified as HEAD has them, such as an okf format fix, citing a file
+      // changed before the record was written
+      const text = concept(["sources: [{ resource: ../../src/a.ts }]"]);
+      const history = {
+        "kb/notes/a.md": [
+          { at: toSeconds("2026-10-06T00:00:00Z"), commit: undefined },
+          { at: toSeconds("2026-09-01T00:00:00Z"), commit: commit("r") },
+        ],
+        "src/a.ts": [source],
+      };
+
+      // When - checking it
+      const hits = findHits({
+        code: "T007",
+        hasUncommittedStamp: false,
+        history,
+        paths: ["src/a.ts"],
+        text,
+        unseen: source.commit === undefined ? [] : [source.commit.hash],
+      });
+
+      // Then - the change still warns, as it would once the edit is
+      // committed
+      expect(hits).toStrictEqual([expected]);
+    }
+  );
 
   test.each([
     {

@@ -411,6 +411,16 @@ export type RuleHit = {
  */
 export type UnseenCommits = {
   /**
+   * Whether the record has an uncommitted re-stamp or sign-off: its stamp in
+   * the working tree, `generated` and `verified` together, can be read and
+   * differs from `HEAD`'s, which can be read too, or no commit has changed
+   * it yet and its own can be read.
+   *
+   * @example true
+   */
+  hasUncommittedStamp: boolean;
+
+  /**
    * The record's newest commit that re-stamped or signed it off, or
    * `undefined` when none did.
    *

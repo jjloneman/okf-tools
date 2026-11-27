@@ -146,13 +146,16 @@ export function readStamp(text: string | undefined): string | undefined {
  *   was made, and an edit that didn't re-stamp, such as to `tags` alone or
  *   an `okf format`, doesn't hide one.
  *
- * - While the record has uncommitted changes, such as a re-stamp `okf touch`
- *   made, a commit counts only when it's also later than the later of
+ * - While the record has an uncommitted re-stamp or sign-off, as `okf touch`
+ *   makes, judged against `HEAD` as a commit is against its parents, a
+ *   commit counts only when it's also later than the later of
  *   `generated.at` and the latest sign-off, since git can't say what an
- *   uncommitted record saw; a record no commit re-stamped or signed off is
+ *   uncommitted re-stamp saw; a record no commit re-stamped or signed off is
  *   judged by that time alone.
  *
- * - Uncommitted changes count unless the record has some too.
+ * - Uncommitted changes count unless the record has an uncommitted re-stamp
+ *   or sign-off too; an uncommitted edit that is neither, such as an
+ *   `okf format` fix, is judged as its commit will be, so it hides nothing.
  *
  * - When git couldn't read the record's history, or say which commits it
  *   holds, the record is skipped, as `okf check` says on stderr.
@@ -167,21 +170,18 @@ function checkSourceChanged(file: CheckedFile): RuleHit[] {
       return [];
     }
 
-    const isDirty = file
-      .readChanges(file.filePath)
-      .some(({ commit }) => commit === undefined);
     const seen = file.readUnseenCommits(file.filePath);
 
     if (seen === undefined) {
       return [];
     }
 
-    const { lastSeen, unseen } = seen;
+    const { hasUncommittedStamp, lastSeen, unseen } = seen;
     const isUnseen = ({ at, commit }: FileChange): boolean =>
       commit === undefined
-        ? !isDirty
+        ? !hasUncommittedStamp
         : unseen.has(commit.hash) &&
-          ((!isDirty && lastSeen !== undefined) || at > writtenAt);
+          ((!hasUncommittedStamp && lastSeen !== undefined) || at > writtenAt);
 
     return readCitedSources(parsed).flatMap(({ node, path, resource }) => {
       if (!file.doesExist(path)) {

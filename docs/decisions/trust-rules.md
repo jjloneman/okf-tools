@@ -39,8 +39,8 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T05:32:51Z }
-verified: { by: human:jjloneman, at: 2026-11-27T06:03:41Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
+verified: { by: human:jjloneman, at: 2026-11-27T07:50:01Z }
 ---
 
 # How okf check judges whether a sign-off still holds
@@ -87,8 +87,10 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
     - A commit that added the record counts, a `git mv` included, since the history is read without following renames, so a moved record's sources aren't checked against what came before the move.
     - **Rejected:** counting any commit that changed the record, which #140 chose. It couldn't tell an edit that checked the sources from one that didn't, so a tags-only commit hid a change the clock rule before it had warned about.
     - **Rejected:** `git log -G` on the `generated` and `verified` lines. A line pattern misses a change inside a flow mapping or one entry of a sign-off list, and matches a body line, so each commit's frontmatter is parsed instead, read for every record in one `git cat-file --batch`[^git].
-  - Uncommitted changes to the path count, unless the record has some too.
-  - While the record has uncommitted changes, such as a re-stamp from `okf touch` not committed yet, a commit counts only when it's also later than both `generated.at` and the latest sign-off, to the whole second, by its committer time[^git], since git can't say what the record saw; a record no commit re-stamped or signed off, such as one git has no commits of, is judged by that time alone.
+  - Uncommitted changes to the path count, unless the record has an uncommitted re-stamp or sign-off too: its `generated` or `verified` in the working tree differs from `HEAD`'s, read by what they mean, by the same test as a commit against its parents, so a stamp that can't be read on either side isn't one[^check].
+  - While it does, such as after an `okf touch` not committed yet, a commit counts only when it's also later than both `generated.at` and the latest sign-off, to the whole second, by its committer time[^git], since git can't say what the record saw; a record no commit re-stamped or signed off, such as one git has no commits of, is judged by that time alone.
+    - An uncommitted edit that changes neither, such as an `okf format` fix or a change to `tags` alone, is judged as its commit will be, so it neither hides a source change nor brings back the clock (#151).
+    - **Rejected:** counting any uncommitted edit to the record, as before #151. Between an `okf format` and its commit, the warning about a stale source went away, and it came back once the fix was committed.
   - It's a warning, not an error: it works at file level, so a change that leaves the record true still warns, and judging the prose is the review skill's audit mode.
   - A `generated.at` or sign-off later than now doesn't count, as `T003` and `T004` warn, so it can't hide a source change until the clock passes it.
   - **Rejected:** comparing `sources[].last_modified`. It's the source's own recency signal, written by hand, and goes stale the same way.

@@ -37,6 +37,18 @@ const CITING = record([
   "sources: [{ resource: ../src/a.ts }]",
 ]);
 
+/** Aliases that expand past the parser's limit, so no stamp can be read. */
+const ALIAS_BOMB = [
+  "a: &a [x, x, x, x, x, x, x, x, x, x]",
+  `b: &b [${"*a, ".repeat(10)}*a]`,
+  `c: &c [${"*b, ".repeat(10)}*b]`,
+  `d: [${"*c, ".repeat(10)}*c]`,
+];
+
+/** A `generated` from 2026-10-01. */
+const GENERATED_LINE =
+  "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }";
+
 /** A record no rule finds anything in. */
 const CONCEPT = record(["type: Decision", 'title: "A"']);
 
@@ -1205,6 +1217,142 @@ describe("runCheck --fix", () => {
     ]);
   });
 
+  test.each([
+    {
+      description: "warns while its uncommitted fix doesn't re-stamp it",
+      expected: [
+        expect.stringMatching(
+          /^kb\/a\.md:5: warning T007 source-changed: source \.\.\/src\/a\.ts has uncommitted changes /u
+        ),
+        "2 files checked: 0 errors, 1 warning, 0 info.",
+      ],
+      generatedAt: "2026-10-01T15:00:00Z",
+    },
+    {
+      description: "passes once an uncommitted re-stamp follows its fix",
+      expected: ["2 files checked: 0 errors, 0 warnings, 0 info."],
+      generatedAt: "2026-10-03T15:00:00Z",
+    },
+  ])(
+    "judges a record with an uncommitted fix and source change: $description",
+    ({ expected, generatedAt }) => {
+      // Given - a committed record citing a source, its tags out of order,
+      // the source changed and left uncommitted, and the record's tags
+      // fixed, then perhaps re-stamped, uncommitted too
+      repo.write("kb/index.md", ROOT_INDEX);
+      repo.write("src/a.ts", "export {};\n");
+      repo.write(
+        "kb/a.md",
+        record([
+          "type: Decision",
+          "tags: [b, a]",
+          "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+          "sources: [{ resource: ../src/a.ts }]",
+        ])
+      );
+      repo.commitAll("add the record");
+      repo.write("src/a.ts", "export const a = 1;\n");
+      check({ houseRules: { "tags-sorted": "error" }, isFix: true });
+      repo.write(
+        "kb/a.md",
+        repo.read("kb/a.md").replace("2026-10-01T15:00:00Z", generatedAt)
+      );
+      infos.length = 0;
+
+      // When - checking it
+      const code = check({ houseRules: { "tags-sorted": "error" } });
+
+      // Then - the source change warns unless the record was re-stamped
+      expect(repo.read("kb/a.md")).toContain("tags: [a, b]");
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(infos).toStrictEqual(expected);
+    }
+  );
+
+  test.each([
+    {
+      committed: [GENERATED_LINE, ...ALIAS_BOMB],
+      description: "re-stamped, though its stamp can't be read",
+      edited: [
+        GENERATED_LINE.replace("2026-10-01", "2026-10-03"),
+        ...ALIAS_BOMB,
+      ],
+    },
+    {
+      committed: [GENERATED_LINE, ...ALIAS_BOMB],
+      description: "edited, though its stamp can't be read",
+      edited: [GENERATED_LINE, ...ALIAS_BOMB, "title: A"],
+    },
+    {
+      committed: [GENERATED_LINE, "title: [A"],
+      description: "repaired from frontmatter HEAD can't read",
+      edited: [GENERATED_LINE, "title: A"],
+    },
+  ])(
+    "warns about an uncommitted source change to a record $description",
+    ({ committed, edited }) => {
+      // Given - a committed record citing a source, then edited and its
+      // source changed, both left uncommitted
+      repo.write("kb/index.md", ROOT_INDEX);
+      repo.write("src/a.ts", "export {};\n");
+      repo.write(
+        "kb/a.md",
+        record([
+          "type: Decision",
+          "sources: [{ resource: ../src/a.ts }]",
+          ...committed,
+        ])
+      );
+      commitAt({ at: "2026-10-02T15:00:00Z", message: "add the record" });
+      repo.write(
+        "kb/a.md",
+        record([
+          "type: Decision",
+          "sources: [{ resource: ../src/a.ts }]",
+          ...edited,
+        ])
+      );
+      repo.write("src/a.ts", "export const a = 1;\n");
+
+      // When - checking it
+      check({});
+
+      // Then - the uncommitted source change warns, since only a stamp that
+      // can be read on both sides, and differs, is an uncommitted re-stamp,
+      // as for a commit and its parents
+      expect(infos.filter((line) => line.includes("T007"))).toStrictEqual([
+        expect.stringMatching(
+          /^kb\/a\.md:\d+: warning T007 source-changed: source \.\.\/src\/a\.ts has uncommitted changes /u
+        ),
+      ]);
+    }
+  );
+
+  test("warns about an uncommitted source change to a record recreated after a commit deleted it", () => {
+    // Given - a record citing a source, committed, then deleted in a commit,
+    // then written again with a later generated, its source changed, both
+    // left uncommitted
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "export {};\n");
+    repo.write("kb/a.md", CITING);
+    commitAt({ at: "2026-10-02T15:00:00Z", message: "add the record" });
+    repo.git("rm", "--quiet", "--", "kb/a.md");
+    commitAt({ at: "2026-10-02T16:00:00Z", message: "remove the record" });
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+    repo.write("src/a.ts", "export const a = 1;\n");
+
+    // When - checking it
+    check({});
+
+    // Then - the uncommitted source change warns, since the deleting commit
+    // holds no version to judge a re-stamp against
+    expect(infos.filter((line) => line.includes("T007"))).toStrictEqual([
+      expect.stringMatching(
+        /^kb\/a\.md:\d+: warning T007 source-changed: source \.\.\/src\/a\.ts has uncommitted changes /u
+      ),
+    ]);
+  });
+
   test("keeps a record's source-changed warning once its fix is committed", () => {
     // Given - a record citing a source, its tags out of order, and the
     // source changed in a later commit
@@ -1235,8 +1383,8 @@ describe("runCheck --fix", () => {
 
     const code = check({ houseRules: { "tags-sorted": "error" } });
 
-    // Then - the warning while the fix is uncommitted, by the clock, and
-    // after its commit, which doesn't re-stamp the record
+    // Then - the warning while the fix is uncommitted and after its commit,
+    // since neither re-stamps the record
     const expected = [
       expect.stringMatching(/^kb\/a\.md:5: warning T007 source-changed: /u),
       "2 files checked: 0 errors, 1 warning, 0 info.",

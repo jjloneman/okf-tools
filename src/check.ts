@@ -241,8 +241,8 @@ export function runCheck(params: {
      * - A fix never edits `generated` or `verified`, so its commit never
      *   counts to `T007` as the record having seen its sources.
      *
-     * - Until it's committed, a later check judges the record by the clock,
-     *   as for any uncommitted edit to a record.
+     * - Nor does it before it's committed, since `T007` falls back to the clock
+     *   only while a record has an uncommitted re-stamp or sign-off.
      */
     const fixed = applyFixes({
       bundles,
@@ -376,6 +376,38 @@ function isInsideOnDisk(params: {
   return relative !== ".." && !relative.startsWith(`..${path.sep}`);
 }
 
+/**
+ * Say whether a version of a record re-stamped or signed it off: its
+ * `generated` and `verified` can be read, and differ from those of every
+ * version it follows that held the record, each of which can be read too.
+ */
+function isRestamp(params: {
+  /**
+   * The text of each version it follows, a commit's parents or the working
+   * tree's `HEAD`, or `undefined` for one that didn't hold the record.
+   *
+   * @example `["---\ngenerated: …\n---\n"]`
+   */
+  parentTexts: readonly (string | undefined)[];
+
+  /** Its stamp, by `readStamp`. @example `'[{"at":"…","by":"…"},null]'` */
+  stamp: string | undefined;
+}): boolean {
+  const { parentTexts, stamp } = params;
+
+  return (
+    stamp !== undefined &&
+    parentTexts.every((text) => {
+      const parentStamp = readStamp(text);
+
+      return (
+        text === undefined ||
+        (parentStamp !== undefined && parentStamp !== stamp)
+      );
+    })
+  );
+}
+
 /** Whether a finding is a draft's, which `okf review-comments` posts. */
 function isReviewDraft(finding: CheckFinding): boolean {
   return finding.code === "T001";
@@ -427,8 +459,16 @@ function listCitingKeys(params: {
  *   name, and every record when git can't read the files, so the source
  *   rules skip them.
  *
- * @returns the commits, by the record's path from the repo root, and why git
- *   couldn't say, for each record.
+ * - A record with uncommitted changes counts as re-stamped in the working
+ *   tree by the same test, against the newest commit that changed it, which
+ *   holds it as `HEAD` does: its stamp there, `generated` and `verified`
+ *   together, can be read and differs from that commit's, or no commit has
+ *   changed it yet; a clean one never does, and nor does one whose newest
+ *   commit has no blob for it.
+ *
+ * @returns the commits, by the record's path from the repo root, the records
+ *   re-stamped in the working tree, and why git couldn't say, for each
+ *   record.
  */
 function listStampCommits(params: {
   /**
@@ -469,6 +509,14 @@ function listStampCommits(params: {
    * @example `new Map([["kb/a.md", new Set(["1a2b3c4d…"])]])`
    */
   stamps: Map<string, ReadonlySet<string>>;
+
+  /**
+   * The records re-stamped or signed off in the working tree, by path from
+   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
+   *
+   * @example `new Set(["kb/a.md"])`
+   */
+  uncommittedStamps: Set<string>;
 } {
   const { cited, commits, repoRoot } = params;
   const failures: string[] = [];
@@ -487,7 +535,16 @@ function listStampCommits(params: {
       return [];
     }
 
-    return [{ filePath: file.filePath, own }];
+    return [
+      {
+        filePath: file.filePath,
+        isDirty: file
+          .readChanges(file.filePath)
+          .some(({ commit }) => commit === undefined),
+        own,
+        text: file.text,
+      },
+    ];
   });
   const names = records.flatMap(({ filePath, own }) =>
     own.flatMap(({ hash, parents }) =>
@@ -498,6 +555,7 @@ function listStampCommits(params: {
     names.length === 0
       ? { isOk: true as const, value: new Map<string, string | undefined>() }
       : readTextsAt({ names: [...new Set(names)], repoRoot });
+  const uncommittedStamps = new Set<string>();
   const stamps = new Map<string, ReadonlySet<string>>();
 
   if (!read.isOk) {
@@ -510,38 +568,49 @@ function listStampCommits(params: {
         ),
       ],
       stamps,
+      uncommittedStamps,
     };
   }
 
   const texts = read.value;
 
-  for (const { filePath, own } of records) {
+  for (const { filePath, isDirty, own, text } of records) {
+    const [newest] = own;
+    const held =
+      newest === undefined
+        ? undefined
+        : texts.get(`${newest.hash}:${filePath}`);
+
+    // The newest commit to change the record holds it as `HEAD` does; one
+    // with no blob for it, as when it deleted the record, or git names the
+    // path another way, isn't a version to judge against, so the record
+    // keeps its warnings.
+    if (
+      isDirty &&
+      (newest === undefined || held !== undefined) &&
+      isRestamp({ parentTexts: [held], stamp: readStamp(text) })
+    ) {
+      uncommittedStamps.add(filePath);
+    }
+
     stamps.set(
       filePath,
       new Set(
         own
-          .filter(({ hash, parents }) => {
-            const stamp = readStamp(texts.get(`${hash}:${filePath}`));
-
-            return (
-              stamp !== undefined &&
-              parents.every((parent) => {
-                const text = texts.get(`${parent}:${filePath}`);
-                const parentStamp = readStamp(text);
-
-                return (
-                  text === undefined ||
-                  (parentStamp !== undefined && parentStamp !== stamp)
-                );
-              })
-            );
-          })
+          .filter(({ hash, parents }) =>
+            isRestamp({
+              parentTexts: parents.map((parent) =>
+                texts.get(`${parent}:${filePath}`)
+              ),
+              stamp: readStamp(texts.get(`${hash}:${filePath}`)),
+            })
+          )
           .map(({ hash }) => hash)
       )
     );
   }
 
-  return { failures, stamps };
+  return { failures, stamps, uncommittedStamps };
 }
 
 /**
@@ -597,13 +666,21 @@ function listUnseenCommits(params: {
   stamps: ReadonlyMap<string, ReadonlySet<string>>;
 
   /**
+   * The records re-stamped or signed off in the working tree, by path from
+   * the repo root, as `UnseenCommits.hasUncommittedStamp` says.
+   *
+   * @example `new Set(["kb/a.md"])`
+   */
+  uncommittedStamps: ReadonlySet<string>;
+
+  /**
    * Where each record's unseen commits go, by its path from the repo root.
    *
    * @example `new Map()`
    */
   unseen: Map<string, UnseenCommits>;
 }): string[] {
-  const { cited, order, repoRoot, stamps, unseen } = params;
+  const { cited, order, repoRoot, stamps, uncommittedStamps, unseen } = params;
   const failures: string[] = [];
   const groups = new Map<
     string,
@@ -661,7 +738,11 @@ function listUnseenCommits(params: {
     }
 
     for (const { filePath, lastSeen } of records) {
-      unseen.set(filePath, { lastSeen, unseen: listed.value });
+      unseen.set(filePath, {
+        hasUncommittedStamp: uncommittedStamps.has(filePath),
+        lastSeen,
+        unseen: listed.value,
+      });
     }
   }
 
@@ -843,6 +924,7 @@ function readBundles(params: {
     order,
     repoRoot,
     stamps: stamped.stamps,
+    uncommittedStamps: stamped.uncommittedStamps,
     unseen,
   });
 

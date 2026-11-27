@@ -17,8 +17,8 @@ sources:
     resource: ../../src/source-rules.ts
     title: src/source-rules.ts, the rules on a record's sources
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T02:15:34Z }
-verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T07:42:46Z }
+verified: { by: human:jjloneman, at: 2026-11-27T07:50:01Z }
 ---
 
 # Which repo files a decision record cites in sources
