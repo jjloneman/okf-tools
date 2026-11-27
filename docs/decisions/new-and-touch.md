@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: How okf new and okf touch stamp generated
-description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses; a change to `tags` alone isn't re-stamped."
+description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses; a change to `tags` alone, or to the order of `sources` alone, isn't re-stamped."
 tags:
   - agents
   - frontmatter
@@ -57,6 +57,8 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
   - `title` and `description` aren't exempt, since they summarize what the record says.
   - In a tag audit, the record skill proposes every retag in one table first, so the person sees each change before it's written; a retag made in other work is shown only in its diff.
   - **Rejected:** re-stamping every edit, tags included, which sent each retagged record back for sign-off, so a bundle-wide tag audit queued every record it touched.
+- **A change to the order of `sources` alone isn't re-stamped either** (#150, #155): the agent rules and the `okf-record` skill name it beside `tags`, since a footnote cites its source by `id`, so the order changes no claim. `okf format` sorts `sources` under the `sources-sorted` house rule without re-stamping, per [What okf check --fix fixes, and how it writes](fixes.md).
+  - Adding, removing, or editing an entry is re-stamped as before, since it changes what the record rests on.
 
 ## Why
 
@@ -71,6 +73,8 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 
 - [Issue #54](https://github.com/jjloneman/okf-tools/issues/54)
 - [Issue #66](https://github.com/jjloneman/okf-tools/issues/66), where the tags exception was decided
+- [Issue #150](https://github.com/jjloneman/okf-tools/issues/150), where the `sources` sort was decided, and [issue #155](https://github.com/jjloneman/okf-tools/issues/155), which named its exception in the guidance
+- [What okf check --fix fixes, and how it writes](fixes.md)
 - [How a record's tags are laid out](tags-layout.md)
 - [How okf index keeps an index.md in step with its records](index-sync.md)
 - [How okf-verify writes and commits records](writes.md)
