@@ -27,8 +27,8 @@ sources:
     resource: ../../src/house-rules.ts
     title: src/house-rules.ts, the opt-in house rules
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:00:23Z }
-verified: { by: human:jjloneman, at: 2026-11-27T01:13:56Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
+verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }
 ---
 
 # What okf check --fix fixes, and how it writes
@@ -41,7 +41,7 @@ As of 2026-11-26, from `src/fix.ts`[^fix], `src/frontmatter/format.ts`[^frontmat
 
 - **It fixes only what `okf check` reported**, so the house rules `okf.rules` turns on and `okf.exclude` decide what it touches; then it reports what's left, with the same exit code `okf check` gives, so a refused fix counts by the findings it leaves.
   - Under `--changed`, it fixes only the files the branch changed and the indexes that list them, not a record reported only for citing a changed file.
-  - A record with a `T007` finding, a source changed since it was written, is never fixed, in any mode: the fix would give it a change of its own, which `T007` reads as the record having caught up with its source.
+  - A record with a `T007` finding, a source changed since it was written, is never fixed, in any mode: the fix would give it a change of its own, which `T007` read as the record having caught up with its source until #144, which counts only a re-stamp or a sign-off as having seen it (see [How okf check judges whether a sign-off still holds](trust-rules.md)).
   - **Rejected:** fixing every record whatever the rules say. A repo that didn't turn `tags-sorted` on didn't choose sorted tags.
 - **The fixes, as of 2026-11-26:**
   - `tags-sorted` sorts `tags` in place, flow or block, keeping each tag's quotes;

@@ -6,7 +6,7 @@ import { record } from "#test/repo";
 import type { FileChange } from "./check-engine.ts";
 
 import { buildCheckReport, readCheckedFile } from "./check-engine.ts";
-import { readSourcePaths, SOURCE_RULES } from "./source-rules.ts";
+import { readSourcePaths, readStamp, SOURCE_RULES } from "./source-rules.ts";
 
 /** When the records below were generated. */
 const GENERATED_AT = "2026-10-01T15:00:00Z";
@@ -63,8 +63,9 @@ function findHits(params: {
   text: string;
 
   /**
-   * The commits not in the record's history, by full hash, or `undefined`
-   * when git couldn't say; without it, every commit the record didn't make.
+   * The commits not in the history of the record's re-stamps and sign-offs,
+   * by full hash, or `undefined` when git couldn't say; without it, every
+   * commit the record didn't make.
    *
    * @example `[commit("a").hash]`
    */
@@ -76,6 +77,9 @@ function findHits(params: {
     ...params.history,
   };
   const own = new Set(history[RECORD_PATH]?.map(({ commit }) => commit?.hash));
+  const lastSeen = history[RECORD_PATH]?.find(
+    ({ commit }) => commit !== undefined
+  )?.commit;
   const unseen =
     "unseen" in params
       ? params.unseen
@@ -98,7 +102,9 @@ function findHits(params: {
               ? {}
               : {
                   readUnseenCommits: (filePath: string) =>
-                    filePath === RECORD_PATH ? new Set(unseen) : undefined,
+                    filePath === RECORD_PATH
+                      ? { lastSeen, unseen: new Set(unseen) }
+                      : undefined,
                 }),
             text,
           }),
@@ -242,6 +248,94 @@ describe("readSourcePaths", () => {
 
     // Then - none
     expect(paths).toStrictEqual([]);
+  });
+});
+
+describe("readStamp", () => {
+  test.each([
+    { description: "no text", text: undefined },
+    { description: "no frontmatter", text: "# A\n" },
+    { description: "frontmatter YAML can't read", text: "---\na: [b\n---\n" },
+    {
+      description: "an alias with no anchor",
+      text: "---\ntags: [*x]\n---\n",
+    },
+    {
+      description: "an alias that loops back on itself",
+      text: "---\ngenerated: &a [*a]\n---\n",
+    },
+    {
+      description: "aliases that expand past the parser's limit",
+      text: `---\na: &a [x, x, x, x, x, x, x, x, x, x]\nb: &b [${"*a, ".repeat(10)}*a]\nc: &c [${"*b, ".repeat(10)}*b]\nd: &d [${"*c, ".repeat(10)}*c]\ngenerated: [${"*d, ".repeat(10)}*d]\n---\n`,
+    },
+  ])("reads nothing from $description", ({ text }) => {
+    // Given - a text with nothing to read
+
+    // When - reading its stamp
+    const stamp = readStamp(text);
+
+    // Then - nothing
+    expect(stamp).toBeUndefined();
+  });
+
+  test("reads an empty frontmatter as no generated and no verified", () => {
+    // Given - a record whose frontmatter is empty
+    const text = "---\n---\n# A\n";
+
+    // When - reading its stamp
+    const stamp = readStamp(text);
+
+    // Then - neither
+    expect(stamp).toBe("[null,null]");
+  });
+
+  test.each([
+    {
+      description: "its tags",
+      edited: record([
+        GENERATED,
+        "verified: [{ by: human:a, at: x }]",
+        "tags: [a]",
+      ]),
+    },
+    {
+      description: "generated's layout and key order",
+      edited: record([
+        "generated:",
+        "  at: 2026-10-01T15:00:00Z",
+        "  by: claude-code/1.0",
+        "verified: [{ at: x, by: human:a }]",
+      ]),
+    },
+  ])("reads a record the same with a change to $description", ({ edited }) => {
+    // Given - a record, and the same record edited
+    const text = record([GENERATED, "verified: [{ by: human:a, at: x }]"]);
+
+    // When - reading both stamps
+    const stamps = [readStamp(text), readStamp(edited)];
+
+    // Then - the same
+    expect(stamps[1]).toBe(stamps[0]);
+  });
+
+  test.each([
+    {
+      description: "re-stamped",
+      edited: record([GENERATED.replace("2026-10-01", "2026-10-02")]),
+    },
+    {
+      description: "signed off",
+      edited: record([GENERATED, "verified: [{ by: human:a, at: x }]"]),
+    },
+  ])("reads a record $description differently", ({ edited }) => {
+    // Given - a record, and the same record changed
+    const text = record([GENERATED]);
+
+    // When - reading both stamps
+    const stamps = [readStamp(text), readStamp(edited)];
+
+    // Then - different
+    expect(stamps[1]).not.toBe(stamps[0]);
   });
 });
 
@@ -395,14 +489,14 @@ describe("T007 source-changed", () => {
       at: "2026-09-15T00:00:00Z",
       description: "made before the record was written",
       expected:
-        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-09-15T00:00:00Z, which isn't in the history of the record's last commit, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
+        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-09-15T00:00:00Z, which isn't in the history of the record's last re-stamp or sign-off, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
       record: [{ at: toSeconds(GENERATED_AT), commit: commit("r") }],
     },
     {
       at: "2026-10-05T00:00:00Z",
       description: "made after an uncommitted re-stamp's time",
       expected:
-        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-10-05T00:00:00Z, which isn't in the history of the record's last commit, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
+        "4: warning source ../../src/a.ts changed in aaaaaaa, at 2026-10-05T00:00:00Z, which isn't in the history of the record's last re-stamp or sign-off, rrrrrrr; check the record still holds, then re-stamp generated with okf touch",
       record: [
         { at: toSeconds("2026-10-06T00:00:00Z"), commit: undefined },
         { at: toSeconds("2026-09-01T00:00:00Z"), commit: commit("r") },
@@ -428,7 +522,7 @@ describe("T007 source-changed", () => {
         unseen: [commit("a").hash],
       });
 
-      // Then - a warning naming the record's last commit
+      // Then - a warning naming the record's last re-stamp or sign-off
       expect(hits).toStrictEqual([expected]);
     }
   );

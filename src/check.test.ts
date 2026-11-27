@@ -580,12 +580,202 @@ describe("runCheck", () => {
     expect(infos).toStrictEqual([
       expect.stringMatching(
         new RegExp(
-          String.raw`^kb/a\.md:4: warning T007 source-changed: source \.\./src/a\.ts changed in [\da-f]+, at 2026-09-02T15:00:00Z, which isn't in the history of the record's last commit, ${record}; `,
+          String.raw`^kb/a\.md:4: warning T007 source-changed: source \.\./src/a\.ts changed in [\da-f]+, at 2026-09-02T15:00:00Z, which isn't in the history of the record's last re-stamp or sign-off, ${record}; `,
           "u"
         )
       ),
       "2 files checked: 0 errors, 1 warning, 0 info.",
     ]);
+  });
+
+  test.each([
+    {
+      description: "changed only its tags",
+      edit: (text: string) =>
+        text.replace("type: Decision", "type: Decision\ntags: [a]"),
+    },
+    {
+      description: "only rewrote its generated as a block, keys reordered",
+      edit: (text: string) =>
+        text.replace(
+          "generated: { by: claude-code/1.0, at: 2026-10-01T15:00:00Z }",
+          "generated:\n  at: 2026-10-01T15:00:00Z\n  by: claude-code/1.0"
+        ),
+    },
+  ])(
+    "warns about a source changed before a commit to its record that $description",
+    ({ edit }) => {
+      // Given - a record, its source changed, then the record changed
+      // without a re-stamp or a sign-off
+      repo.write("kb/index.md", ROOT_INDEX);
+      repo.write("src/a.ts", "a\n");
+      repo.write("kb/a.md", CITING);
+      repo.commitAll("add the record");
+      const added = repo.git("log", "-1", "--format=%h").trim();
+      repo.write("src/a.ts", "a2\n");
+      repo.commitAll("edit a");
+      repo.write("kb/a.md", edit(CITING));
+      repo.commitAll("edit the record");
+
+      // When - checking it
+      const code = check({});
+
+      // Then - a warning naming the commit that added the record, its last
+      // re-stamp
+      expect(code).toBe(EXIT_CODES.ok);
+      expect(infos).toStrictEqual([
+        expect.stringMatching(
+          new RegExp(
+            String.raw`^kb/a\.md:\d+: warning T007 source-changed: source \.\./src/a\.ts changed in [\da-f]+, at [^,]+, which isn't in the history of the record's last re-stamp or sign-off, ${added}; `,
+            "u"
+          )
+        ),
+        "2 files checked: 0 errors, 1 warning, 0 info.",
+      ]);
+    }
+  );
+
+  test("warns about a source changed before a commit that repaired its record's frontmatter", () => {
+    // Given - a record, its source changed, then the record's frontmatter
+    // broken and repaired, with no re-stamp
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record");
+    const added = repo.git("log", "-1", "--format=%h").trim();
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    repo.write("kb/a.md", CITING.replace("type: Decision", "type: [Decision"));
+    repo.commitAll("break the record");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("repair the record");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - a warning naming the commit that added the record
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        new RegExp(
+          String.raw`^kb/a\.md:4: warning T007 source-changed: .*, which isn't in the history of the record's last re-stamp or sign-off, ${added}; `,
+          "u"
+        )
+      ),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("passes a source changed before its record was signed off", () => {
+    // Given - a record, its source changed, then the record signed off
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    repo.write(
+      "kb/a.md",
+      CITING.replace(
+        "sources:",
+        "verified: [{ by: human:a, at: 2026-10-02T15:00:00Z }]\nsources:"
+      )
+    );
+    repo.commitAll("sign the record off");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - the sign-off saw the source's commit, so nothing
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      "2 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("warns about a source changed before a merge that combined its record's edits", () => {
+    // Given - a record re-stamped on a side branch, while main changed its
+    // source and then its body, merged with both edits to the record
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record");
+    repo.git("switch", "--quiet", "-c", "side");
+    const restamped = CITING.replace("2026-10-01", "2026-10-03");
+    repo.write("kb/a.md", restamped);
+    repo.commitAll("re-stamp the record");
+    const side = repo.git("log", "-1", "--format=%h").trim();
+    repo.git("switch", "--quiet", "main");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    repo.write("kb/a.md", `${CITING}\nMore.\n`);
+    repo.commitAll("edit the record's body");
+    repo.git("merge", "--quiet", "--no-ff", "--no-edit", "side");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - a warning naming the side branch's re-stamp, since the merge
+    // only took it
+    expect(repo.read("kb/a.md")).toBe(`${restamped}\nMore.\n`);
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        new RegExp(
+          String.raw`^kb/a\.md:4: warning T007 source-changed: source \.\./src/a\.ts changed in [\da-f]+, at [^,]+, which isn't in the history of the record's last re-stamp or sign-off, ${side}; `,
+          "u"
+        )
+      ),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("passes a source changed before its record was deleted and added again", () => {
+    // Given - a record, its source changed, then the record deleted and
+    // added again
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+    rmSync(path.join(repo.root, "kb/a.md"));
+    repo.commitAll("delete the record");
+    repo.write("kb/a.md", CITING);
+    repo.commitAll("add the record again");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - adding it counts as writing it, so nothing
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      "2 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test("skips a record whose path has a line break, and checks the rest", () => {
+    // Given - two records citing a file changed since, one named with a
+    // line break
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    repo.write("kb/b\nc.md", CITING);
+    repo.commitAll("add the records");
+    repo.write("src/a.ts", "a2\n");
+    repo.commitAll("edit a");
+
+    // When - checking them
+    const code = check({});
+
+    // Then - why the one is skipped, and a warning on the other
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(errors).toStrictEqual([
+      "Couldn't tell which commits re-stamped or signed off kb/b c.md: git cat-file can't read a path with a line break; the source rules skip it.",
+    ]);
+    expect(infos).toContainEqual(
+      expect.stringMatching(/^kb\/a\.md:4: warning T007 source-changed: /u)
+    );
   });
 
   test("fails a record whose source was deleted", () => {

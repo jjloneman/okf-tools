@@ -21,6 +21,7 @@ import {
   readBaseRef,
   readCommittedText,
   readGitFailure,
+  readTextsAt,
   readWorkingPaths,
 } from "./git.ts";
 
@@ -475,13 +476,18 @@ describe("listPathChanges", () => {
     repo.commitAll("edit a");
     repo.write("src/c.ts", "c\n");
     const log = repo
-      .git("log", "--format=%H %h %ct", "-2", "--", "src")
+      .git("log", "--format=%H %h %ct %P", "-2", "--", "src")
       .trim()
       .split("\n")
       .map((line) => {
-        const [hash, shortHash, committedAt] = line.split(" ");
+        const [hash, shortHash, committedAt, ...parents] = line.split(" ");
 
-        return { committedAt: Number(committedAt), hash, shortHash };
+        return {
+          committedAt: Number(committedAt),
+          hash,
+          parents: parents.filter(Boolean),
+          shortHash,
+        };
       });
 
     // When - listing the folder's changes
@@ -980,6 +986,71 @@ describe("readCommittedText", () => {
       reason: expect.stringMatching(
         /^Couldn't read package\.json at HEAD: /u
       ) as unknown,
+    });
+  });
+});
+
+describe("readTextsAt", () => {
+  test("reads each file as its commit holds it, in one call", () => {
+    // Given - a file with a multi-byte character committed, then edited
+    repo.write("kb/a.md", "é one\n");
+    repo.commitAll("add a");
+    const first = repo.git("rev-parse", "HEAD").trim();
+    repo.write("kb/a.md", "é two\n");
+    repo.commitAll("edit a");
+    const second = repo.git("rev-parse", "HEAD").trim();
+
+    // When - reading it at both commits, one missing file, and a missing
+    // commit's
+    const texts = readTextsAt({
+      names: [
+        `${first}:kb/a.md`,
+        `${second}:kb/a.md`,
+        `${second}:kb/b.md`,
+        `${"0".repeat(40)}:kb/a.md`,
+      ],
+      repoRoot: repo.root,
+    });
+
+    // Then - each text, and nothing for the two missing
+    expect(texts).toStrictEqual({
+      isOk: true,
+      value: new Map([
+        [`${"0".repeat(40)}:kb/a.md`, undefined],
+        [`${first}:kb/a.md`, "é one\n"],
+        [`${second}:kb/a.md`, "é two\n"],
+        [`${second}:kb/b.md`, undefined],
+      ]),
+    });
+  });
+
+  test("refuses a path with a line break", () => {
+    // Given - a name whose path has a line break
+
+    // When - reading it
+    const texts = readTextsAt({
+      names: ["HEAD:kb/a\nb.md"],
+      repoRoot: repo.root,
+    });
+
+    // Then - why it can't
+    expect(texts).toStrictEqual({
+      isOk: false,
+      reason: "git cat-file can't read a path with a line break",
+    });
+  });
+
+  test("says why git couldn't read them", () => {
+    // Given - a folder that isn't there
+    const repoRoot = path.join(repo.root, "missing");
+
+    // When - reading a file from it
+    const texts = readTextsAt({ names: ["HEAD:kb/a.md"], repoRoot });
+
+    // Then - the failure
+    expect(texts).toStrictEqual({
+      isOk: false,
+      reason: expect.stringContaining("ENOENT") as unknown,
     });
   });
 });

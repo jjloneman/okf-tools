@@ -29,7 +29,7 @@ sources:
     resource: ../../src/spec-rules.ts
     title: src/spec-rules.ts, the rules the spec states
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:31:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:05:49Z }
 ---
 
