@@ -2,4 +2,4 @@
 "@jjloneman/okf-tools": patch
 ---
 
-`okf check` reports a draft re-stamped since a sign-off as one `T001` notice that names the sign-off and says whether the record's text changed since the base branch or only its frontmatter did, and `I204` no longer reports a draft. `okf check --review-file` writes each draft's `T001` for the new `okf review-comments`, which posts them as pull request review comments the owner resolves to acknowledge them, as the `okf-check.yml` workflow's new `review-comments` input does.
+`okf check` reports a draft re-stamped since a sign-off as one `T001` notice that names the sign-off and says whether the record's text changed since the base branch or only its frontmatter did, and `I204` no longer reports a draft. The new `okf check --review-file` and `okf review-comments` post each draft's `T001` as a pull request review comment the owner resolves to acknowledge it, which the `okf-check.yml` workflow's new `review-comments` input runs; its calling job grants `contents: write` and `pull-requests: write`. `okf review-comments` calls GitHub through `@octokit/core`, a new dependency that only that command loads.

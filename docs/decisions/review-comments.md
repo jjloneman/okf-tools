@@ -1,11 +1,15 @@
 ---
 type: Decision
 title: How okf-check.yml posts drafts as review comments
-description: "With `review-comments: true`, the reusable workflow posts each draft record's `T001` on a same-repo pull request as a file-level review comment, found again by a hidden marker naming the record, the code and its blob, which the owner resolves to acknowledge that the record merges as a draft; the comments job takes the calling job's permissions, and a fork, another event or a refused comment falls back to annotations."
+description: "With `review-comments: true`, the reusable workflow posts each draft record's `T001` on a same-repo pull request as a file-level review comment, through `okf check --review-file` and `okf review-comments` over `@octokit/core`; a hidden marker naming the record, the code and its blob finds each comment again, the owner resolves it to acknowledge the draft, the comments job takes the calling job's `contents: write` and `pull-requests: write`, and anything it can't post falls back to annotations."
 tags:
   - ci
+  - dependencies
+  - github-actions
   - okf-check
+  - okf-review-comments
   - pull-requests
+  - rulesets
   - verification
 sources:
   - id: okf-check-yml
@@ -30,7 +34,7 @@ sources:
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T03:57:11Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T04:02:27Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:33:04Z }
 ---
 
