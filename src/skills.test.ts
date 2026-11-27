@@ -93,6 +93,19 @@ describe("okf-record", () => {
     expect(section).toContain("tags-count");
   });
 
+  test("keeps generated for a sources reorder alone, as for tags", () => {
+    // Given - the record skill's text
+    const { text } = RECORD_SKILL;
+
+    // When/Then - its draft rule and its re-stamp step name both edits
+    expect(text).toContain(
+      "unless you changed only its `tags` or the order of its `sources`"
+    );
+    expect(text).toContain(
+      "unless it changed only `tags` or the order of `sources`"
+    );
+  });
+
   test("cites the repo files a record was written from", () => {
     // Given - the record skill's text
     const { text } = RECORD_SKILL;
