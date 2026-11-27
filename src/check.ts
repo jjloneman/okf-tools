@@ -392,10 +392,42 @@ function listCitingKeys(params: {
  * @returns why git couldn't say, for each record.
  */
 function listUnseenCommits(params: {
-  cited: readonly { file: CheckedFile; paths: readonly string[] }[];
+  /**
+   * Each file read, with the paths in the repo its `sources` cite.
+   *
+   * @example `[{ file, paths: ["src/check.ts"] }]`
+   */
+  cited: readonly {
+    /** The file. @example `readCheckedFile({ … })` */
+    file: CheckedFile;
+
+    /** The paths it cites, from the repo root. @example `["src/a.ts"]` */
+    paths: readonly string[];
+  }[];
+
+  /**
+   * The changes git knows to each path, by path from the repo root.
+   *
+   * @example `new Map([["src/a.ts", [{ at: 1790000000, commit }]]])`
+   */
   history: ReadonlyMap<string, readonly FileChange[]>;
+
+  /**
+   * Every commit read, newest first, from a history with no merge; else
+   * `undefined`.
+   *
+   * @example `["1a2b3c4d…", "5e6f7a8b…"]`
+   */
   order: readonly string[] | undefined;
+
+  /** The repo's root folder. @example "/home/me/repo" */
   repoRoot: string;
+
+  /**
+   * Where each record's unseen commits go, by its path from the repo root.
+   *
+   * @example `new Map()`
+   */
   unseen: Map<string, ReadonlySet<string>>;
 }): string[] {
   const { cited, history, order, repoRoot, unseen } = params;
@@ -458,13 +490,38 @@ function listUnseenCommits(params: {
 
 /**
  * Say which of some commits aren't in the history of any of a record's
- * commits, `from`, newest first: all of them when it has none, by their
- * place in `order` when the history has no merge, and else by asking git.
+ * commits.
+ *
+ * - All of them, when the record has no commits.
+ *
+ * - By their place in `order`, when the history has no merge.
+ *
+ * - Else by asking git.
  */
 function placeCommits(params: {
+  /**
+   * The full hashes of the commits to place.
+   *
+   * @example `new Set(["1a2b3c4d…"])`
+   */
   candidates: ReadonlySet<string>;
+
+  /**
+   * The full hashes of the record's commits, newest first.
+   *
+   * @example `["5e6f7a8b…"]`
+   */
   from: readonly string[];
+
+  /**
+   * Every commit read, newest first, from a history with no merge; else
+   * `undefined`.
+   *
+   * @example `["1a2b3c4d…", "5e6f7a8b…"]`
+   */
   order: readonly string[] | undefined;
+
+  /** The repo's root folder. @example "/home/me/repo" */
   repoRoot: string;
 }): Outcome<ReadonlySet<string>> {
   const { candidates, from, order, repoRoot } = params;
@@ -640,16 +697,40 @@ function readBundles(params: {
  *
  * - A path git can't read has no history, so the source rules skip it.
  *
- * @returns why git couldn't read a path's history, by path, and the order of
- *   every commit read, newest first, when they were all read at once from a
- *   history with no merge.
+ * @returns why git couldn't read a path's history, and the commits' order.
  */
 function readHistory(params: {
+  /** The paths to read, from the repo root. @example `["src/a.ts"]` */
   filePaths: readonly string[];
+
+  /** Whether the branch has a commit for `git log` to read. @example true */
   hasHead: boolean;
+
+  /**
+   * Where each path's changes go, by path from the repo root.
+   *
+   * @example `new Map()`
+   */
   history: Map<string, readonly FileChange[]>;
+
+  /** The repo's root folder. @example "/home/me/repo" */
   repoRoot: string;
-}): { failures: Map<string, string>; order: readonly string[] | undefined } {
+}): {
+  /**
+   * Why git couldn't read a path's history, by path from the repo root.
+   *
+   * @example `new Map([["sub/a.ts", "fatal: …"]])`
+   */
+  failures: Map<string, string>;
+
+  /**
+   * Every commit read, newest first, when every path was read at once from a
+   * history with no merge; else `undefined`.
+   *
+   * @example `["1a2b3c4d…", "5e6f7a8b…"]`
+   */
+  order: readonly string[] | undefined;
+} {
   const { filePaths, hasHead, history, repoRoot } = params;
   const failures = new Map<string, string>();
   const now = Math.floor(DateTime.utc().toSeconds());

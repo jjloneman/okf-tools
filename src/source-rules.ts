@@ -177,14 +177,38 @@ function checkSourceGone(file: CheckedFile): RuleHit[] {
 }
 
 /**
- * Say how a cited path changed: by uncommitted changes, by a commit missing
- * from the history of the record's last commit, or, for a record git has no
- * commits of, by a commit later than when it was written.
+ * Say how a cited path changed.
+ *
+ * - By uncommitted changes.
+ *
+ * - By a commit missing from the history of the record's last commit.
+ *
+ * - For a record git has no commits of, by a commit later than when it was
+ *   written.
  */
 function describeChange(params: {
+  /**
+   * The change to the cited path.
+   *
+   * @example `{ at: 1790000000, commit: { hash: "1a2b…", shortHash: "1a2b" } }`
+   */
   change: FileChange;
+
+  /**
+   * The record's last commit, or `undefined` when git has none of it.
+   *
+   * @example `{ hash: "5e6f…", shortHash: "5e6f7a8" }`
+   */
   lastCommit: FileChange["commit"];
+
+  /** The `resource` as written. @example "../../src/check.ts" */
   resource: string;
+
+  /**
+   * When the record was last written or signed off, as the message says it.
+   *
+   * @example "since the record was last written or signed off, at …"
+   */
   since: string;
 }): string {
   const { change, lastCommit, resource, since } = params;

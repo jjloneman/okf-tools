@@ -163,7 +163,13 @@ export type PathChangesTogether = {
    *
    * @example `[{ changes: { commits: [], isDirty: true }, filePath: "a.md" }]`
    */
-  paths: { changes: PathChanges; filePath: string }[];
+  paths: {
+    /** The path's changes. @example `{ commits: [], isDirty: true }` */
+    changes: PathChanges;
+
+    /** The path, as given. @example "a.md" */
+    filePath: string;
+  }[];
 };
 
 /** A commit that changed a path, with when it was committed. */
@@ -807,25 +813,13 @@ export function listPathChangesTogether(params: {
  * @returns the commits given that none of the others reach, by full hash.
  */
 export function listUnreachedCommits(params: {
-  /**
-   * The full hashes of the commits to sort out.
-   *
-   * @example `["1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"]`
-   */
+  /** The full hashes of the commits to sort out. @example `["1a2b3c4d…"]` */
   commits: readonly string[];
 
-  /**
-   * The full hashes of the commits to reach them from.
-   *
-   * @example `["5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1a2b3c4d"]`
-   */
+  /** The full hashes to reach them from. @example `["5e6f7a8b…"]` */
   from: readonly string[];
 
-  /**
-   * The repo's root folder.
-   *
-   * @example "/home/me/repo"
-   */
+  /** The repo's root folder. @example "/home/me/repo" */
   repoRoot: string;
 }): Outcome<Set<string>> {
   const { commits, from, repoRoot } = params;
@@ -1020,11 +1014,7 @@ export function readWorkingPaths(repoRoot: string): Outcome<string[]> {
 export function runGit(params: {
   args: readonly string[];
 
-  /**
-   * What to write to its standard input, which is closed without it.
-   *
-   * @example "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
-   */
+  /** What to write to its stdin, closed without it. @example "1a2b3c4d…" */
   input?: string | undefined;
   repoRoot: string;
 }): string {

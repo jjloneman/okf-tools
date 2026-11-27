@@ -117,11 +117,14 @@ export type CheckedFile = {
   readChanges: (filePath: string) => readonly FileChange[];
 
   /**
-   * Which commits in the histories of the paths a record cites, by path from
-   * the repo root, aren't in the history of any commit that changed the
-   * record, being neither one of them nor an ancestor of one, by the
-   * record's path; `undefined` when git couldn't say, or for a path that
-   * isn't a record citing a path in the repo.
+   * Which commits to the paths a record cites aren't in the history of any
+   * commit that changed the record, by the record's path from the repo root.
+   *
+   * - A commit is in that history when it's one of those commits or an
+   *   ancestor of one.
+   *
+   * - `undefined` when git couldn't say, or for a path that isn't a record
+   *   citing a path in the repo.
    *
    * @example `(filePath) => unseen.get(filePath)`
    */

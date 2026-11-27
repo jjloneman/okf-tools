@@ -156,18 +156,10 @@ function check(params: {
  * as a rebase or a back-dated commit leaves it.
  */
 function commitAt(params: {
-  /**
-   * When it was authored and committed, as an ISO date-time.
-   *
-   * @example "2026-10-05T15:00:00Z"
-   */
+  /** When it was authored and committed. @example "2026-10-05T15:00:00Z" */
   at: string;
 
-  /**
-   * The commit message.
-   *
-   * @example "edit a"
-   */
+  /** The commit message. @example "edit a" */
   message: string;
 }): void {
   const { at, message } = params;
