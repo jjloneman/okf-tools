@@ -18,7 +18,7 @@ export const TAG_RULES = `- **Give each record 5 to 10 specific tags**, so a sea
   - Never add a near-duplicate of a tag the bundle has, such as its plural or another spelling.
 - **Write \`tags\` as a block list**, one \`- tag\` per line, sorted, in kebab-case, even where upstream's examples show a one-line \`[a, b]\` list, which okf-tools reads as the same tags.
 - **A change to \`tags\` alone keeps \`generated\` and \`status\`**, so a signed-off record stays signed off: don't run \`okf touch\` for it.
-  - Any other change in the same edit, to the body or another field, \`title\` and \`description\` included, is re-stamped as usual.
+  - Any other change in the same edit, to the body or another field, \`title\` and \`description\` included, is re-stamped as usual, apart from a reorder of \`sources\`.
   - Run \`okf index\` after it, which syncs each tag index.
 - **Where \`okf.rules\` in \`package.json\` turns on a tag rule, it wins over these:**
   - \`tags-count\`'s \`min\` and \`max\` replace 5 to 10;
