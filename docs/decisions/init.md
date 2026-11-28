@@ -26,9 +26,10 @@ sources:
   - id: tag-rules
     resource: ../../src/tag-rules.ts
     title: src/tag-rules.ts, how an agent chooses a record's tags
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:56Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T08:43:00Z }
 verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+x-okf-restamp-reason: src/guide.ts and src/tag-rules.ts changed
 ---
 
 # What `okf init` writes, and how it keeps the agent block current
