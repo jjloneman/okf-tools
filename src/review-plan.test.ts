@@ -189,6 +189,64 @@ describe("wordComment", () => {
     ]);
   });
 
+  test("keeps a reason holding a semicolon whole, as one bullet", () => {
+    // Given - a re-stamped draft whose reason holds two `; `
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message: `${DRAFT.message.replace("; okf verify signs it off again", "")}; its text changed since the base branch; it was re-stamped because "checked it; still holds; mostly"; okf verify signs it off again`,
+    };
+
+    // When - wording it
+    const lines = wordComment({ blob: BLOB, finding }).split("\n");
+
+    // Then - the reason one bullet, and the sign-off step still its own
+    expect(lines.slice(5, 11)).toStrictEqual([
+      "> - Its text changed since the base branch.",
+      '> - It was re-stamped because "checked it; still holds; mostly".',
+      "",
+      "**What to do**, one or the other:",
+      "",
+      "- **Sign it off:** `okf verify` signs it off again, and the next run resolves this thread.",
+    ]);
+  });
+
+  test.each([
+    {
+      by: "human:a",
+      description: "no clause comes between the summary and the reason",
+      summary: "> The record is a draft, and `human:a`'s sign-off",
+    },
+    {
+      by: 'human:a; it was re-stamped because "x',
+      description: "the signer's name holds the reason's lead",
+      summary: "> The record is a draft, and human:a.",
+    },
+  ])("keeps the reason one bullet when $description", (row) => {
+    // Given - a reason with `; `, right after the summary
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message: DRAFT.message
+        .replace("human:a", row.by)
+        .replace(
+          "; okf verify signs it off again",
+          '; it was re-stamped because "a; b"; okf verify signs it off again'
+        ),
+    };
+
+    // When - wording it
+    const lines = wordComment({ blob: BLOB, finding }).split("\n");
+
+    // Then - the summary first, and the real reason the last bullet
+    expect(lines[3]?.startsWith(row.summary)).toBe(true);
+    expect(lines.slice(-8, -3)).toStrictEqual([
+      '> - It was re-stamped because "a; b".',
+      "",
+      "**What to do**, one or the other:",
+      "",
+      "- **Sign it off:** `okf verify` signs it off again, and the next run resolves this thread.",
+    ]);
+  });
+
   test.each([
     { description: "a backtick", expected: "``a`b.ts``", resource: "a`b.ts" },
     {
