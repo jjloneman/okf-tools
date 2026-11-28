@@ -42,7 +42,7 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T04:53:25Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T04:58:10Z }
 verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
 ---
 
@@ -139,7 +139,9 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - [#137](https://github.com/jjloneman/okf-tools/issues/137) — reading every cited path's history in one `git log`.
 - [#140](https://github.com/jjloneman/okf-tools/issues/140) — judging a source's change by commit ancestry instead of a clock.
 - [#146](https://github.com/jjloneman/okf-tools/issues/146) — one notice that says why a draft needs signing off again, and review comments for drafts.
+- [#151](https://github.com/jjloneman/okf-tools/issues/151) — judging an uncommitted edit by whether it re-stamps the record, as its commit will be.
 - [#154](https://github.com/jjloneman/okf-tools/issues/154) — naming the cited sources the branch changed under a re-stamped draft.
+- [#160](https://github.com/jjloneman/okf-tools/issues/160) — the uncommitted merge left as a known limitation, and the two fixes tried.
 - [#161](https://github.com/jjloneman/okf-tools/issues/161) — a reason stored with the re-stamp, with `okf touch --reason`.
 - [How okf-check.yml posts drafts as review comments](review-comments.md) — the reusable workflow's opt-in review comments.
 
