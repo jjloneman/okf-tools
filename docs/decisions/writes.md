@@ -35,6 +35,9 @@ sources:
   - id: frontmatter-shared
     resource: ../../src/frontmatter/shared.ts
     title: src/frontmatter/shared.ts, the failsafe-schema parse and the positions the edits share
+  - id: frontmatter-sign-off
+    resource: ../../src/frontmatter/sign-off.ts
+    title: src/frontmatter/sign-off.ts, the sign-off and its listing check
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
@@ -45,8 +48,8 @@ sources:
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:11:03Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:22:44Z }
+verified: { by: human:jjloneman, at: 2026-11-28T09:56:47Z }
 ---
 
 # How okf-verify writes and commits records
@@ -64,7 +67,7 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
   - As of 2026-11-12, only an allowlist of `status` and `verified` layouts is edited, listed in the README; any other is refused with a reason naming the field, for a hand edit. Refused: an anchor, alias, or tag on a `draft` status, `verified`, an entry, any entry's `by`, or the signer's `at`; a value or flow collection spread over several lines; a quoted or `?` `status` or `verified` key; a `verified` holding a single value; someone else's entry written as a block mapping when it's the whole `verified` value; and a signer's name holding a line break.
   - Also refused, anywhere in the frontmatter, before any edit is planned: a carriage return that doesn't end a line (YAML 1.2 reads it as a line break, the parser as text); an alias whose anchor isn't set before it; and two keys that mean the same, such as an alias key repeating another, `~` beside `null`, or equal collection keys.
   - A null `by` names nobody, so it never counts as the signer's entry.
-  - As of 2026-11-28, a sign-off also takes out `x-okf-restamp-reason`, the reason `okf touch --reason` gave for the record's re-stamp, with its whole line, and keeps every other byte, so an old reason never outlives its review (issue #161; see [How okf new and okf touch stamp generated](new-and-touch.md)). A reason it can't take out alone, such as one in a flow mapping or with an anchor or tag before its key, is refused when the records are listed, as any other layout is; an uncommitted sign-off still counts as one when `HEAD`'s copy held a reason.[^records][^frontmatter-fields][^apply]
+  - As of 2026-11-28, a sign-off also takes out `x-okf-restamp-reason`, the reason `okf touch --reason` gave for the record's re-stamp, with its whole line, and keeps every other byte, so an old reason never outlives its review (issue #161; see [How okf new and okf touch stamp generated](new-and-touch.md)). A reason it can't take out alone, such as one in a flow mapping or with an anchor or tag before its key, is refused when the records are listed, as any other layout is; an uncommitted sign-off still counts as one when `HEAD`'s copy held a reason.[^records][^frontmatter-sign-off][^frontmatter-fields][^apply]
   - As of 2026-11-25, when the signer has several entries, the one with the latest readable `at` is renewed, the first of any that tie, or the first entry when none reads; the reads judge the state by the same entry, so the sign-off always clears it (issue #32).
 - **A new entry in the record's own style:** as of 2026-11-25, `okf.style` in `package.json` (`style` for `verifyRecord`) lays out a new `verified` entry, and an existing entry keeps its layout, only its `at` renewed (issue #48).
   - `match`, the default, copies the form of `generated`: a block mapping when `generated` is one, else inline.
@@ -74,7 +77,7 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
   - An inline list keeps getting inline entries, whatever the style, since a block mapping can't go inside one.
   - The new `at` is quoted as `generated.at` is, else as the first other entry's `at`, passing over an alias or a null, else plain, in every style.
   - Any other `style` passed to `verifyRecord`, such as `null` from a caller without the types, is refused as `invalidParams`, as a bad `at` is.
-  - Listing records (`findEditProblem`) plans in the default style, since no refusal depends on the style.
+  - Listing records (`findSignOffProblem`, or `findEditProblem` for `verifyRecord` alone) plans in the default style, since no refusal depends on the style.[^frontmatter-sign-off]
   - A sign-off left on disk is recognized by redoing it in every style, so one written before `okf.style` changed still counts as a sign-off on the re-run. One written unquoted by an earlier okf-tools, in a record whose timestamps are quoted, doesn't, and is committed with a warning that it has other changes.
   - The meaning check tells a null from an empty string, though the failsafe schema reads both as `""`.
   - A status other than `draft`, and other people's `at`, are never edited, so they may take any form.
@@ -164,3 +167,5 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
 [^records]: `src/records.ts`, the sign-off edits.
 
 [^frontmatter-fields]: `src/frontmatter/fields.ts`, which takes out a re-stamp's reason.
+
+[^frontmatter-sign-off]: `src/frontmatter/sign-off.ts`, the sign-off and its listing check.
