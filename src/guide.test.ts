@@ -96,14 +96,20 @@ describe("GUIDE", () => {
     expect(GUIDE).toContain(TAG_RULES);
   });
 
-  test("skips the re-stamp for a sources reorder alone, as for tags", () => {
+  test("skips the re-stamp for a sources or key reorder, as for tags", () => {
     // Given - the guide's re-stamp rule and its okf touch line
-    const exception = "only its `tags`, the order of its `sources`, or both";
+    const exception = [
+      "only its `tags`, the order of its `sources`, the order of its",
+      "top-level keys, or several of these",
+    ].join(" ");
 
-    // When/Then - both name the two edits that keep generated
+    // When/Then - both name the three edits that keep generated
     expect(RECORD_RULES).toContain(`changes ${exception}, re-stamp it`);
     expect(RECORD_RULES).toContain("A reorder of `sources` keeps");
-    expect(TAG_RULES).toContain("apart from a reorder of `sources`");
+    expect(RECORD_RULES).toContain("A reorder of the top-level keys, such as");
+    expect(TAG_RULES).toContain(
+      "apart from a reorder of `sources` or of the top-level keys"
+    );
     expect(GUIDE).toContain(`one that changes ${exception}, in the same`);
   });
 

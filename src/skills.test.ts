@@ -93,16 +93,28 @@ describe("okf-record", () => {
     expect(section).toContain("tags-count");
   });
 
-  test("keeps generated for a sources reorder alone, as for tags", () => {
+  test("keeps generated for a sources or key reorder, as for tags", () => {
     // Given - the record skill's text
     const { text } = RECORD_SKILL;
 
-    // When/Then - its draft rule and its re-stamp step name both edits
+    // When/Then - its draft rule, re-stamp step and handover name all three
     expect(text).toContain(
-      "unless you changed only its `tags`, the order of its `sources`, or both"
+      [
+        "unless you changed only its `tags`, the order of its `sources`, the",
+        "order of its top-level keys, or several of these",
+      ].join(" ")
     );
     expect(text).toContain(
-      "unless it changed only `tags`, the order of `sources`, or both"
+      [
+        "unless it changed only `tags`, the order of `sources`, the order of",
+        "top-level keys, or several of these",
+      ].join(" ")
+    );
+    expect(text).toContain(
+      [
+        "apart from the ones in which you changed only `tags`, the order of",
+        "`sources`, the order of top-level keys, or several of these",
+      ].join(" ")
     );
   });
 
