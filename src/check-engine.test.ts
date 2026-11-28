@@ -174,6 +174,16 @@ describe("readCheckedFile", () => {
       },
       text: "---\n- a\n- b\n---\n",
     },
+    {
+      description: "an alias before its anchor, in CRLF text",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 3,
+        reason: "the alias `*t` names no anchor set before it",
+      },
+      text: "---\r\ntype: Decision\r\ntitle: *t\r\ndescription: &t A\r\n---\r\n",
+    },
   ])("reads $description as broken", ({ expected, text }) => {
     // When/Then - broken, with the line and why
     expect(readFile({ filePath: "kb/a.md", text }).frontmatter).toStrictEqual(

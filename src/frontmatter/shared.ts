@@ -8,7 +8,7 @@
  * - The frontmatter is sliced out by position, so line endings and a byte
  *   order mark are kept as written.
  */
-import type { Document, Node, Pair, Range, Scalar, YAMLMap } from "yaml";
+import type { Alias, Document, Node, Pair, Range, Scalar, YAMLMap } from "yaml";
 
 import { DateTime } from "luxon";
 import {
@@ -20,6 +20,7 @@ import {
   isScalar,
   isSeq,
   parseDocument,
+  visit,
 } from "yaml";
 
 import type {
@@ -286,6 +287,11 @@ type ReadFieldParams = {
   map: unknown;
 } & Pick<ResolveAliasParams, "doc">;
 
+/** Say why an alias whose anchor isn't set before it can't be read. */
+export function describeUnresolvedAlias(alias: Alias): string {
+  return `the alias \`*${alias.source}\` names no anchor set before it`;
+}
+
 /** Join the parser's errors into one reason, or `undefined` for none. */
 export function describeYamlErrors(doc: Frontmatter): string | undefined {
   const messages = doc.errors.map(({ message }) => message);
@@ -434,6 +440,31 @@ export function findPair(params: FindPairParams): KeyedPair | undefined {
     (pair): pair is KeyedPair =>
       isScalar(pair.key) && isPlaced(pair.key) && pair.key.value === key
   );
+}
+
+/**
+ * Find the first alias whose anchor isn't set before it, which the yaml
+ * package parses without an error, though YAML can't load it.
+ *
+ * - An anchor counts from where its node starts, so an alias inside the node
+ *   it names resolves, as it does for PyYAML.
+ */
+export function findUnresolvedAlias(doc: Document): Alias | undefined {
+  let found: Alias | undefined;
+
+  visit(doc, {
+    Alias(_key, node) {
+      if (node.resolve(doc) === undefined) {
+        found = node;
+
+        return visit.BREAK;
+      }
+
+      return undefined;
+    },
+  });
+
+  return found;
 }
 
 /** Whether a value, from config or a caller, names a style a new entry can take. */
