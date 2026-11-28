@@ -184,6 +184,66 @@ describe("readCheckedFile", () => {
       },
       text: "---\r\ntype: Decision\r\ntitle: *t\r\ndescription: &t A\r\n---\r\n",
     },
+    {
+      description: "an anchor set a second time",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 4,
+        reason: "the anchor `&t` is set a second time",
+      },
+      text: "---\ntype: Decision\ntitle: &t A\ndescription: &t B\n---\n",
+    },
+    {
+      description: "a block map's anchor set a second time",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 3,
+        reason: "the anchor `&t` is set a second time",
+      },
+      text: "---\ntitle: &t A\ngenerated: &t\n  by: human:a\n---\n",
+    },
+    {
+      description: "a key given twice before an alias with no anchor",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 4,
+        reason: "the alias `*t` names no anchor set before it",
+      },
+      text: "---\ntype: A\ntype: B\ntitle: *t\n---\n",
+    },
+    {
+      description: "a key given twice before YAML that doesn't parse",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 5,
+        reason: expect.stringMatching(/^Flow sequence/u) as unknown,
+      },
+      text: "---\ntype: A\ntype: B\ntags: [a\n---\n",
+    },
+    {
+      description: "an alias with no anchor before YAML that doesn't parse",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 2,
+        reason: "the alias `*t` names no anchor set before it",
+      },
+      text: "---\ntitle: *t\ntags: [a\n---\n",
+    },
+    {
+      description: "YAML that doesn't parse before an anchor set again",
+      expected: {
+        isDuplicateKey: false,
+        kind: "broken",
+        line: 3,
+        reason: expect.stringMatching(/^Nested mappings/u) as unknown,
+      },
+      text: "---\ntitle: &t A\ntype: a: b\ndescription: &t B\n---\n",
+    },
   ])("reads $description as broken", ({ expected, text }) => {
     // When/Then - broken, with the line and why
     expect(readFile({ filePath: "kb/a.md", text }).frontmatter).toStrictEqual(
