@@ -27,8 +27,8 @@ sources:
     resource: ../../src/index.ts
     title: src/index.ts, the library's exports
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:57Z }
-verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:11:03Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:00:29Z }
 x-okf-restamp-reason: src/frontmatter/shared.ts gained the x-okf-restamp-reason key, and the library API this record describes is unchanged
 ---
 
