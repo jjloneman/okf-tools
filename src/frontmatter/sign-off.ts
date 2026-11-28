@@ -23,6 +23,9 @@ import { FRONTMATTER_KEYS } from "./shared.ts";
  * - It plans with the same fixed, valid timestamp as `findEditProblem`, so it
  *   never reports the refusal `verifyRecord` gives for a caller's own `at`.
  *
+ * - It plans in the default style, `match`, as `findEditProblem` does, since
+ *   no refusal depends on the style.
+ *
  * - Beyond `findEditProblem`'s refusals, it reports an
  *   `x-okf-restamp-reason` whose layout `removeField` refuses.
  *

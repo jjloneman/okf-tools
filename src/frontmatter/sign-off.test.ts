@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest";
 
+import { VERIFIED_BY } from "#test/repo";
+
 import { verifyRecord } from "./edit.ts";
 import { findSignOffProblem, signOffRecord } from "./sign-off.ts";
 
 const AT = "2026-11-28T09:00:00Z";
 const BODY = "\n# Title\n\nBody text.\n";
 const GENERATED = "generated: { by: claude-code/x, at: 2026-11-27T09:00:00Z }";
-const VERIFIED_BY = "human:a";
 
 /** Build a fabricated record from its frontmatter lines. */
 function record(frontmatter: readonly string[]): string {

@@ -74,9 +74,9 @@ The types promised what the functions couldn't keep, and the fix had to be addit
 
 [^frontmatter-read]: `src/frontmatter/read.ts`, the record reads and `findFrontmatterProblem`.
 
-[^frontmatter-sign-off]: `src/frontmatter/sign-off.ts`, `signOffRecord` and `findSignOffProblem`.
-
 [^frontmatter-shared]: `src/frontmatter/shared.ts`, the timestamp checks.
+
+[^frontmatter-sign-off]: `src/frontmatter/sign-off.ts`, `signOffRecord` and `findSignOffProblem`.
 
 [^frontmatter-types]: `src/frontmatter/types.ts`, the public types and constants.
 
