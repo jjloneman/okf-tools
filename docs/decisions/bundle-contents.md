@@ -23,10 +23,9 @@ sources:
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:22:45Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
-x-okf-restamp-reason: src/repo.ts changed
+verified: { by: human:jjloneman, at: 2026-11-28T09:56:47Z }
 ---
 
 # Which files in a bundle are records
