@@ -849,6 +849,115 @@ describe("runCheck", () => {
     ]);
   });
 
+  test("warns about a source changed before a merge that took its record's re-stamp", () => {
+    // Given - a record re-stamped on a side branch, after main changed its
+    // source, merged into main with only the side's edit to the record
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    commitAt({ at: "2026-10-01T16:00:00Z", message: "add the record" });
+    repo.git("switch", "--quiet", "-c", "side");
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+    commitAt({ at: "2026-10-03T16:00:00Z", message: "re-stamp the record" });
+    repo.git("switch", "--quiet", "main");
+    repo.write("src/a.ts", "a2\n");
+    commitAt({ at: "2026-10-02T15:00:00Z", message: "edit a" });
+    repo.git("merge", "--quiet", "--no-ff", "--no-edit", "side");
+
+    // When - checking it
+    const code = check({});
+
+    // Then - a warning, though the source's commit is older than the
+    // re-stamp, since the merge only took the side's
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      expect.stringMatching(
+        /^kb\/a\.md:4: warning T007 source-changed: source \.\.\/src\/a\.ts changed in [\da-f]+, at 2026-10-02T15:00:00Z, /u
+      ),
+      "2 files checked: 0 errors, 1 warning, 0 info.",
+    ]);
+  });
+
+  test("passes a source changed before an uncommitted merge that re-stamps its record", () => {
+    // Given - a record re-stamped on a side branch, after main changed its
+    // source, merged into main uncommitted and re-stamped again
+    repo.write("kb/index.md", ROOT_INDEX);
+    repo.write("src/a.ts", "a\n");
+    repo.write("kb/a.md", CITING);
+    commitAt({ at: "2026-10-01T16:00:00Z", message: "add the record" });
+    repo.git("switch", "--quiet", "-c", "side");
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+    commitAt({ at: "2026-10-03T16:00:00Z", message: "re-stamp the record" });
+    repo.git("switch", "--quiet", "main");
+    repo.write("src/a.ts", "a2\n");
+    commitAt({ at: "2026-10-02T15:00:00Z", message: "edit a" });
+    repo.git("merge", "--quiet", "--no-ff", "--no-commit", "side");
+    repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-04"));
+
+    // When - checking it
+    const code = check({});
+
+    // Then - the merge's own re-stamp follows the source's commit, so
+    // nothing
+    expect(code).toBe(EXIT_CODES.ok);
+    expect(infos).toStrictEqual([
+      "2 files checked: 0 errors, 0 warnings, 0 info.",
+    ]);
+  });
+
+  test.each([
+    {
+      description: "a cherry-pick",
+      resume: ["cherry-pick", "--continue"],
+      start: ["cherry-pick", "side"],
+    },
+    {
+      description: "a rebase",
+      resume: ["rebase", "--continue"],
+      start: ["rebase", "--quiet", "main", "side"],
+    },
+  ])(
+    "passes a source changed before $description that re-stamps its record, during and after",
+    ({ resume, start }) => {
+      // Given - a record re-stamped on a side branch, beside a change that
+      // conflicts with main's, after main changed its source; then the
+      // re-stamp replayed onto main, stopped at the conflict
+      repo.write("kb/index.md", ROOT_INDEX);
+      repo.write("src/a.ts", "a\n");
+      repo.write("notes.txt", "one\n");
+      repo.write("kb/a.md", CITING);
+      commitAt({ at: "2026-10-01T16:00:00Z", message: "add the record" });
+      repo.git("switch", "--quiet", "-c", "side");
+      repo.write("kb/a.md", CITING.replace("2026-10-01", "2026-10-03"));
+      repo.write("notes.txt", "side\n");
+      commitAt({ at: "2026-10-03T16:00:00Z", message: "re-stamp the record" });
+      repo.git("switch", "--quiet", "main");
+      repo.write("src/a.ts", "a2\n");
+      repo.write("notes.txt", "main\n");
+      commitAt({ at: "2026-10-02T15:00:00Z", message: "edit a" });
+      expect(() => repo.git(...start)).toThrow(/conflict/iu);
+
+      // When - checking it while it's stopped, then once it's resolved and
+      // committed
+      const during = check({});
+      repo.write("notes.txt", "both\n");
+      repo.git("add", "notes.txt");
+      repo.git("-c", "core.editor=true", ...resume);
+      const after = check({});
+
+      // Then - nothing either time, since the replayed re-stamp follows the
+      // source's commit
+      expect(repo.read("kb/a.md")).toBe(
+        CITING.replace("2026-10-01", "2026-10-03")
+      );
+      expect([during, after]).toStrictEqual([EXIT_CODES.ok, EXIT_CODES.ok]);
+      expect(infos).toStrictEqual([
+        "2 files checked: 0 errors, 0 warnings, 0 info.",
+        "2 files checked: 0 errors, 0 warnings, 0 info.",
+      ]);
+    }
+  );
+
   test("passes a source changed before its record was deleted and added again", () => {
     // Given - a record, its source changed, then the record deleted and
     // added again

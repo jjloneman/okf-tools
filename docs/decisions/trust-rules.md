@@ -42,8 +42,8 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T23:14:58Z }
-verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T04:58:10Z }
+verified: { by: human:jjloneman, at: 2026-11-28T05:00:37Z }
 ---
 
 # How okf check judges whether a sign-off still holds
@@ -97,6 +97,9 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
     - **Rejected:** counting any commit that changed the record, which #140 chose. It couldn't tell an edit that checked the sources from one that didn't, so a tags-only commit hid a change the clock rule before it had warned about.
     - **Rejected:** `git log -G` on the `generated` and `verified` lines. A line pattern misses a change inside a flow mapping or one entry of a sign-off list, and matches a body line, so each commit's frontmatter is parsed instead, read for every record in one `git cat-file --batch`[^git].
   - Uncommitted changes to the path count, unless the record has an uncommitted re-stamp or sign-off too: its `generated` or `verified` in the working tree differs from `HEAD`'s, read by what they mean, by the same test as a commit against its parents, so a stamp that can't be read on either side isn't one[^check].
+    - **Known limitation (#160):** during an uncommitted merge, the working tree is tested against `HEAD` alone, so a merge that only takes the other side's re-stamp counts as an uncommitted re-stamp, and a source change it would warn about once committed stays hidden until then. CI checks commits, so it never sees this state. A cherry-pick or a rebase stopped at a conflict agrees with its commit, since each replays the re-stamp onto `HEAD` as a commit with one parent.
+    - **Rejected:** testing the working tree against `HEAD` and every `MERGE_HEAD` commit, but reading the history from `HEAD` alone. Tried on #160: a merge of a branch that re-stamped its record then warned until committed, since the other side's re-stamps and source commits looked unseen or uncommitted.
+    - **Rejected:** judging the uncommitted merge as the commit it will become, by reading each path's history from `HEAD` and the merge heads, and counting a path as changed only when it differs from every parent. It reworks the history reads for a state that lasts only until the merge is committed, and that CI never checks.
   - While it does, such as after an `okf touch` not committed yet, a commit counts only when it's also later than both `generated.at` and the latest sign-off, to the whole second, by its committer time[^git], since git can't say what the record saw; a record no commit re-stamped or signed off, such as one git has no commits of, is judged by that time alone.
     - An uncommitted edit that changes neither, such as an `okf format` fix or a change to `tags` alone, is judged as its commit will be, so it neither hides a source change nor brings back the clock (#151).
     - **Rejected:** counting any uncommitted edit to the record, as before #151. Between an `okf format` and its commit, the warning about a stale source went away, and it came back once the fix was committed.
@@ -136,7 +139,9 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - [#137](https://github.com/jjloneman/okf-tools/issues/137) — reading every cited path's history in one `git log`.
 - [#140](https://github.com/jjloneman/okf-tools/issues/140) — judging a source's change by commit ancestry instead of a clock.
 - [#146](https://github.com/jjloneman/okf-tools/issues/146) — one notice that says why a draft needs signing off again, and review comments for drafts.
+- [#151](https://github.com/jjloneman/okf-tools/issues/151) — judging an uncommitted edit by whether it re-stamps the record, as its commit will be.
 - [#154](https://github.com/jjloneman/okf-tools/issues/154) — naming the cited sources the branch changed under a re-stamped draft.
+- [#160](https://github.com/jjloneman/okf-tools/issues/160) — the uncommitted merge left as a known limitation, and the two fixes tried.
 - [#161](https://github.com/jjloneman/okf-tools/issues/161) — a reason stored with the re-stamp, with `okf touch --reason`.
 - [How okf-check.yml posts drafts as review comments](review-comments.md) — the reusable workflow's opt-in review comments.
 
