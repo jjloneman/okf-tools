@@ -1,6 +1,6 @@
 {
   "name": "@jjloneman/okf-tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "✅ Tools for Open Knowledge Format bundles, run as okf <command>: okf verify signs records off, marking them stable with a verified entry, interactively or from an agent, and okf status reports where every record stands.",
   "keywords": [
     "frontmatter",
