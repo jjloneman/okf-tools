@@ -32,8 +32,8 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:12:53Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:19:26Z }
+verified: { by: human:jjloneman, at: 2026-11-28T09:58:49Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
@@ -49,6 +49,11 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
   - **Rejected:** okf-tools' own codes. Two checkers that number the same rule differently make a user map one to the other.
 - **An error is only what §11.1 of the spec[^okf-spec] makes a conformance failure:** frontmatter that doesn't parse as a YAML mapping (`E002`), a key given twice (`E007`), frontmatter on an `index.md` below the bundle root (`E004`) or on a `log.md` (`E006`), and a `log.md` heading that isn't a real `YYYY-MM-DD` date (`E005`). Everything else is a warning.
   - As of 2026-11-28, an alias whose anchor isn't set before it, below it or nowhere, is an `E002` too (#164): the yaml package parses it without an error, but can't load it[^frontmatter-shared], and PyYAML raises on it, which `validate.py` reports as `E002`. `okf check` puts it on the alias's line, where `validate.py` puts every `E002` on line 1.
+  - As of 2026-11-28, an anchor set a second time, such as `title: &t A` above `description: &t B`, is an `E002` too (#169), on the line of its second `&`[^check-engine]: PyYAML refuses it (tried, PyYAML 6.0.3), which `validate.py` reports as `E002`.
+    - **Rejected:** YAML 1.2's reading, which lets an anchor be set again and is how the yaml package reads it. The spec says only that frontmatter is valid YAML, but a record `okf check` passes would then fail upstream's checker, and an anchor set twice is never needed in frontmatter.
+  - **When frontmatter has more than one problem, `okf check` reports the code `validate.py` does** (#169)[^check-engine]. PyYAML reads the whole block before it builds a value, so a syntax error, an alias whose anchor isn't set before it, or an anchor set again is reported first, whichever comes first in the text, as an `E002`; a key given twice is an `E007` only when nothing else is wrong.
+    - Among the `E002`s, the reason and line can still differ from `validate.py`'s, since the yaml package doesn't always place a syntax error where PyYAML gives up.
+    - As of 2026-11-28, `okf verify` and the other edits still accept an anchor set twice (#177).
   - **Rejected:** a missing `type` and a timestamp without an offset as errors, as #44 first planned. v0.3 makes a file without `type` "not a concept", which consumers skip, and keeps the bundle conformant; upstream warns about both.
 - **v0.3's tolerances, as upstream reads them:**
   - a date-only timestamp is valid, the start of that day in UTC, so a date-only `stale_after` passes; a date-only `generated.at` or `verified[].at` is a warning (`W122`), since the two are compared;
@@ -85,6 +90,8 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 - [#40](https://github.com/jjloneman/okf-tools/issues/40) — the trial that settled who owns the rules.
 - [#45](https://github.com/jjloneman/okf-tools/issues/45) — the trust rules, next on the engine.
 - [#164](https://github.com/jjloneman/okf-tools/issues/164) — an alias before its anchor, reported as `E002`.
+- [#169](https://github.com/jjloneman/okf-tools/issues/169) — an anchor set twice, reported as `E002`, and which of several problems is reported.
+- [#177](https://github.com/jjloneman/okf-tools/issues/177) — refusing an anchor set twice before an edit, as `okf check` now reports it.
 
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 

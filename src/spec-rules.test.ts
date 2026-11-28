@@ -178,6 +178,30 @@ describe("E002 frontmatter-parses", () => {
       files: { "kb/a.md": "---\ntype: Decision\ntags: &t [a, *t]\n---\n" },
     },
     {
+      description: "an anchor set a second time",
+      expected: ["kb/a.md:4"],
+      files: {
+        "kb/a.md": "---\ntype: Decision\ntitle: &t A\ndescription: &t B\n---\n",
+      },
+    },
+    {
+      description: "an anchor set again inside the node it names",
+      expected: ["kb/a.md:2"],
+      files: { "kb/a.md": "---\ntags: &t [&t a]\n---\n" },
+    },
+    {
+      description: "an anchor set once, with aliases after it",
+      expected: [],
+      files: {
+        "kb/a.md": "---\ntitle: &t A\ndescription: *t\ntags: [*t]\n---\n",
+      },
+    },
+    {
+      description: "a key given twice before an alias with no anchor",
+      expected: ["kb/a.md:4"],
+      files: { "kb/a.md": "---\ntype: A\ntype: B\ntitle: *t\n---\n" },
+    },
+    {
       description: "a root index.md with an alias before its anchor",
       expected: ["kb/index.md:2"],
       files: { "kb/index.md": '---\ntitle: *v\nokf_version: &v "0.3"\n---\n' },
@@ -342,6 +366,11 @@ describe("E007 frontmatter-unique-keys", () => {
       description: "YAML that doesn't parse, which E002 reports",
       expected: [],
       files: { "kb/a.md": "---\ntags: [\n---\n" },
+    },
+    {
+      description: "a key repeated before an alias with no anchor",
+      expected: [],
+      files: { "kb/a.md": "---\ntype: A\ntype: B\ntitle: *t\n---\n" },
     },
   ])("checks $description", ({ expected, files }) => {
     // When/Then - the lines it reports

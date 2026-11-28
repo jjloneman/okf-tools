@@ -7,11 +7,14 @@
  *   a later rule set adds rules to a list without touching the engine.
  *
  * - Frontmatter is read with the parser `okf verify` uses, so `check` and
- *   `verify` never disagree about whether a record's frontmatter reads.
+ *   `verify` read a record's values alike.
+ *
+ * - `check` also refuses what upstream's PyYAML refuses and the yaml package
+ *   reads, such as an anchor set twice, which `verify` still accepts.
  */
-import type { Document, YAMLMap } from "yaml";
+import type { Document, YAMLError, YAMLMap } from "yaml";
 
-import { isMap, isNode } from "yaml";
+import { isMap, isNode, visit } from "yaml";
 
 import {
   describeUnresolvedAlias,
@@ -475,6 +478,30 @@ export type UnseenCommits = {
   unseen: ReadonlySet<string>;
 };
 
+/** What stops a frontmatter block loading, and where in it. */
+type ParseProblem = {
+  /**
+   * The position in the block it starts at.
+   *
+   * @example 16
+   */
+  index: number;
+
+  /**
+   * Whether it's a key given twice, which `E007` reports.
+   *
+   * @example false
+   */
+  isDuplicateKey: boolean;
+
+  /**
+   * Why the block can't be read, on one line.
+   *
+   * @example "the anchor `&t` is set a second time"
+   */
+  reason: string;
+};
+
 /** The version of the JSON report's shape. */
 export const CHECK_SCHEMA_VERSION = 2;
 
@@ -648,6 +675,95 @@ function countSeverity(params: {
 }
 
 /**
+ * Find the first anchor set a second time, which YAML 1.2 allows and the yaml
+ * package reads without an error, though PyYAML refuses it.
+ *
+ * - It's placed at the second `&` that sets the anchor, since a node's range
+ *   starts after its anchor, on the next line for a block collection.
+ */
+function findAnchorProblem(params: {
+  doc: Document;
+  text: string;
+}): ParseProblem | undefined {
+  const { doc, text } = params;
+  const anchors = new Set<string>();
+  let found: ParseProblem | undefined;
+
+  visit(doc, {
+    Node(_key, node) {
+      const { anchor } = node;
+
+      if (anchor === undefined || !isPlaced(node)) {
+        return undefined;
+      }
+
+      if (anchors.has(anchor)) {
+        found = {
+          index: text.lastIndexOf(`&${anchor}`, node.range[0]),
+          isDuplicateKey: false,
+          reason: `the anchor \`&${anchor}\` is set a second time`,
+        };
+
+        return visit.BREAK;
+      }
+
+      anchors.add(anchor);
+
+      return undefined;
+    },
+  });
+
+  return found;
+}
+
+/**
+ * Find what stops a frontmatter block loading as upstream's `validate.py`
+ * loads it with PyYAML, or `undefined` when nothing does.
+ *
+ * - PyYAML reads the whole block before it builds a value, so a syntax
+ *   error, an alias whose anchor isn't set before it, or an anchor set again
+ *   is found there, whichever comes first in the text.
+ *
+ * - A key given twice is found only while building, so it's the problem only
+ *   when nothing else is wrong.
+ */
+function findParseProblem(params: {
+  doc: Document;
+  text: string;
+}): ParseProblem | undefined {
+  const { doc, text } = params;
+  const alias = findUnresolvedAlias(doc);
+  const problems = [
+    ...doc.errors.map((error) => readErrorProblem(error)),
+    alias !== undefined && isPlaced(alias)
+      ? {
+          index: alias.range[0],
+          isDuplicateKey: false,
+          reason: describeUnresolvedAlias(alias),
+        }
+      : undefined,
+    findAnchorProblem({ doc, text }),
+  ].filter((problem) => problem !== undefined);
+
+  return problems.sort(
+    (left, right) =>
+      Number(left.isDuplicateKey) - Number(right.isDuplicateKey) ||
+      left.index - right.index
+  )[0];
+}
+
+/** Read one of the yaml package's errors as a problem, on one line. */
+function readErrorProblem(error: YAMLError): ParseProblem {
+  return {
+    index: error.pos[0],
+    isDuplicateKey: error.code === DUPLICATE_KEY,
+    reason: error.message
+      .replace(/\n[\s\S]*/u, "")
+      .replace(/ at line \d+, column \d+:?$/u, ""),
+  };
+}
+
+/**
  * Read a file's frontmatter: none, a block that can't be read, or a map.
  *
  * - A block that doesn't close counts only when the first line is exactly
@@ -670,27 +786,14 @@ function readFrontmatterState(params: {
   }
 
   const doc = parseFrontmatter(block.text);
-  const [error] = doc.errors;
+  const problem = findParseProblem({ doc, text: block.text });
 
-  if (error !== undefined) {
+  if (problem !== undefined) {
     return {
-      isDuplicateKey: error.code === DUPLICATE_KEY,
+      isDuplicateKey: problem.isDuplicateKey,
       kind: "broken",
-      line: toLine({ index: block.start + error.pos[0], text }),
-      reason: error.message
-        .replace(/\n[\s\S]*/u, "")
-        .replace(/ at line \d+, column \d+:?$/u, ""),
-    };
-  }
-
-  const alias = findUnresolvedAlias(doc);
-
-  if (alias !== undefined && isPlaced(alias)) {
-    return {
-      isDuplicateKey: false,
-      kind: "broken",
-      line: toLine({ index: block.start + alias.range[0], text }),
-      reason: describeUnresolvedAlias(alias),
+      line: toLine({ index: block.start + problem.index, text }),
+      reason: problem.reason,
     };
   }
 
