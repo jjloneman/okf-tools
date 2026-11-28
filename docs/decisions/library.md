@@ -29,8 +29,8 @@ sources:
   - id: index
     resource: ../../src/index.ts
     title: src/index.ts, the library's exports
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:11:03Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:22:44Z }
 verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
 ---
 

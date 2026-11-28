@@ -24,9 +24,10 @@ sources:
   - id: working-directory
     resource: ../../src/working-directory.ts
     title: src/working-directory.ts, which resolves the working directory
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:57Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:22:45Z }
 verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+x-okf-restamp-reason: src/repo.ts changed
 ---
 
 # What `--yes` verifies, and how it exits

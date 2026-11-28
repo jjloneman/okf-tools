@@ -24,9 +24,10 @@ sources:
   - id: yaml-spec
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:22:44Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+x-okf-restamp-reason: src/frontmatter/edit.ts changed
 ---
 
 # Which actors can sign a record
