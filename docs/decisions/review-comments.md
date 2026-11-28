@@ -33,8 +33,8 @@ sources:
   - id: ruleset
     resource: ../../.github/rulesets/main.json
     title: .github/rulesets/main.json, which protects main
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T23:14:58Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:17:47Z }
 verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
 ---
 
@@ -67,6 +67,10 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
     - The link is to the README on `main`, not the installed version's tag, since a release's README can predate a rule, and a code is never reused.
     - Any other code the message names is linked the same way.
   - The finding's first clause as a sentence, and each clause after it, up to the last, as a bullet, splitting the message where `okf check` joins its clauses with `; `.
+    - **The reason `okf touch --reason` wrote stays one bullet**, even when it holds a `; ` itself, as #171 asked: the comment finds it by the lead `T001` opens it with, `; it was re-stamped because "`, and keeps it whole up to the last clause, the sign-off step[^review-plan], as the sources are found by their phrase.
+      - It takes the last lead in the message, since the clauses before the reason can hold a record's own text, such as the signer's `by` in the summary; a reason that holds the lead itself is cut there, which the owner's own words would have to do on purpose.
+    - **Rejected:** carrying the reason as its own field on the finding, beside `sources`, which changes the JSON report's shape and so bumps `CHECK_SCHEMA_VERSION`, a breaking change, for text the comment can already find.
+    - **Rejected:** refusing a `; ` in `--reason`, which would bend the owner's own words to a layout only the review comment has; the text and JSON reports quote it fine.
   - Times, actors, the `generated` and `verified` fields, and `okf` commands set as code.
   - **Each cited source the finding names links to its file on the Files changed tab**, as the owner asked on PR #162[^review-plan]: set as code, its fence longer than any backtick in it, and linked to `<pull request>/files#diff-<SHA-256 of its path>`, the anchor GitHub gives each file of a pull request's diff, as tried on PR #162 on 2026-11-27.
     - The finding carries each source's path from the repo root in `sources`, since the message names it as the record wrote it; the comment finds the sources by the phrase `T001` builds with `nameSources`, so a path is never matched inside other text.
@@ -119,7 +123,9 @@ As of 2026-11-27, from `.github/workflows/okf-check.yml`[^okf-check-yml]:
 ## Links
 
 - [#146](https://github.com/jjloneman/okf-tools/issues/146) — review comments the owner can resolve.
+- [PR #147](https://github.com/jjloneman/okf-tools/pull/147) — where the owner asked for the layout, and for the logic to leave the workflow's YAML.
 - [PR #162](https://github.com/jjloneman/okf-tools/pull/162) — where the owner asked for the sources to link to their diffs.
+- [#171](https://github.com/jjloneman/okf-tools/issues/171) — a re-stamp reason holding `; ` kept in one bullet.
 - [How okf check judges whether a sign-off still holds](trust-rules.md) — what `T001` says.
 
 [^okf-check-yml]: `.github/workflows/okf-check.yml`, the reusable workflow.
