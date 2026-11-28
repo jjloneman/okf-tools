@@ -38,8 +38,8 @@ sources:
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T01:36:56Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T05:56:55Z }
 verified: { by: human:jjloneman, at: 2026-11-27T02:04:42Z }
 ---
 

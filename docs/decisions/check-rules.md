@@ -31,8 +31,8 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T23:14:58Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T05:56:55Z }
 verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
 ---
 
