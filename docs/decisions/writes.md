@@ -44,9 +44,9 @@ sources:
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:11:03Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:00:29Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
 ---
 
 # How okf-verify writes and commits records

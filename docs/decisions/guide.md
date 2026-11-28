@@ -18,10 +18,9 @@ sources:
   - id: guide
     resource: ../../src/guide.ts
     title: src/guide.ts, the okf guide text and record rules
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:56Z }
-verified: { by: human:jjloneman, at: 2026-11-28T04:45:44Z }
-x-okf-restamp-reason: src/guide.ts gained okf touch --reason in its command list, and nothing this record says changed
+verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written
