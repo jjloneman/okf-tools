@@ -21,9 +21,9 @@ sources:
   - id: restamp-exceptions
     resource: ../../src/restamp-exceptions.ts
     title: src/restamp-exceptions.ts, the edits that keep a record's generated and status
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T08:42:59Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+verified: { by: human:jjloneman, at: 2026-11-28T08:52:55Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written

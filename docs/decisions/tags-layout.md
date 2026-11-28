@@ -27,10 +27,9 @@ sources:
   - id: tags
     resource: ../../src/tags.ts
     title: src/tags.ts, the okf tags command
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T08:43:00Z }
-verified: { by: human:jjloneman, at: 2026-11-28T04:45:44Z }
-x-okf-restamp-reason: src/tag-rules.ts changed
+verified: { by: human:jjloneman, at: 2026-11-28T08:52:55Z }
 ---
 
 # How a record's tags are laid out
