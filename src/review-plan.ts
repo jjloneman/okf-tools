@@ -175,6 +175,9 @@ const RULE_CODE = /\b[EHITW]\d{3}\b/gu;
 const CODE_TOKEN =
   /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z|\b[a-z][a-z0-9-]*:[\w.-]+(?='s\b)|\b(?:generated|verified)\.(?:at|by)\b|\bokf [a-z-]+/gu;
 
+/** How `T001` opens the clause quoting `okf touch --reason`'s reason. */
+const RESTAMP_REASON_LEAD = '; it was re-stamped because "';
+
 /** What follows an `@` so it mentions no one, written as its code point. */
 const ZERO_WIDTH_SPACE = String.fromCodePoint(0x20_0b);
 
@@ -376,15 +379,14 @@ export function wordComment(params: {
   const sources = finding.sources ?? [];
   // The summary holds the actor, a record's own text, so only the clauses
   // after it are searched for the sources.
-  const [summary = "", ...rest] = finding.message
-    .split("; ")
-    .map((clause, index) =>
+  const [summary = "", ...rest] = splitClauses(finding.message).map(
+    (clause, index) =>
       toSentence(
         index === 0
           ? formatClause(clause)
           : formatSourcesClause({ clause, diffUrl, sources })
       )
-    );
+  );
   const details = rest.slice(0, -1);
   const settle = rest.at(-1);
   const alert = [
@@ -517,6 +519,35 @@ function formatSourcesClause(params: {
 /** Set a rule code as code, linked to the README's table of its rules. */
 function linkCode(code: string): string {
   return `[\`${code}\`](${RULE_DOCS[code.charAt(0)] ?? SPEC_RULE_DOCS})`;
+}
+
+/**
+ * Split a finding's message into its clauses at each `; `, but keep the
+ * reason `T001` quotes whole, from its lead to the last clause, since the
+ * reason is the owner's own text and may hold a `; ` itself.
+ *
+ * - It finds the reason by its lead, as `formatSourcesClause` finds the
+ *   sources by their phrase, so the report's JSON needs no new field.
+ *
+ * - It takes the last lead, since the clauses before the reason can hold
+ *   a record's own text, such as the signer's `by` in the summary.
+ *
+ * - `T001` always ends with the step that signs it off, after the reason,
+ *   so the last `; ` ends the reason.
+ */
+function splitClauses(message: string): string[] {
+  const at = message.lastIndexOf(RESTAMP_REASON_LEAD);
+  const end = message.lastIndexOf("; ");
+
+  if (at === -1) {
+    return message.split("; ");
+  }
+
+  return [
+    ...message.slice(0, at).split("; "),
+    message.slice(at + 2, end),
+    message.slice(end + 2),
+  ];
 }
 
 /** Make a clause a sentence: a capital first letter and a full stop. */
