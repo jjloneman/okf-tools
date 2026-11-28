@@ -6,6 +6,10 @@ import { run } from "./cli.ts";
 import { EXIT_CODES } from "./exit-codes.ts";
 import { GUIDE, RECORD_RULES, RECORDS_INTRO } from "./guide.ts";
 import { formatVerifyUsage, GUIDE_USAGE, OKF_USAGE } from "./options.ts";
+import {
+  OWNED_RESTAMP_EXCEPTIONS,
+  RESTAMP_REORDERS,
+} from "./restamp-exceptions.ts";
 import { TAG_RULES } from "./tag-rules.ts";
 
 /** A directory that doesn't exist, since the guide reads nothing. */
@@ -98,18 +102,13 @@ describe("GUIDE", () => {
 
   test("skips the re-stamp for a sources or key reorder, as for tags", () => {
     // Given - the guide's re-stamp rule and its okf touch line
-    const exception = [
-      "only its `tags`, the order of its `sources`, the order of its",
-      "top-level keys, or several of these",
-    ].join(" ");
+    const exception = `only ${OWNED_RESTAMP_EXCEPTIONS}`;
 
-    // When/Then - both name the three edits that keep generated
+    // When/Then - both name the shared edits that keep generated
     expect(RECORD_RULES).toContain(`changes ${exception}, re-stamp it`);
     expect(RECORD_RULES).toContain("A reorder of `sources` keeps");
     expect(RECORD_RULES).toContain("A reorder of the top-level keys, such as");
-    expect(TAG_RULES).toContain(
-      "apart from a reorder of `sources` or of the top-level keys"
-    );
+    expect(TAG_RULES).toContain(`apart from ${RESTAMP_REORDERS}.`);
     expect(GUIDE).toContain(`one that changes ${exception}, in the same`);
   });
 
