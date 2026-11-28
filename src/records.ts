@@ -3,16 +3,12 @@ import path from "node:path";
 
 import type { RecordVerification } from "./frontmatter/edit.ts";
 import type { RecordState, RecordSummary } from "./frontmatter/read.ts";
-import type {
-  EntryStyle,
-  Timestamp,
-  VerifyRecordParams,
-} from "./frontmatter/types.ts";
+import type { EntryStyle, Timestamp } from "./frontmatter/types.ts";
 
-import { verifyRecord } from "./frontmatter/edit.ts";
-import { removeField, writeFields } from "./frontmatter/fields.ts";
+import { writeFields } from "./frontmatter/fields.ts";
 import { readStatusText } from "./frontmatter/read.ts";
 import { FRONTMATTER_KEYS } from "./frontmatter/shared.ts";
+import { signOffRecord } from "./frontmatter/sign-off.ts";
 import { findBundleDir } from "./repo.ts";
 
 /** A record in a bundle that could be verified. */
@@ -188,19 +184,6 @@ export function prepareEdits(params: {
   });
 
   return { edits, failures };
-}
-
-/**
- * Sign a record off as `verifyRecord` does, then take out the reason its
- * last re-stamp gave, `x-okf-restamp-reason`, so an old reason never
- * outlives the review it was written for.
- */
-export function signOffRecord(params: VerifyRecordParams): RecordVerification {
-  const verified = verifyRecord(params);
-
-  return verified.isOk
-    ? removeField({ key: FRONTMATTER_KEYS.restampReason, text: verified.text })
-    : verified;
 }
 
 /**
