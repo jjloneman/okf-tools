@@ -26,6 +26,7 @@ import type { Outcome } from "./outcome.ts";
 import type { Candidate, RecordEdit } from "./records.ts";
 
 import { findEditProblem } from "./frontmatter/edit.ts";
+import { removeField } from "./frontmatter/fields.ts";
 import {
   findFrontmatterProblem,
   getRecordState,
@@ -33,6 +34,7 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
+import { FRONTMATTER_KEYS } from "./frontmatter/shared.ts";
 import {
   listChangedPaths,
   listIgnoredFolders,
@@ -357,8 +359,10 @@ export function loadCandidate(params: {
   }
 
   // A layout the edits refuse is reported now, since choosing it would stop
-  // the records chosen with it from being written too.
-  const editProblem = findEditProblem({ text, verifiedBy });
+  // the records chosen with it from being written too; a sign-off also takes
+  // out a re-stamp's reason, as `signOffRecord` does.
+  const editProblem =
+    findEditProblem({ text, verifiedBy }) ?? findReasonProblem(text);
 
   if (editProblem !== undefined) {
     return { kind: "invalid", reason: `${filePath}: ${editProblem}` };
@@ -799,6 +803,13 @@ function findIndexSpelling(params: {
       toFoldKey(entry) === key &&
       isDiskSpelling({ filePath, indexPath: entry, repoRoot })
   );
+}
+
+/** Say why a sign-off couldn't take out a re-stamp's reason, if it can't. */
+function findReasonProblem(text: string): string | undefined {
+  const removed = removeField({ key: FRONTMATTER_KEYS.restampReason, text });
+
+  return removed.isOk ? undefined : removed.reason;
 }
 
 /**

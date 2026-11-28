@@ -29,8 +29,8 @@ sources:
     resource: ../../src/status.ts
     title: src/status.ts, the okf status command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:57Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
 ---
 
 # How okf status reports a bundle's trust state

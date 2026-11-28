@@ -1,6 +1,6 @@
 /*
  * `okf touch`: re-stamps records' `generated` from the clock after an edit,
- * all or nothing, and commits nothing.
+ * with `--reason`'s why, all or nothing, and commits nothing.
  */
 import type { ExitCode } from "./exit-codes.ts";
 import type { TouchOptions } from "./options.ts";
@@ -28,7 +28,7 @@ export function runTouch(params: {
 }): ExitCode {
   const { context, options } = params;
   const { bundleDirs, cwd, excludeGlobs, output, repoRoot } = context;
-  const { by, recordPaths, shouldDraft } = options;
+  const { by, reason, recordPaths, shouldDraft } = options;
 
   if (!isActor(by)) {
     output.error(describeBadActor(by));
@@ -68,7 +68,7 @@ export function runTouch(params: {
     }
 
     const { text } = loaded.candidate;
-    const touched = touchRecord({ at, by, shouldDraft, text });
+    const touched = touchRecord({ at, by, reason, shouldDraft, text });
 
     if (touched.isOk) {
       edits.push({ filePath, originalText: text, text: touched.text });

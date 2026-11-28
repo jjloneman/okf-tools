@@ -14,6 +14,9 @@ tags:
   - timestamps
   - verification
 sources:
+  - id: frontmatter-fields
+    resource: ../../src/frontmatter/fields.ts
+    title: src/frontmatter/fields.ts, which writes and takes out top-level fields
   - id: frontmatter-scaffold
     resource: ../../src/frontmatter/scaffold.ts
     title: src/frontmatter/scaffold.ts, a new draft record's frontmatter
@@ -23,12 +26,15 @@ sources:
   - id: new-record
     resource: ../../src/new-record.ts
     title: src/new-record.ts, the okf new command
+  - id: records
+    resource: ../../src/records.ts
+    title: src/records.ts, the sign-off edits
   - id: touch
     resource: ../../src/touch.ts
     title: src/touch.ts, the okf touch command
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T04:40:09Z }
-verified: { by: human:jjloneman, at: 2026-11-28T04:45:44Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:48Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
 ---
 
 # How okf new and okf touch stamp generated
@@ -48,6 +54,14 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - **`okf touch <record>... --by <producer>`**[^frontmatter-touch] re-stamps `generated.by` and `generated.at` in place, with the same position-based edits and refusals as `okf verify`, adding either key, or `generated` after `status`, when missing.
   - `--draft` sets a `stable` record back to `status: draft`, only when asked, as the issue says; any other status is kept.
   - It writes nothing when any named record refuses.[^touch]
+- **`okf touch --reason "<why>"` says why a record was re-stamped**, as #161 asked, for a re-stamp whose text didn't change, which no cited source the branch changed explains: it writes `x-okf-restamp-reason: <why>` at the end of the frontmatter, taking out any old one's line first, and `okf check`'s `T001` quotes it (see [How okf check judges whether a sign-off still holds](trust-rules.md)).[^frontmatter-touch]
+  - The key is an `x-` key, which the spec leaves to producers, since the spec defines no field for it, so no other OKF tool reads it.
+  - `okf verify` takes it out on sign-off, with its whole line, so an old reason never outlives the review it was written for.[^records] It refuses a record where it can't take the line out alone, such as a reason in a flow mapping, as it refuses any other layout it can't edit safely.[^frontmatter-fields]
+  - `okf touch` without `--reason`, and `okf deprecate`, take out any reason an earlier re-stamp wrote, since a reason explains only the stamp it came with.
+  - The reason must be one line, and not blank.
+  - **Rejected:** writing it after `generated`, which it explains. The `key-order` house rule puts a key it doesn't list after every one it does, so a repo that lists `verified` would get a finding after every re-stamp with a reason.
+  - **Rejected:** the re-stamp's commit message, read from the record's last stamp commit. An uncommitted re-stamp has no commit yet, so `okf check`, a pre-commit hook and the review comments couldn't show it, and a squash merge folds it into the pull request's message.
+  - **Rejected:** keeping a reason through later re-stamps until a sign-off. A later re-stamp is for a later change, which the old reason may not explain, and a reviewer would read it as this stamp's.
 - **Neither takes a time**: there is no `--at`, since a typed time is the mistake they exist to stop.
 - **Neither adds or changes `verified`, and neither commits**, since signing off stays the person's call (see [Who verifies a record](who-verifies.md)).
 - **`--by` is required and must be an actor**, as `okf.verifiedBy` must; it names the producer, so it never falls back to `okf.verifiedBy`.
@@ -70,6 +84,7 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - Tags help a reader find a record, while a sign-off confirms what the record says against its sources, which a tag can't change.
   - As of 2026-11-25, upstream's okf-generate skill re-stamps `generated.at` only for a change in meaning, and keeps it for a move, which changes how a record is found but not what it says; a retag is the same kind of change.
   - The CLI needed no change for it: a sign-off is judged by `generated.at`, and `okf check`'s `T006` gate compares only the body.
+- A reason in the frontmatter is there before any commit, so `okf check`, a pre-commit hook and the review comments can quote it, and taking it out on sign-off means a reason is only ever read beside the stamp it explains.
 - All-or-nothing writes match `okf verify`'s (see [How okf-verify writes and commits records](writes.md)).
 
 ## Links
@@ -78,6 +93,7 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - [Issue #66](https://github.com/jjloneman/okf-tools/issues/66), where the tags exception was decided
 - [Issue #150](https://github.com/jjloneman/okf-tools/issues/150), where the `sources` sort was decided, and [issue #155](https://github.com/jjloneman/okf-tools/issues/155), which named its exception in the guidance
 - [Issue #157](https://github.com/jjloneman/okf-tools/issues/157), which named the key-order exception
+- [Issue #161](https://github.com/jjloneman/okf-tools/issues/161), where `okf touch --reason` and its `x-` key were decided
 - [What okf check --fix fixes, and how it writes](fixes.md)
 - [How a record's tags are laid out](tags-layout.md)
 - [How okf index keeps an index.md in step with its records](index-sync.md)
@@ -91,3 +107,7 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 [^frontmatter-touch]: `src/frontmatter/touch.ts`, the re-stamp edit.
 
 [^touch]: `src/touch.ts`, the `okf touch` command.
+
+[^records]: `src/records.ts`, the sign-off edits.
+
+[^frontmatter-fields]: `src/frontmatter/fields.ts`, which writes and takes out top-level fields.

@@ -1514,6 +1514,14 @@ export type TouchOptions = {
   by: string;
 
   /**
+   * Why the records were re-stamped, passed with `--reason`; `undefined`
+   * takes out any reason an earlier re-stamp wrote.
+   *
+   * @example "re-checked against the v0.3 spec, which moved"
+   */
+  reason: string | undefined;
+
+  /**
    * Record files named on the command line, relative to where it was run.
    *
    * @example `["docs/decisions/package-promise.md"]`
@@ -1751,6 +1759,9 @@ adds or changes \`verified\`, and writes nothing when any record refuses.
 options:
   --by <producer>  who edited it, as \`<producer>/<version>\`
   --draft          set a \`stable\` record back to \`status: draft\`
+  --reason <why>   say why, as \`x-okf-restamp-reason\`, which okf check
+                   quotes and okf verify takes out; without it, any old
+                   reason is taken out
   --bundle <dir>   a bundle directory the records are in; repeat for more
                    (default: \`okf.bundles\` in package.json)
   --help, -h       print this help`;
@@ -1828,7 +1839,7 @@ export function parseTouchArgs(
   }
 
   const bundles = values.bundle ?? [];
-  const { by } = values;
+  const { by, reason } = values;
 
   if (positionals.length === 0) {
     return { kind: "invalid", message: "Name at least one record." };
@@ -1838,7 +1849,9 @@ export function parseTouchArgs(
     return { kind: "invalid", message: "okf touch needs --by." };
   }
 
-  const problem = findBundleFlagProblem(bundles);
+  const problem =
+    findBundleFlagProblem(bundles) ??
+    findTextProblem({ "--reason": reason === undefined ? [] : [reason] });
 
   return problem === undefined
     ? {
@@ -1846,6 +1859,7 @@ export function parseTouchArgs(
         options: {
           bundles,
           by,
+          reason,
           recordPaths: positionals,
           shouldDraft: values.draft === true,
         },
@@ -1967,6 +1981,7 @@ function parseTouchLine(args: readonly string[]) {
       by: { type: "string" },
       draft: { type: "boolean" },
       help: { short: "h", type: "boolean" },
+      reason: { type: "string" },
     },
     strict: true,
   });

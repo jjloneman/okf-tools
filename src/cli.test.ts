@@ -1443,6 +1443,39 @@ describe.each(INVOCATIONS)("as $command", (current) => {
       ]);
     });
 
+    test("takes out a re-stamp's reason, and a re-run after a rejected commit commits it", async () => {
+      // Given - a draft whose re-stamp gave a reason, committed
+      const reason = "x-okf-restamp-reason: the spec moved";
+
+      repo.write(
+        "docs/decisions/a.md",
+        draftRecord("A").replace("status: draft", `status: draft\n${reason}`)
+      );
+      repo.commitAll("re-stamp a");
+      repo.installFailingHook({ output: "hook says no" });
+      await runIn(["--yes", "docs/decisions/a.md"]);
+      unlinkSync(path.join(repo.root, ".git/hooks/pre-commit"));
+
+      const signedOff = repo.read("docs/decisions/a.md");
+
+      infos.length = 0;
+
+      // When - running it again
+      const code = await runIn(["--yes", "docs/decisions/a.md"]);
+
+      // Then - signed off without the reason, and committed as it is, with
+      // no warning about its own change
+      expect(code).toBe(0);
+      expect(signedOff).toContain("status: stable");
+      expect(signedOff).not.toContain("x-okf-restamp-reason");
+      expect(repo.git("status", "--porcelain")).toBe("");
+      expect(repo.read("docs/decisions/a.md")).toBe(signedOff);
+      expect(infos).toStrictEqual([
+        `${invocation.prefix} committing docs/decisions/a.md: already verified, not yet committed`,
+        expect.stringMatching(prefixed(/committed [0-9a-f]+$/u)),
+      ]);
+    });
+
     test("--stale-in sets stale_after that long after the sign-off", async () => {
       // When - verifying a record to go stale in 90 days
       const code = await runIn([

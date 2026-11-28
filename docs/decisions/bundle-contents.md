@@ -24,8 +24,8 @@ sources:
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:57Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
 ---
 
 # Which files in a bundle are records

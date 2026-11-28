@@ -224,6 +224,24 @@ describe("T001 draft", () => {
         expected: `${outdated}; okf verify signs it off again`,
         text: restamped,
       },
+      {
+        baseText: signed,
+        description: "okf touch --reason said why",
+        expected: `${outdated}; its text is the same as on the base branch, and only its frontmatter differs; it was re-stamped because "the API it describes moved"; okf verify signs it off again`,
+        text: restamped.replace(
+          "verified:",
+          "x-okf-restamp-reason: the API it describes moved\nverified:"
+        ),
+      },
+      {
+        baseText: undefined,
+        description: "a reason is empty",
+        expected: `${outdated}; okf verify signs it off again`,
+        text: restamped.replace(
+          "verified:",
+          "x-okf-restamp-reason:\nverified:"
+        ),
+      },
     ])("names the last sign-off when $description", (row) => {
       // When/Then - one notice that says why
       expect(

@@ -171,6 +171,24 @@ describe("wordComment", () => {
     ]);
   });
 
+  test("quotes okf touch's reason as a bullet, defusing a mention or a comment", () => {
+    // Given - a re-stamped draft whose reason holds an @ and a <
+    const finding: CheckFinding = {
+      ...DRAFT,
+      message: `${DRAFT.message.replace("; okf verify signs it off again", "")}; its text is the same as on the base branch, and only its frontmatter differs; it was re-stamped because "@a checked it <!-- x"; okf verify signs it off again`,
+    };
+
+    // When - wording it
+    const lines = wordComment({ blob: BLOB, finding }).split("\n");
+
+    // Then - the reason its own bullet, unable to mention or hide anything
+    expect(lines.slice(5, 8)).toStrictEqual([
+      "> - Its text is the same as on the base branch, and only its frontmatter differs.",
+      `> - It was re-stamped because "@\u200Ba checked it &lt;!-- x".`,
+      "",
+    ]);
+  });
+
   test.each([
     { description: "a backtick", expected: "``a`b.ts``", resource: "a`b.ts" },
     {

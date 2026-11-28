@@ -1032,6 +1032,7 @@ describe("parseTouchArgs", () => {
       options: {
         bundles: [],
         by: "claude-code/2.2.0",
+        reason: undefined,
         recordPaths: ["a.md"],
         shouldDraft: false,
       },
@@ -1045,11 +1046,14 @@ describe("parseTouchArgs", () => {
         "--draft",
         "--bundle",
         "docs",
+        "--reason",
+        "the spec moved",
       ],
-      description: "two records, --draft, and a bundle",
+      description: "two records, --draft, a bundle, and a reason",
       options: {
         bundles: ["docs"],
         by: "claude-code/2.2.0",
+        reason: "the spec moved",
         recordPaths: ["a.md", "b.md"],
         shouldDraft: true,
       },
@@ -1096,6 +1100,16 @@ describe("parseTouchArgs", () => {
       args: ["a.md", "--by", "claude-code/2.2.0", "--bundle", ""],
       description: "an empty --bundle",
       message: "--bundle needs a directory, not an empty string.",
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--reason", " "],
+      description: "an empty --reason",
+      message: "--reason needs a value, not an empty string.",
+    },
+    {
+      args: ["a.md", "--by", "claude-code/2.2.0", "--reason", "a\nb"],
+      description: "a --reason over two lines",
+      message: "--reason must be one line.",
     },
   ])("rejects $description", ({ args, message }) => {
     // When/Then - a usage error saying why

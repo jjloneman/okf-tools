@@ -11,7 +11,6 @@ import type { Outcome } from "./outcome.ts";
 import type { Candidate } from "./records.ts";
 import type { RunContext } from "./run-context.ts";
 
-import { verifyRecord } from "./frontmatter/edit.ts";
 import {
   getRecordState,
   isVerifiedAhead,
@@ -31,6 +30,7 @@ import {
   currentTimestamp,
   needsSignOff,
   prepareEdits,
+  signOffRecord,
   writeStaleAfter,
 } from "./records.ts";
 import { isRecordUnchanged, writeRecords } from "./repo.ts";
@@ -416,6 +416,9 @@ function isLater(params: {
  *
  * - The disk's own `stale_after` is written too, so a sign-off made with
  *   `--stale-in` still counts as one.
+ *
+ * - `HEAD`'s `x-okf-restamp-reason` is taken out, as every sign-off takes
+ *   it out.
  */
 function isSignOffOf(params: {
   at: Timestamp;
@@ -427,7 +430,7 @@ function isSignOffOf(params: {
   const staleAfter = readRecordSummary({ text, verifiedBy })?.staleAfter;
 
   return Object.values(ENTRY_STYLES).some((style) => {
-    const result = verifyRecord({ at, style, text: headText, verifiedBy });
+    const result = signOffRecord({ at, style, text: headText, verifiedBy });
 
     if (!result.isOk) {
       return false;
