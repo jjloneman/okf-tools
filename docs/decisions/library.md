@@ -26,9 +26,9 @@ sources:
   - id: index
     resource: ../../src/index.ts
     title: src/index.ts, the library's exports
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T05:56:55Z }
-verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:00:29Z }
 ---
 
 # What the library accepts, and how it refuses
