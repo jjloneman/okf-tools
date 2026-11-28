@@ -16,6 +16,7 @@ import {
   isVerifiedAhead,
   readRecordSummary,
 } from "./frontmatter/read.ts";
+import { signOffRecord } from "./frontmatter/sign-off.ts";
 import { ENTRY_STYLES } from "./frontmatter/types.ts";
 import {
   checkCommittable,
@@ -30,7 +31,6 @@ import {
   currentTimestamp,
   needsSignOff,
   prepareEdits,
-  signOffRecord,
   writeStaleAfter,
 } from "./records.ts";
 import { isRecordUnchanged, writeRecords } from "./repo.ts";

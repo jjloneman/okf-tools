@@ -16,10 +16,12 @@ describe("the library entry", () => {
       "TRUST_TIERS",
       "findEditProblem",
       "findFrontmatterProblem",
+      "findSignOffProblem",
       "getRecordState",
       "getTrustTier",
       "readRecordSummary",
       "run",
+      "signOffRecord",
       "verifyRecord",
     ]);
   });

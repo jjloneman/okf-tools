@@ -20,6 +20,9 @@ sources:
   - id: frontmatter-scaffold
     resource: ../../src/frontmatter/scaffold.ts
     title: src/frontmatter/scaffold.ts, a new draft record's frontmatter
+  - id: frontmatter-sign-off
+    resource: ../../src/frontmatter/sign-off.ts
+    title: src/frontmatter/sign-off.ts, the sign-off that takes out the reason
   - id: frontmatter-touch
     resource: ../../src/frontmatter/touch.ts
     title: src/frontmatter/touch.ts, the re-stamp edit
@@ -56,7 +59,7 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
   - It writes nothing when any named record refuses.[^touch]
 - **`okf touch --reason "<why>"` says why a record was re-stamped**, as #161 asked, for a re-stamp whose text didn't change, which no cited source the branch changed explains: it writes `x-okf-restamp-reason: <why>` at the end of the frontmatter, taking out any old one's line first, and `okf check`'s `T001` quotes it (see [How okf check judges whether a sign-off still holds](trust-rules.md)).[^frontmatter-touch]
   - The key is an `x-` key, which the spec leaves to producers, since the spec defines no field for it, so no other OKF tool reads it.
-  - `okf verify` takes it out on sign-off, with its whole line, so an old reason never outlives the review it was written for.[^records] It refuses a record where it can't take the line out alone, such as a reason in a flow mapping, as it refuses any other layout it can't edit safely.[^frontmatter-fields]
+  - `okf verify` takes it out on sign-off, with its whole line, so an old reason never outlives the review it was written for.[^records] The library exports that sign-off as `signOffRecord` (see [What the library accepts, and how it refuses](library.md)).[^frontmatter-sign-off] It refuses a record where it can't take the line out alone, such as a reason in a flow mapping, as it refuses any other layout it can't edit safely.[^frontmatter-fields]
   - `okf touch` without `--reason`, and `okf deprecate`, take out any reason an earlier re-stamp wrote, since a reason explains only the stamp it came with.
   - The reason must be one line, and not blank.
   - **Rejected:** writing it after `generated`, which it explains. The `key-order` house rule puts a key it doesn't list after every one it does, so a repo that lists `verified` would get a finding after every re-stamp with a reason.
@@ -96,6 +99,7 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - [Issue #161](https://github.com/jjloneman/okf-tools/issues/161), where `okf touch --reason` and its `x-` key were decided
 - [What okf check --fix fixes, and how it writes](fixes.md)
 - [How a record's tags are laid out](tags-layout.md)
+- [What the library accepts, and how it refuses](library.md)
 - [How okf index keeps an index.md in step with its records](index-sync.md)
 - [How okf-verify writes and commits records](writes.md)
 - [Who verifies a record](who-verifies.md)
@@ -107,6 +111,8 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 [^frontmatter-touch]: `src/frontmatter/touch.ts`, the re-stamp edit.
 
 [^touch]: `src/touch.ts`, the `okf touch` command.
+
+[^frontmatter-sign-off]: `src/frontmatter/sign-off.ts`, the sign-off that takes out the reason.
 
 [^records]: `src/records.ts`, the sign-off edits.
 

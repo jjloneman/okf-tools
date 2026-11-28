@@ -35,6 +35,9 @@ sources:
   - id: frontmatter-shared
     resource: ../../src/frontmatter/shared.ts
     title: src/frontmatter/shared.ts, the failsafe-schema parse and the positions the edits share
+  - id: frontmatter-sign-off
+    resource: ../../src/frontmatter/sign-off.ts
+    title: src/frontmatter/sign-off.ts, the sign-off and its listing check
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
@@ -74,7 +77,7 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
   - An inline list keeps getting inline entries, whatever the style, since a block mapping can't go inside one.
   - The new `at` is quoted as `generated.at` is, else as the first other entry's `at`, passing over an alias or a null, else plain, in every style.
   - Any other `style` passed to `verifyRecord`, such as `null` from a caller without the types, is refused as `invalidParams`, as a bad `at` is.
-  - Listing records (`findEditProblem`) plans in the default style, since no refusal depends on the style.
+  - Listing records (`findSignOffProblem`, or `findEditProblem` for `verifyRecord` alone) plans in the default style, since no refusal depends on the style.[^frontmatter-sign-off]
   - A sign-off left on disk is recognized by redoing it in every style, so one written before `okf.style` changed still counts as a sign-off on the re-run. One written unquoted by an earlier okf-tools, in a record whose timestamps are quoted, doesn't, and is committed with a warning that it has other changes.
   - The meaning check tells a null from an empty string, though the failsafe schema reads both as `""`.
   - A status other than `draft`, and other people's `at`, are never edited, so they may take any form.
@@ -164,3 +167,5 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
 [^records]: `src/records.ts`, the sign-off edits.
 
 [^frontmatter-fields]: `src/frontmatter/fields.ts`, which takes out a re-stamp's reason.
+
+[^frontmatter-sign-off]: `src/frontmatter/sign-off.ts`, the sign-off and its listing check.

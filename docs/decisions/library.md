@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: What the library accepts, and how it refuses
-description: "`verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; and a summary's `writtenStatus` tells an absent status from one OKF doesn't define."
+description: "`verifyRecord` refuses an `at` that isn't an RFC 3339 date and time with a zone; a refusal carries a `kind` to switch on; the frontmatter checks are exported; a summary's `writtenStatus` tells an absent status from one OKF doesn't define; and `signOffRecord` is the sign-off `okf verify` makes."
 tags:
   - api
   - frontmatter
@@ -20,6 +20,9 @@ sources:
   - id: frontmatter-shared
     resource: ../../src/frontmatter/shared.ts
     title: src/frontmatter/shared.ts, the timestamp checks
+  - id: frontmatter-sign-off
+    resource: ../../src/frontmatter/sign-off.ts
+    title: src/frontmatter/sign-off.ts, signOffRecord and findSignOffProblem
   - id: frontmatter-types
     resource: ../../src/frontmatter/types.ts
     title: src/frontmatter/types.ts, the public types and constants
@@ -51,6 +54,9 @@ As of 2026-11-25, from `src/frontmatter/edit.ts`[^frontmatter-edit], `read.ts`[^
 - **`RecordSummary.writtenStatus`** holds the `status` as written, so an absent, empty, or null status (`undefined`) differs from one OKF doesn't define, such as `wip`. `status` keeps its meaning: a status OKF defines, or `undefined`.
   - `getRecordState` takes only `generatedAt` and `verifiedAt` (`RecordTimes`), so a caller that builds a summary by hand needn't add the new field.
   - **Rejected:** reading an absent `status` as `stable`, as OKF does. It changes what existing callers see, the CLI's "no status" hint included.
+- **`signOffRecord` is exported as the sign-off `okf verify` makes**, and `findSignOffProblem` as its listing check, from `src/frontmatter/sign-off.ts`[^frontmatter-sign-off], as of 2026-11-28 (issue #172). It runs `verifyRecord`, then takes out the reason the last re-stamp gave, `x-okf-restamp-reason`, which [How okf new and okf touch stamp generated](new-and-touch.md) says never outlives the review it was written for (issue #161).
+  - `verifyRecord` and `findEditProblem` stay the bare edit of `status` and `verified`, and their doc comments point at `signOffRecord`, so a tool that already calls them gets the same text it always did. Adding two exports is a `patch` in 0.x.
+  - **Rejected:** having `verifyRecord` take the reason out too. It would change the text an existing export returns, and add a refusal, a reason whose layout `removeField` can't edit, to a function callers already switch on: a breaking change, for a field only `okf touch --reason` writes.
 - **A backdated `at` renews the signer's latest entry but may not become it.** With two entries for the signer, an `at` earlier than the other stays behind it, and the reads still judge by the later one. The CLI always stamps the current time, so it never meets this.
 
 ## Why
@@ -59,12 +65,16 @@ The types promised what the functions couldn't keep, and the fix had to be addit
 
 ## Links
 
+- [#172](https://github.com/jjloneman/okf-tools/issues/172) — export the sign-off that takes out a re-stamp's reason.
+- [#161](https://github.com/jjloneman/okf-tools/issues/161) — `okf touch --reason`, and the sign-off that takes the reason out.
 - [#36](https://github.com/jjloneman/okf-tools/issues/36) — validate the timestamp and export the frontmatter checks.
 - [#25](https://github.com/jjloneman/okf-tools/issues/25) — the code audit that found it.
 
 [^frontmatter-edit]: `src/frontmatter/edit.ts`, `verifyRecord` and `findEditProblem`.
 
 [^frontmatter-read]: `src/frontmatter/read.ts`, the record reads and `findFrontmatterProblem`.
+
+[^frontmatter-sign-off]: `src/frontmatter/sign-off.ts`, `signOffRecord` and `findSignOffProblem`.
 
 [^frontmatter-shared]: `src/frontmatter/shared.ts`, the timestamp checks.
 
