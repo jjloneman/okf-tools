@@ -14,7 +14,10 @@ import type { Document, YAMLMap } from "yaml";
 import { isMap, isNode } from "yaml";
 
 import {
+  describeUnresolvedAlias,
   findFenceProblem,
+  findUnresolvedAlias,
+  isPlaced,
   parseFrontmatter,
   splitFrontmatter,
 } from "./frontmatter/shared.ts";
@@ -677,6 +680,17 @@ function readFrontmatterState(params: {
       reason: error.message
         .replace(/\n[\s\S]*/u, "")
         .replace(/ at line \d+, column \d+:?$/u, ""),
+    };
+  }
+
+  const alias = findUnresolvedAlias(doc);
+
+  if (alias !== undefined && isPlaced(alias)) {
+    return {
+      isDuplicateKey: false,
+      kind: "broken",
+      line: toLine({ index: block.start + alias.range[0], text }),
+      reason: describeUnresolvedAlias(alias),
     };
   }
 

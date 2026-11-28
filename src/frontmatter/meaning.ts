@@ -20,9 +20,11 @@ import type {
 import type { VerifyRecordParams } from "./types.ts";
 
 import {
+  describeUnresolvedAlias,
   describeYamlErrors,
   ENTRY_KEYS,
   findOwnEntry,
+  findUnresolvedAlias,
   FRONTMATTER_KEYS,
   isNullScalar,
   resolveAlias,
@@ -139,7 +141,7 @@ export function findAmbiguity(doc: Document): string | undefined {
   const unresolved = findUnresolvedAlias(doc);
 
   if (unresolved !== undefined) {
-    return `the alias \`*${unresolved}\` names no anchor set before it`;
+    return describeUnresolvedAlias(unresolved);
   }
 
   try {
@@ -190,25 +192,6 @@ function addIntendedEntry(params: AddIntendedEntryParams): void {
     list.items = [verified, entry];
     doc.set(FRONTMATTER_KEYS.verified, list);
   }
-}
-
-/** Find an alias whose anchor isn't set before it, which can't be read. */
-function findUnresolvedAlias(doc: Document): string | undefined {
-  let source: string | undefined;
-
-  visit(doc, {
-    Alias(_key, node) {
-      if (node.resolve(doc) === undefined) {
-        source = node.source;
-
-        return visit.BREAK;
-      }
-
-      return undefined;
-    },
-  });
-
-  return source;
 }
 
 /** Whether any mapping in a document has two keys that mean the same. */

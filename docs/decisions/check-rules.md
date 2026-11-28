@@ -19,6 +19,9 @@ sources:
   - id: check-engine
     resource: ../../src/check-engine.ts
     title: src/check-engine.ts, the check engine
+  - id: frontmatter-shared
+    resource: ../../src/frontmatter/shared.ts
+    title: src/frontmatter/shared.ts, the frontmatter parse and its alias check
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification, v0.3
@@ -29,8 +32,8 @@ sources:
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-27T23:14:58Z }
-verified: { by: human:jjloneman, at: 2026-11-27T23:20:58Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T05:56:55Z }
+verified: { by: human:jjloneman, at: 2026-11-28T06:00:29Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
@@ -45,6 +48,7 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 - **Each rule takes the code, severity, and wording of upstream's `validate.py`** at the pinned commit, and a kebab-case name beside it, so the two tools report a finding the same way.
   - **Rejected:** okf-tools' own codes. Two checkers that number the same rule differently make a user map one to the other.
 - **An error is only what §11.1 of the spec[^okf-spec] makes a conformance failure:** frontmatter that doesn't parse as a YAML mapping (`E002`), a key given twice (`E007`), frontmatter on an `index.md` below the bundle root (`E004`) or on a `log.md` (`E006`), and a `log.md` heading that isn't a real `YYYY-MM-DD` date (`E005`). Everything else is a warning.
+  - As of 2026-11-28, an alias whose anchor isn't set before it, below it or nowhere, is an `E002` too (#164): the yaml package parses it without an error, but can't load it[^frontmatter-shared], and PyYAML raises on it, which `validate.py` reports as `E002`. `okf check` puts it on the alias's line, where `validate.py` puts every `E002` on line 1.
   - **Rejected:** a missing `type` and a timestamp without an offset as errors, as #44 first planned. v0.3 makes a file without `type` "not a concept", which consumers skip, and keeps the bundle conformant; upstream warns about both.
 - **v0.3's tolerances, as upstream reads them:**
   - a date-only timestamp is valid, the start of that day in UTC, so a date-only `stale_after` passes; a date-only `generated.at` or `verified[].at` is a warning (`W122`), since the two are compared;
@@ -80,6 +84,7 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 - [#44](https://github.com/jjloneman/okf-tools/issues/44) — the engine and the spec rules, with the comment that aligned them with v0.3.
 - [#40](https://github.com/jjloneman/okf-tools/issues/40) — the trial that settled who owns the rules.
 - [#45](https://github.com/jjloneman/okf-tools/issues/45) — the trust rules, next on the engine.
+- [#164](https://github.com/jjloneman/okf-tools/issues/164) — an alias before its anchor, reported as `E002`.
 
 [^okf-spec]: The OKF v0.3 text okf-tools follows.
 
@@ -88,5 +93,7 @@ As of 2026-11-25, from `src/check.ts`[^check], `src/check-engine.ts`[^check-engi
 [^check]: `src/check.ts`, the `okf check` command.
 
 [^check-engine]: `src/check-engine.ts`, the check engine.
+
+[^frontmatter-shared]: `src/frontmatter/shared.ts`, the frontmatter parse and its alias check.
 
 [^spec-rules]: `src/spec-rules.ts`, the rules the spec states.

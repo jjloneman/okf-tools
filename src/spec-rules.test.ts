@@ -153,9 +153,56 @@ describe("E002 frontmatter-parses", () => {
       expected: [],
       files: { "kb/a.md": "---\ntype: A\ntype: B\n---\n" },
     },
+    {
+      description: "an alias before its anchor",
+      expected: ["kb/a.md:3"],
+      files: {
+        "kb/a.md": "---\ntype: Decision\ntitle: *t\ndescription: &t A\n---\n",
+      },
+    },
+    {
+      description: "an alias that names no anchor",
+      expected: ["kb/a.md:3"],
+      files: { "kb/a.md": "---\ntype: Decision\ntitle: *t\n---\n" },
+    },
+    {
+      description: "an alias after its anchor",
+      expected: [],
+      files: {
+        "kb/a.md": "---\ntype: Decision\ndescription: &t A\ntitle: *t\n---\n",
+      },
+    },
+    {
+      description: "an alias inside the node its anchor names",
+      expected: [],
+      files: { "kb/a.md": "---\ntype: Decision\ntags: &t [a, *t]\n---\n" },
+    },
+    {
+      description: "a root index.md with an alias before its anchor",
+      expected: ["kb/index.md:2"],
+      files: { "kb/index.md": '---\ntitle: *v\nokf_version: &v "0.3"\n---\n' },
+    },
   ])("checks $description", ({ expected, files }) => {
     // When/Then - the lines it reports
     expect(findLines({ code: "E002", files })).toStrictEqual(expected);
+  });
+
+  test("names the alias that comes before its anchor", () => {
+    // When - checking an alias above the anchor it names
+    const hits = findHits({
+      code: "E002",
+      files: { "kb/a.md": "---\ntitle: *t\ndescription: &t A\n---\n" },
+    });
+
+    // Then - the reason
+    expect(hits).toStrictEqual([
+      {
+        line: 2,
+        message:
+          "frontmatter doesn't parse as a YAML mapping: the alias `*t` names no anchor set before it (§4)",
+        path: "kb/a.md",
+      },
+    ]);
   });
 
   test("says why, naming the section", () => {
