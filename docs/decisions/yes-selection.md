@@ -24,9 +24,10 @@ sources:
   - id: working-directory
     resource: ../../src/working-directory.ts
     title: src/working-directory.ts, which resolves the working directory
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:57Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+x-okf-restamp-reason: src/repo.ts now also reports a re-stamp reason a sign-off can't take out, and which files are records and how they're selected are unchanged
 ---
 
 # What `--yes` verifies, and how it exits

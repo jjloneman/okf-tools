@@ -20,9 +20,10 @@ sources:
   - id: okf-spec
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md
     title: Open Knowledge Format specification
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T04:40:09Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:56Z }
 verified: { by: human:jjloneman, at: 2026-11-28T04:45:44Z }
+x-okf-restamp-reason: src/guide.ts gained okf touch --reason in its command list, and nothing this record says changed
 ---
 
 # Who verifies a record

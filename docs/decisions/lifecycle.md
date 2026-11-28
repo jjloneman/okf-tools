@@ -29,9 +29,10 @@ sources:
   - id: records
     resource: ../../src/records.ts
     title: src/records.ts, the record edits and stale_after from --stale-in
-status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:22:42Z }
+status: draft
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:57Z }
 verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+x-okf-restamp-reason: okf deprecate now takes out an old x-okf-restamp-reason, and status, superseded_by and stale_after still work as this record says
 ---
 
 # How okf deprecate and --stale-in write a record's lifecycle
