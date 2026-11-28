@@ -31,9 +31,9 @@ sources:
   - id: validate-py
     resource: https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/skills/okf-generate/scripts/validate.py
     title: Upstream's validate.py, at the pinned commit
-status: draft
+status: stable
 generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:19:26Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+verified: { by: human:jjloneman, at: 2026-11-28T09:58:49Z }
 ---
 
 # How okf check numbers, ranks and reports its rules
