@@ -25,8 +25,8 @@ sources:
     resource: https://yaml.org/spec/1.2.2/
     title: YAML 1.2.2 specification
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-26T22:13:02Z }
-verified: { by: human:jjloneman, at: 2026-11-26T22:59:21Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T09:22:44Z }
+verified: { by: human:jjloneman, at: 2026-11-28T09:56:47Z }
 ---
 
 # Which actors can sign a record

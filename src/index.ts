@@ -1,7 +1,8 @@
 /*
  * The package's library entry: the pure frontmatter functions `okf-verify` is
- * built on, `run`, the CLI itself, for tools that call it in-process, and the
- * shapes `okf check --format json`, `okf status --format json`, and
+ * built on, `signOffRecord` among them as the sign-off it makes; `run`, the
+ * CLI itself, for tools that call it in-process; and the shapes
+ * `okf check --format json`, `okf status --format json`, and
  * `okf tags --format json` print.
  */
 export type {
@@ -33,6 +34,7 @@ export {
   getTrustTier,
   readRecordSummary,
 } from "./frontmatter/read.ts";
+export { findSignOffProblem, signOffRecord } from "./frontmatter/sign-off.ts";
 export type {
   EntryStyle,
   RecordStatus,

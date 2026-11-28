@@ -62,10 +62,11 @@ const LIST_INDENT = "  ";
 const LIST_MARKER = "- ";
 
 /**
- * The timestamp `findEditProblem` plans with; no refusal depends on it, since
- * any valid timestamp is written as one value on one line.
+ * The timestamp `findEditProblem` and `findSignOffProblem` plan with; no
+ * refusal depends on it, since any valid timestamp is written as one value on
+ * one line.
  */
-const LISTING_AT = "1970-01-01T00:00:00Z";
+export const LISTING_AT = "1970-01-01T00:00:00Z";
 
 /** The quote each quoted scalar style opens and closes with. */
 const QUOTE_MARKS: ReadonlyMap<string | undefined, string> = new Map([
@@ -421,6 +422,9 @@ export function applyEdits(params: ApplyEditsParams): string {
  * - It plans in the default style, `match`, since no refusal depends on the
  *   style; the property tests check every style against every layout.
  *
+ * - It reports only `verifyRecord`'s refusals; `findSignOffProblem` reports
+ *   `signOffRecord`'s.
+ *
  * @returns the refusal `verifyRecord` would give, or `undefined` when none.
  */
 export function findEditProblem(
@@ -457,7 +461,8 @@ export function findEditProblem(
  *   `readEntryForm`.
  *
  * - Everything outside the edited characters, line endings included, is kept
- *   byte for byte.
+ *   byte for byte, `x-okf-restamp-reason` too; `signOffRecord` is the
+ *   sign-off `okf verify` makes, which also takes that reason out.
  */
 export function verifyRecord(params: VerifyRecordParams): RecordVerification {
   const {

@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { VERIFIED_BY } from "#test/repo";
 
-import { verifyRecord } from "./edit.ts";
+import { findEditProblem, verifyRecord } from "./edit.ts";
 import { readRecordSummary } from "./read.ts";
 
 const AT = "2026-10-02T13:30:00Z";
@@ -2349,5 +2349,31 @@ describe("verifyRecord, given a style it doesn't know", () => {
       kind: "invalidParams",
       reason: `the style ${JSON.stringify(style)} isn't one of block, inline, match`,
     });
+  });
+});
+
+describe("findEditProblem", () => {
+  test.each([
+    {
+      description: "nothing for a record it can edit, reason and all",
+      expected: undefined,
+      lines: [...DRAFT_LINES, "&k x-okf-restamp-reason: a"],
+    },
+    {
+      description: "the refusal verifyRecord would give",
+      expected: expect.stringMatching(
+        /^frontmatter isn't valid YAML/u
+      ) as string,
+      lines: ["status: [draft"],
+    },
+  ])("reports $description", ({ expected, lines }) => {
+    // Given - a record
+    const text = record(lines);
+
+    // When - asking whether verifyRecord can edit it
+    const problem = findEditProblem({ text, verifiedBy: VERIFIED_BY });
+
+    // Then - only verifyRecord's own refusal, if any
+    expect(problem).toStrictEqual(expected);
   });
 });

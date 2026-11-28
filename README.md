@@ -811,12 +811,15 @@ The frontmatter functions are exported too, for tools of your own:
 import {
   findEditProblem,
   findFrontmatterProblem,
+  findSignOffProblem,
   getRecordState,
   readRecordSummary,
+  signOffRecord,
   verifyRecord,
 } from "@jjloneman/okf-tools";
 ```
 
+- `signOffRecord` is the sign-off `okf verify` makes: `verifyRecord`'s edits, then the reason `okf touch --reason` gave, `x-okf-restamp-reason`, taken out. `verifyRecord` edits only `status` and `verified`, leaving the reason in place, so call `signOffRecord` to sign a record off; `findSignOffProblem` says why it would refuse a record.
 - `verifyRecord` takes an optional `style`, one of `ENTRY_STYLES` (`match`, `inline`, `block`), as `okf.style` describes, `match` when not given.
 - `verifyRecord` takes the sign-off's `at` as RFC 3339 profiles ISO 8601: a date, `T`, a time to the minute or finer, and a zone, such as `2026-10-02T13:30:00Z` or `2026-10-02T15:30+02:00`. It refuses any other, so every sign-off it writes can be dated.
 - A refusal has a `kind` to switch on, one of `REFUSAL_KINDS` (`invalidParams`, `invalidYaml`, `noFrontmatter`, `unsupportedLayout`), beside its `reason` in words.
