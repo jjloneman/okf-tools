@@ -9,6 +9,10 @@
  * - It never adds or changes `verified`, so a signed-off record reads as
  *   changed until it's signed off again.
  *
+ * - It writes the reason for the re-stamp as `x-okf-restamp-reason`, or
+ *   takes out an old one, since a reason explains only the stamp it was
+ *   written with.
+ *
  * - Nothing here touches the file system or the clock; the caller passes the
  *   timestamp in.
  */
@@ -22,6 +26,7 @@ import type { Frontmatter, Placed } from "./shared.ts";
 import type { Timestamp } from "./types.ts";
 
 import { applyEdits, writeScalar } from "./edit.ts";
+import { removeField, writeFields } from "./fields.ts";
 import { createEntry, findAmbiguity } from "./meaning.ts";
 import {
   describeYamlErrors,
@@ -45,7 +50,7 @@ import { RECORD_STATUSES, REFUSAL_KINDS } from "./types.ts";
 /** What a refusal of an unsupported layout tells the person to do instead. */
 const HAND_EDIT_HINT = "edit the record by hand";
 
-/** What `touchRecord` needs: the record, who edited it, and when. */
+/** What `touchRecord` needs: the record, who edited it, when, and why. */
 export type TouchRecordParams = {
   /**
    * The time to write as `generated.at`, as RFC 3339 profiles ISO 8601.
@@ -60,6 +65,14 @@ export type TouchRecordParams = {
    * @example "claude-code/claude-opus-5-5"
    */
   by: string;
+
+  /**
+   * Why the record was re-stamped, written as `x-okf-restamp-reason`;
+   * `undefined` takes out any reason an earlier re-stamp wrote.
+   *
+   * @example "re-checked against the v0.3 spec, which moved"
+   */
+  reason: string | undefined;
 
   /**
    * Whether to set a `stable` record back to `status: draft`.
@@ -124,6 +137,10 @@ type TouchPlan =
  * - With `shouldDraft`, a `stable` status becomes `draft`; any other status
  *   is left as it is.
  *
+ * - With a `reason`, `x-okf-restamp-reason` is written at the end of the
+ *   frontmatter, in place of any; without one, any is taken out, as `writeFields` and
+ *   `removeField` edit, under their refusals too.
+ *
  * - The same refusals as `verifyRecord`'s guard it: no frontmatter, YAML
  *   that isn't valid or whose meaning is ambiguous, a lone carriage return,
  *   a `generated` that isn't a mapping, and an edit that would mean more
@@ -133,13 +150,24 @@ type TouchPlan =
  *   byte for byte.
  */
 export function touchRecord(params: TouchRecordParams): RecordVerification {
-  const { at, by, shouldDraft, text: recordText } = params;
+  const { at, by, reason, shouldDraft, text: recordText } = params;
 
   if (/[\n\r]/u.test(by)) {
     return {
       isOk: false,
       kind: REFUSAL_KINDS.invalidParams,
       reason: "the producer's name holds a line break",
+    };
+  }
+
+  if (
+    reason !== undefined &&
+    (reason.trim() === "" || /[\n\r]/u.test(reason))
+  ) {
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.invalidParams,
+      reason: "the reason must be one line of text",
     };
   }
 
@@ -206,14 +234,26 @@ export function touchRecord(params: TouchRecordParams): RecordVerification {
     return refuseLayout(meaningProblem);
   }
 
-  return {
-    isOk: true,
-    text: [
-      recordText.slice(0, block.start),
-      edited,
-      recordText.slice(block.end),
-    ].join(""),
-  };
+  const restamped = [
+    recordText.slice(0, block.start),
+    edited,
+    recordText.slice(block.end),
+  ].join("");
+
+  const removed = removeField({
+    key: FRONTMATTER_KEYS.restampReason,
+    text: restamped,
+  });
+
+  // A new reason replaces the old one's line rather than its value, which
+  // would keep its quotes and refuse a reason holding one of them; it goes
+  // at the end, where an unlisted key never breaks the `key-order` rule.
+  return reason === undefined || !removed.isOk
+    ? removed
+    : writeFields({
+        fields: [{ key: FRONTMATTER_KEYS.restampReason, value: reason }],
+        text: removed.text,
+      });
 }
 
 /**

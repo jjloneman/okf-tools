@@ -2,10 +2,11 @@ import { describe, expect, test } from "vitest";
 
 import type { FieldWrite } from "./fields.ts";
 
-import { writeFields } from "./fields.ts";
+import { removeField, writeFields } from "./fields.ts";
 
 const BODY = "\n# Title\n\nBody text.\n";
 const HAND_EDIT_HINT = "edit the record by hand";
+const REASON = "x-okf-restamp-reason";
 const STALE = "2027-02-23T10:00:00Z";
 
 /** The fields `okf deprecate` writes with a replacement. */
@@ -260,5 +261,127 @@ describe("writeFields", () => {
 
     // Then - refused, saying why
     expect(result).toStrictEqual(expected);
+  });
+});
+
+describe("removeField", () => {
+  test.each([
+    {
+      after: ["type: Decision", "status: draft"],
+      before: ["type: Decision", `${REASON}: why # kept?`, "status: draft"],
+      description: "a plain value, with the comment on its line",
+    },
+    {
+      after: ["type: Decision", "# own line", "status: draft"],
+      before: [
+        "type: Decision",
+        `${REASON}: >-`,
+        "  a folded",
+        "  reason",
+        "# own line",
+        "status: draft",
+      ],
+      description: "a value over several lines, keeping a comment after it",
+    },
+    {
+      after: ["type: Decision"],
+      before: ["type: Decision", `${REASON}:`],
+      description: "an empty value, last in the frontmatter",
+    },
+  ])("takes out $description", ({ after, before }) => {
+    // When - removing the field
+    const result = removeField({ key: REASON, text: record(before) });
+
+    // Then - its lines gone, the rest kept
+    expect(result).toStrictEqual({ isOk: true, text: record(after) });
+  });
+
+  test.each([
+    { description: "no such field", text: record(["type: Decision"]) },
+    { description: "a flow mapping", text: record(["{ type: Decision }"]) },
+    { description: "frontmatter of only a comment", text: record(["# a"]) },
+  ])("leaves a record with $description as it is", ({ text }) => {
+    // When/Then - nothing to edit
+    expect(removeField({ key: REASON, text })).toStrictEqual({
+      isOk: true,
+      text,
+    });
+  });
+
+  test("keeps CRLF line endings", () => {
+    // Given - a CRLF record holding the field
+    const text = record(["type: Decision", `${REASON}: why`, "a: 1"]);
+
+    // When - removing it
+    const result = removeField({
+      key: REASON,
+      text: text.replaceAll("\n", "\r\n"),
+    });
+
+    // Then - CRLF kept
+    expect(result).toStrictEqual({
+      isOk: true,
+      text: record(["type: Decision", "a: 1"]).replaceAll("\n", "\r\n"),
+    });
+  });
+
+  test.each([
+    {
+      description: "no frontmatter",
+      expected: {
+        isOk: false,
+        kind: "noFrontmatter",
+        reason: "no frontmatter block",
+      },
+      text: "# Title\n",
+    },
+    {
+      description: "invalid YAML",
+      expected: {
+        isOk: false,
+        kind: "invalidYaml",
+        reason: expect.any(String) as string,
+      },
+      text: record([`${REASON}: [a`]),
+    },
+    {
+      description: "a flow mapping holding the field",
+      expected: {
+        isOk: false,
+        kind: "unsupportedLayout",
+        reason: `the frontmatter isn't a block mapping; ${HAND_EDIT_HINT}`,
+      },
+      text: record([`{ ${REASON}: why }`]),
+    },
+    {
+      description: "a key with an anchor before it",
+      expected: {
+        isOk: false,
+        kind: "unsupportedLayout",
+        reason: `\`${REASON}\` doesn't start its line; ${HAND_EDIT_HINT}`,
+      },
+      text: record([`&k ${REASON}: why`]),
+    },
+    {
+      description: "a value another field's alias reads",
+      expected: {
+        isOk: false,
+        kind: "unsupportedLayout",
+        reason: `removing \`${REASON}\` would change what else it means; ${HAND_EDIT_HINT}`,
+      },
+      text: record([`${REASON}: &r why`, "title: *r"]),
+    },
+    {
+      description: "the only field",
+      expected: {
+        isOk: false,
+        kind: "unsupportedLayout",
+        reason: `removing \`${REASON}\` would change what else it means; ${HAND_EDIT_HINT}`,
+      },
+      text: record([`${REASON}: why`]),
+    },
+  ])("refuses $description", ({ expected, text }) => {
+    // When/Then - refused, saying why
+    expect(removeField({ key: REASON, text })).toStrictEqual(expected);
   });
 });

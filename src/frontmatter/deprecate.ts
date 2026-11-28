@@ -58,13 +58,22 @@ export type DeprecateRecordParams = {
  * - It never adds or changes `verified`, so a signed-off record reads as
  *   changed until it's signed off again, and a sign-off keeps it deprecated.
  *
+ * - Like any re-stamp without a reason, it takes out an old
+ *   `x-okf-restamp-reason`.
+ *
  * - It refuses whatever `touchRecord` or `writeFields` refuses.
  */
 export function deprecateRecord(
   params: DeprecateRecordParams
 ): RecordVerification {
   const { at, by, supersededBy, text } = params;
-  const touched = touchRecord({ at, by, shouldDraft: false, text });
+  const touched = touchRecord({
+    at,
+    by,
+    reason: undefined,
+    shouldDraft: false,
+    text,
+  });
 
   if (!touched.isOk) {
     return touched;

@@ -101,7 +101,13 @@ describe("touchRecord", () => {
     const text = record(before);
 
     // When - re-stamping it
-    const result = touchRecord({ at: AT, by: BY, shouldDraft: false, text });
+    const result = touchRecord({
+      at: AT,
+      by: BY,
+      reason: undefined,
+      shouldDraft: false,
+      text,
+    });
 
     // Then - only generated changed
     expect(result).toStrictEqual({ isOk: true, text: record(after) });
@@ -112,7 +118,13 @@ describe("touchRecord", () => {
     const text = `---\n---\n${BODY}`;
 
     // When - re-stamping it
-    const result = touchRecord({ at: AT, by: BY, shouldDraft: false, text });
+    const result = touchRecord({
+      at: AT,
+      by: BY,
+      reason: undefined,
+      shouldDraft: false,
+      text,
+    });
 
     // Then - generated is its only line
     expect(result).toStrictEqual({
@@ -139,7 +151,13 @@ describe("touchRecord", () => {
     },
   ])("keeps the CRLF line breaks of $description", ({ text, touched }) => {
     // When - re-stamping it, drafting it
-    const result = touchRecord({ at: AT, by: BY, shouldDraft: true, text });
+    const result = touchRecord({
+      at: AT,
+      by: BY,
+      reason: undefined,
+      shouldDraft: true,
+      text,
+    });
 
     // Then - every new line break a CRLF
     expect(result).toStrictEqual({ isOk: true, text: touched });
@@ -182,7 +200,13 @@ describe("touchRecord", () => {
     ]);
 
     // When - re-stamping it
-    const result = touchRecord({ at: AT, by: BY, shouldDraft, text });
+    const result = touchRecord({
+      at: AT,
+      by: BY,
+      reason: undefined,
+      shouldDraft,
+      text,
+    });
 
     // Then - the status as expected, verified untouched
     expect(result).toStrictEqual({
@@ -212,6 +236,7 @@ describe("touchRecord", () => {
     const result = touchRecord({
       at: AT,
       by,
+      reason: undefined,
       shouldDraft: false,
       text: record([`generated: ${OLD}`]),
     });
@@ -229,6 +254,7 @@ describe("touchRecord", () => {
     const result = touchRecord({
       at: "2026-11-25",
       by: BY,
+      reason: undefined,
       shouldDraft: false,
       text: record([`generated: ${OLD}`]),
     });
@@ -255,7 +281,13 @@ describe("touchRecord", () => {
     },
   ])("refuses a record with $description", ({ reason, text }) => {
     // When - re-stamping it
-    const result = touchRecord({ at: AT, by: BY, shouldDraft: false, text });
+    const result = touchRecord({
+      at: AT,
+      by: BY,
+      reason: undefined,
+      shouldDraft: false,
+      text,
+    });
 
     // Then - refused for its missing frontmatter
     expect(result).toStrictEqual({
@@ -270,6 +302,7 @@ describe("touchRecord", () => {
     const result = touchRecord({
       at: AT,
       by: BY,
+      reason: undefined,
       shouldDraft: false,
       text: record(["tags: [a"]),
     });
@@ -331,6 +364,7 @@ describe("touchRecord", () => {
     const result = touchRecord({
       at: AT,
       by: BY,
+      reason: undefined,
       shouldDraft: false,
       text: record(lines),
     });
@@ -364,6 +398,7 @@ describe("touchRecord", () => {
     const result = touchRecord({
       at: AT,
       by,
+      reason: undefined,
       shouldDraft: false,
       text: record([`generated: ${OLD}`]),
     });
@@ -382,12 +417,147 @@ describe("touchRecord", () => {
     const text = `---\ngenerated: ${OLD}\n---\n${body}`;
 
     // When - re-stamping it
-    const result = touchRecord({ at: AT, by: BY, shouldDraft: false, text });
+    const result = touchRecord({
+      at: AT,
+      by: BY,
+      reason: undefined,
+      shouldDraft: false,
+      text,
+    });
 
     // Then - the body as it was
     expect(result).toStrictEqual({
       isOk: true,
       text: `---\ngenerated: ${NEW}\n---\n${body}`,
+    });
+  });
+
+  describe("with a reason", () => {
+    test.each([
+      {
+        after: [
+          "type: Decision",
+          `generated: ${NEW}`,
+          "status: draft",
+          "x-okf-restamp-reason: the spec moved",
+        ],
+        before: ["type: Decision", `generated: ${OLD}`, "status: draft"],
+        description: "none yet, adding it at the end",
+      },
+      {
+        after: [
+          "generated:",
+          `  by: ${BY}`,
+          `  at: ${AT}`,
+          "x-okf-restamp-reason: the spec moved",
+        ],
+        before: [
+          "generated:",
+          "  by: claude-code/2.1.0",
+          "  at: 2026-10-01T15:00:00Z",
+        ],
+        description: "a block generated last, adding it after the block",
+      },
+      {
+        after: [`generated: ${NEW}`, "x-okf-restamp-reason: the spec moved"],
+        before: ['x-okf-restamp-reason: "an old reason"', `generated: ${OLD}`],
+        description: "an old one, replacing its line, quotes and all",
+      },
+    ])("writes it, given $description", ({ after, before }) => {
+      // When - re-stamping with a reason
+      const result = touchRecord({
+        at: AT,
+        by: BY,
+        reason: "the spec moved",
+        shouldDraft: false,
+        text: record(before),
+      });
+
+      // Then - the reason written as x-okf-restamp-reason
+      expect(result).toStrictEqual({ isOk: true, text: record(after) });
+    });
+
+    test("takes out an old one when re-stamped without one", () => {
+      // Given - a reason an earlier re-stamp wrote
+      const text = record([
+        `generated: ${OLD}`,
+        "x-okf-restamp-reason: an old reason",
+        "status: draft",
+      ]);
+
+      // When - re-stamping with none
+      const result = touchRecord({
+        at: AT,
+        by: BY,
+        reason: undefined,
+        shouldDraft: false,
+        text,
+      });
+
+      // Then - the old reason gone
+      expect(result).toStrictEqual({
+        isOk: true,
+        text: record([`generated: ${NEW}`, "status: draft"]),
+      });
+    });
+
+    test.each([
+      { description: "an empty reason", reason: " " },
+      { description: "a reason over two lines", reason: "a\nb" },
+    ])("refuses $description", ({ reason }) => {
+      // When - re-stamping with it
+      const result = touchRecord({
+        at: AT,
+        by: BY,
+        reason,
+        shouldDraft: false,
+        text: record([`generated: ${OLD}`]),
+      });
+
+      // Then - refused before any edit
+      expect(result).toStrictEqual({
+        isOk: false,
+        kind: "invalidParams",
+        reason: "the reason must be one line of text",
+      });
+    });
+
+    test("replaces a quoted reason with one holding its quote", () => {
+      // When - re-stamping a double-quoted reason with a reason holding "
+      const result = touchRecord({
+        at: AT,
+        by: BY,
+        reason: 'the "v2" API: moved',
+        shouldDraft: false,
+        text: record([`generated: ${OLD}`, 'x-okf-restamp-reason: "a: b"']),
+      });
+
+      // Then - written fresh, quoted as YAML needs
+      expect(result).toStrictEqual({
+        isOk: true,
+        text: record([
+          `generated: ${NEW}`,
+          "x-okf-restamp-reason: 'the \"v2\" API: moved'",
+        ]),
+      });
+    });
+
+    test("refuses a flow mapping, which it can't add a field to", () => {
+      // When - re-stamping a flow frontmatter with a reason
+      const result = touchRecord({
+        at: AT,
+        by: BY,
+        reason: "the spec moved",
+        shouldDraft: false,
+        text: record([`{ generated: ${OLD} }`]),
+      });
+
+      // Then - refused, as writeFields refuses it
+      expect(result).toStrictEqual({
+        isOk: false,
+        kind: "unsupportedLayout",
+        reason: `the frontmatter isn't a block mapping; ${HAND_EDIT_HINT}`,
+      });
     });
   });
 });

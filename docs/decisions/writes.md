@@ -20,6 +20,9 @@ sources:
   - id: frontmatter-edit
     resource: ../../src/frontmatter/edit.ts
     title: src/frontmatter/edit.ts, verifyRecord's position-based edits
+  - id: frontmatter-fields
+    resource: ../../src/frontmatter/fields.ts
+    title: src/frontmatter/fields.ts, which takes out a re-stamp's reason
   - id: frontmatter-layout
     resource: ../../src/frontmatter/layout.ts
     title: src/frontmatter/layout.ts, the allowlist of editable layouts
@@ -35,6 +38,9 @@ sources:
   - id: git
     resource: ../../src/git.ts
     title: src/git.ts, every git call
+  - id: records
+    resource: ../../src/records.ts
+    title: src/records.ts, the sign-off edits
   - id: repo
     resource: ../../src/repo.ts
     title: src/repo.ts, the file-system work on records
@@ -58,6 +64,7 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
   - As of 2026-11-12, only an allowlist of `status` and `verified` layouts is edited, listed in the README; any other is refused with a reason naming the field, for a hand edit. Refused: an anchor, alias, or tag on a `draft` status, `verified`, an entry, any entry's `by`, or the signer's `at`; a value or flow collection spread over several lines; a quoted or `?` `status` or `verified` key; a `verified` holding a single value; someone else's entry written as a block mapping when it's the whole `verified` value; and a signer's name holding a line break.
   - Also refused, anywhere in the frontmatter, before any edit is planned: a carriage return that doesn't end a line (YAML 1.2 reads it as a line break, the parser as text); an alias whose anchor isn't set before it; and two keys that mean the same, such as an alias key repeating another, `~` beside `null`, or equal collection keys.
   - A null `by` names nobody, so it never counts as the signer's entry.
+  - As of 2026-11-28, a sign-off also takes out `x-okf-restamp-reason`, the reason `okf touch --reason` gave for the record's re-stamp, with its whole line, and keeps every other byte, so an old reason never outlives its review (issue #161; see [How okf new and okf touch stamp generated](new-and-touch.md)). A reason it can't take out alone, such as one in a flow mapping or with an anchor or tag before its key, is refused when the records are listed, as any other layout is; an uncommitted sign-off still counts as one when `HEAD`'s copy held a reason.[^records][^frontmatter-fields][^apply]
   - As of 2026-11-25, when the signer has several entries, the one with the latest readable `at` is renewed, the first of any that tie, or the first entry when none reads; the reads judge the state by the same entry, so the sign-off always clears it (issue #32).
 - **A new entry in the record's own style:** as of 2026-11-25, `okf.style` in `package.json` (`style` for `verifyRecord`) lays out a new `verified` entry, and an existing entry keeps its layout, only its `at` renewed (issue #48).
   - `match`, the default, copies the form of `generated`: a block mapping when `generated` is one, else inline.
@@ -124,6 +131,20 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
 - Changing the write path means keeping each guard above, or updating this record in the same PR.
 - `okf check --fix` writes records under the same guards, but never edits `generated` or `verified`, and commits nothing (see [What okf check --fix fixes, and how it writes](fixes.md)).
 
+## Links
+
+- [PR #2](https://github.com/jjloneman/okf-tools/pull/2) — extracting `okf-verify` into this package, whose reviews brought the guards.
+- [#8](https://github.com/jjloneman/okf-tools/issues/8) — reading frontmatter with a parser instead of patterns.
+- [#25](https://github.com/jjloneman/okf-tools/issues/25) — the audit that found the unguarded calls.
+- [#27](https://github.com/jjloneman/okf-tools/issues/27) — refusing a record that isn't valid UTF-8.
+- [#28](https://github.com/jjloneman/okf-tools/issues/28) — refusing a record reached through a symlink.
+- [#29](https://github.com/jjloneman/okf-tools/issues/29) — asking git before writing.
+- [#32](https://github.com/jjloneman/okf-tools/issues/32) — renewing the signer's latest entry.
+- [#34](https://github.com/jjloneman/okf-tools/issues/34) — outcomes instead of exceptions, and the rollback.
+- [#35](https://github.com/jjloneman/okf-tools/issues/35) — leaving a record new to the repo out of the diff.
+- [#48](https://github.com/jjloneman/okf-tools/issues/48) — a new entry in the record's own style.
+- [#161](https://github.com/jjloneman/okf-tools/issues/161) — taking out a re-stamp's reason on sign-off.
+
 [^apply]: `src/apply.ts`, which writes and commits sign-offs.
 
 [^frontmatter-edit]: `src/frontmatter/edit.ts`, `verifyRecord`'s position-based edits.
@@ -139,3 +160,7 @@ As of 2026-11-11, from `src/apply.ts`[^apply], `src/frontmatter/edit.ts`[^frontm
 [^git]: `src/git.ts`, every git call.
 
 [^repo]: `src/repo.ts`, the file-system work on records.
+
+[^records]: `src/records.ts`, the sign-off edits.
+
+[^frontmatter-fields]: `src/frontmatter/fields.ts`, which takes out a re-stamp's reason.

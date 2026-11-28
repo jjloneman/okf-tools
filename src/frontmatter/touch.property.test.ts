@@ -270,7 +270,13 @@ describe("touchRecord over generated layouts", () => {
           const text = `${opening}${frontmatter}${closing}`;
 
           // When - re-stamping it
-          const result = touchRecord({ at, by, shouldDraft, text });
+          const result = touchRecord({
+            at,
+            by,
+            reason: undefined,
+            shouldDraft,
+            text,
+          });
 
           // Then - edited, inside the fences only
           expect(result.isOk).toBe(true);

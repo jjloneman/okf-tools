@@ -331,6 +331,34 @@ describe("loadCandidates, given a layout the edits refuse", () => {
       },
     ]);
   });
+
+  test("reports a re-stamp's reason a sign-off couldn't take out", () => {
+    // Given - a reason whose key has an anchor before it
+    repo.write(
+      "docs/decisions/a.md",
+      record(["type: Decision", "status: draft", "&k x-okf-restamp-reason: a"])
+    );
+
+    // When - loading the bundle
+    const { candidates, skipped } = unwrap(
+      loadCandidates({
+        bundleDirs: ["docs/decisions"],
+        excludeGlobs: [],
+        repoRoot: repo.root,
+        verifiedBy: VERIFIED_BY,
+      })
+    );
+
+    // Then - reported when listing, with removeField's reason
+    expect(candidates).toStrictEqual([]);
+    expect(skipped).toStrictEqual([
+      {
+        filePath: "docs/decisions/a.md",
+        reason:
+          "docs/decisions/a.md: `x-okf-restamp-reason` doesn't start its line; edit the record by hand",
+      },
+    ]);
+  });
 });
 
 describe("loadCandidates, given a generated.at ahead of the clock", () => {

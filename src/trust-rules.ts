@@ -30,6 +30,7 @@ import {
 } from "./frontmatter/read.ts";
 import {
   findLatestIndex,
+  FRONTMATTER_KEYS,
   readTime,
   readTimestamp,
 } from "./frontmatter/shared.ts";
@@ -151,6 +152,10 @@ export function readChangedAt(parsed: ParsedFile): unknown {
  *   branch changed, since a re-stamp with no text change usually follows
  *   one.
  *
+ * - It quotes the reason `okf touch --reason` wrote for the re-stamp, as
+ *   `x-okf-restamp-reason`, whatever else it says, since it's the one
+ *   account of why a re-stamp no source explains was made.
+ *
  * - Without a base copy, such as a record the branch didn't change, it
  *   can't say which, so it names the sign-off alone.
  */
@@ -192,11 +197,14 @@ function checkDraft(file: CheckedFile): RuleHit[] {
     }
 
     const { clause, sources } = describeTextChange(parsed);
+    const reason = readTimestamp(parsed.get(FRONTMATTER_KEYS.restampReason));
+    const reasonClause =
+      reason === undefined ? "" : `; it was re-stamped because "${reason}"`;
 
     return [
       {
         line: readNodeLine({ file, node }),
-        message: `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${clause}; okf verify signs it off again`,
+        message: `the record is a draft, and ${last.by}'s sign-off at ${last.at} no longer counts, since generated.at is later (§5.3)${clause}${reasonClause}; okf verify signs it off again`,
         ...(sources.length === 0 ? {} : { sources }),
       },
     ];

@@ -73,7 +73,10 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
     - The finding lists the sources it names in `sources`, each with its path from the repo root, so a review comment can link each one to its diff (see [How okf-check.yml posts drafts as review comments](review-comments.md)).
     - It reads the branch's commits rather than `T007`'s findings, which stop once the record is re-stamped, so `okf check` lists them on every run with a base branch, not only under `--changed`.
     - **Rejected, before #154:** naming the cited source `T007` reported. `T007` stops reporting it once the record is re-stamped, and the re-stamp's commit doesn't say why it was made, so `T001` can't tell a source change from any other re-stamp. Reading the branch's own changes answers the first point, and wording the clause as what changed, not why, the second.
-    - **Rejected:** a reason stored with the re-stamp, such as an `okf touch --reason`, for now: where it would live is a choice the spec doesn't make, which #161 takes up.
+    - **Deferred, before #161:** a reason stored with the re-stamp, such as an `okf touch --reason`, since where it would live is a choice the spec doesn't make.
+  - **It quotes the reason `okf touch --reason` gave for the re-stamp**, as #161 asked, after the clauses above: `it was re-stamped because "<why>"`, read from the record's `x-okf-restamp-reason`.[^trust-rules] So a re-stamp no cited source explains, such as one after a fact outside the repo changed, can still say why, in the text report, the JSON report's message, and the review comment.
+    - It quotes the reason whatever the text did, since the person who re-stamped it chose to say why; a draft no one signed off yet gets the plain notice, which no reason changes.
+    - Where the reason lives, and why a sign-off takes it out, is in [How okf new and okf touch stamp generated](new-and-touch.md).
 - **`T002 verified-draft` warns about a draft with a current sign-off**, which `okf verify` would have set `stable`.
   - **Rejected:** any `verified` entry on a draft. A signed-off record that's edited goes back to `draft` and keeps its old entry, as AGENTS.md says, so that would flag every edit in progress.
 - **`T003 generated-ahead` and `T004 verified-ahead` warn about a time later than now**, as a wrong time zone writes it, following #77 and #92: no sign-off made now passes the first, and the second would hide every change until the clock passes it.
@@ -138,6 +141,7 @@ As of 2026-11-27, from `src/trust-rules.ts`[^trust-rules], `src/source-rules.ts`
 - [#136](https://github.com/jjloneman/okf-tools/issues/136) — dating a source's change by its committer time.
 - [#137](https://github.com/jjloneman/okf-tools/issues/137) — reading every cited path's history in one `git log`.
 - [#140](https://github.com/jjloneman/okf-tools/issues/140) — judging a source's change by commit ancestry instead of a clock.
+- [#144](https://github.com/jjloneman/okf-tools/issues/144) — counting only a record's re-stamps and sign-offs as having seen its sources.
 - [#146](https://github.com/jjloneman/okf-tools/issues/146) — one notice that says why a draft needs signing off again, and review comments for drafts.
 - [#151](https://github.com/jjloneman/okf-tools/issues/151) — judging an uncommitted edit by whether it re-stamps the record, as its commit will be.
 - [#154](https://github.com/jjloneman/okf-tools/issues/154) — naming the cited sources the branch changed under a re-stamped draft.

@@ -46,6 +46,7 @@ An agent can draft OKF records, but whether a record is settled is the owner's c
 
 - it sets `status: draft` to `stable` (any other status is left alone);
 - it adds or renews the signer's `verified` entry with the current UTC time, writing a new entry in the record's own style (see [Install](#-install));
+- it takes out `x-okf-restamp-reason`, the reason `okf touch --reason` gave for a re-stamp, with its whole line, so an old reason never outlives the review it was written for; it refuses one in a flow mapping, or with an anchor or tag before its key;
 - it commits just those files, never pushing and never skipping hooks, and writes nothing when git would refuse that commit, such as mid-merge or for an ignored file;
 - it reads frontmatter with a YAML parser but edits only the characters it changes, never a YAML round-trip, so nothing else in a record is reformatted;
 - it refuses a record whose frontmatter isn't valid YAML, rather than guess where its fields end, and one whose block is almost right, such as one with no closing `---` or blanks around a fence, rather than take it for no frontmatter;
@@ -336,6 +337,10 @@ pnpm okf new docs/decisions/caching.md --type Decision \
 
 # Re-stamp records after editing them, setting stable ones back to draft
 pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft
+
+# Re-stamp a record whose text still holds, saying why
+pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft \
+  --reason "checked against the new cache API, and nothing it says changed"
 ```
 
 `generated.at` says when a record last changed, so a time typed by hand, or forgotten, makes a signed-off record look changed, or an edited one look signed off. Both commands take it from the clock instead, and neither has a flag for it.
@@ -347,6 +352,7 @@ pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft
   - It writes nothing when that index can't be synced, and removes the record again if writing the index fails.
 - **`okf touch` re-stamps `generated`**: `by` from `--by` and `at` from the clock, adding either, or `generated` itself after `status`, when it's missing.
   - With `--draft`, a `stable` record goes back to `status: draft`; any other status is kept.
+  - With `--reason "<why>"`, it writes `x-okf-restamp-reason: <why>` at the end of the frontmatter, where the `key-order` rule never flags it, in place of any; `okf check` quotes it in the draft's `T001`, for a re-stamp whose text didn't change, which no cited source explains, or any other. Without `--reason`, it takes out any reason an earlier re-stamp wrote, since a reason explains only the stamp it came with, and `okf verify` takes it out on sign-off.
   - It edits in place, as `okf verify` does, keeping every other byte, and refuses a record whose frontmatter it can't edit safely, such as a `generated` that isn't a mapping.
   - It writes nothing when any record refuses.
 - **Neither adds or changes `verified`, and neither commits.**
@@ -361,6 +367,7 @@ pnpm okf touch docs/decisions/caching.md --by claude-code/2.1.316 --draft
 | `--description <text>` | `okf new`: its `description`.                                          |
 | `--tag <tag>`          | `okf new`: a tag; repeat for more.                                     |
 | `--draft`              | `okf touch`: set a `stable` record back to `status: draft`.            |
+| `--reason <why>`       | `okf touch`: say why, in one line, as `x-okf-restamp-reason`.          |
 | `--bundle <dir>`       | A bundle the records are in, relative to where you run it; repeatable. |
 | `--help`, `-h`         | Print the usage.                                                       |
 
@@ -570,16 +577,16 @@ The gaps in the numbering are upstream rules okf-tools doesn't run yet, such as 
 
 okf-tools' own rules, whose `T` codes upstream doesn't use:
 
-| Code | Rule               | Severity                 | Finds                                                                                                                                                                                          |
-| ---- | ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`; one re-stamped since a sign-off names it, and says whether its text changed since the base branch, naming the cited sources the branch changed when it didn't. |
-| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.                                                                                                  |
-| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes.                                                                                            |
-| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                                                                                                                    |
-| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.                                                                                                      |
-| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.                                                                                                 |
-| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed in a commit outside the history of the record's re-stamps and sign-offs.                                                                      |
-| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.                                                                                                   |
+| Code | Rule               | Severity                 | Finds                                                                                                                                                                                                                                                      |
+| ---- | ------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T001 | `draft`            | info, or as `okf.drafts` | A record still `status: draft`; one re-stamped since a sign-off names it, and says whether its text changed since the base branch, naming the cited sources the branch changed when it didn't, and quotes the `okf touch --reason` it was re-stamped with. |
+| T002 | `verified-draft`   | warning                  | A `status: draft` record with a current sign-off, which `okf verify` would have set `stable`.                                                                                                                                                              |
+| T003 | `generated-ahead`  | warning                  | A `generated.at` later than now, as a wrong time zone writes it, which no sign-off made now passes.                                                                                                                                                        |
+| T004 | `verified-ahead`   | warning                  | A `verified[].at` later than now, which would hide every change until then.                                                                                                                                                                                |
+| T005 | `self-verified`    | warning                  | A current sign-off by the actor in `generated.by`, so no one else has checked the record.                                                                                                                                                                  |
+| T006 | `unstamped-change` | error                    | A body changed since the base branch under a sign-off the base already held that still counts.                                                                                                                                                             |
+| T007 | `source-changed`   | warning                  | A file in the repo that `sources` cites, changed in a commit outside the history of the record's re-stamps and sign-offs.                                                                                                                                  |
+| T008 | `source-gone`      | error                    | A file in the repo that `sources` cites, which git history has but the working tree doesn't.                                                                                                                                                               |
 
 ### 🏠 House rules
 

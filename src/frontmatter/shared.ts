@@ -58,6 +58,7 @@ const FENCE = "---";
 export const FRONTMATTER_KEYS = {
   description: "description",
   generated: "generated",
+  restampReason: "x-okf-restamp-reason",
   staleAfter: "stale_after",
   status: "status",
   supersededBy: "superseded_by",
@@ -155,6 +156,38 @@ export type FindOwnEntryParams = {
 /** A record's frontmatter, parsed with every value as text. */
 export type Frontmatter = Document.Parsed;
 
+/** Where a record's frontmatter sits in its text, and the frontmatter. */
+export type FrontmatterBlock = {
+  /**
+   * Where the frontmatter ends: the start of the closing fence's line.
+   *
+   * @example 24
+   */
+  end: number;
+
+  /**
+   * The opening fence's line break, for a line added to empty frontmatter.
+   *
+   * @example `"\n"`
+   */
+  lineBreak: string;
+
+  /**
+   * Where the frontmatter starts: just past the opening fence's line break.
+   *
+   * @example 4
+   */
+  start: number;
+
+  /**
+   * The frontmatter without its fences, line breaks as written, ending with
+   * the one before the closing fence unless it's empty.
+   *
+   * @example `"type: Decision\nstatus: draft\n"`
+   */
+  text: string;
+};
+
 /** A frontmatter key the frontmatter modules read or write. */
 export type FrontmatterKey =
   (typeof FRONTMATTER_KEYS)[keyof typeof FRONTMATTER_KEYS];
@@ -215,38 +248,6 @@ type FindPairParams = {
    * @example `doc.contents`
    */
   map: YAMLMap;
-};
-
-/** Where a record's frontmatter sits in its text, and the frontmatter. */
-type FrontmatterBlock = {
-  /**
-   * Where the frontmatter ends: the start of the closing fence's line.
-   *
-   * @example 24
-   */
-  end: number;
-
-  /**
-   * The opening fence's line break, for a line added to empty frontmatter.
-   *
-   * @example `"\n"`
-   */
-  lineBreak: string;
-
-  /**
-   * Where the frontmatter starts: just past the opening fence's line break.
-   *
-   * @example 4
-   */
-  start: number;
-
-  /**
-   * The frontmatter without its fences, line breaks as written, ending with
-   * the one before the closing fence unless it's empty.
-   *
-   * @example `"type: Decision\nstatus: draft\n"`
-   */
-  text: string;
 };
 
 /** What `isSignersBy` needs: an entry's `by`, and the signer. */

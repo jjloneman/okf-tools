@@ -66,6 +66,7 @@ function touch(options: Partial<TouchOptions> = {}): number {
     options: {
       bundles: [],
       by: BY,
+      reason: undefined,
       recordPaths: ["docs/decisions/a.md"],
       shouldDraft: false,
       ...options,
@@ -104,6 +105,37 @@ describe("runTouch", () => {
     expect(repo.read("docs/decisions/b.md")).toContain("status: stable");
     expect(repo.read("docs/decisions/b.md")).toContain(
       `generated: { by: ${BY}, at: ${AT} }`
+    );
+  });
+
+  test("writes --reason at the end, and a later touch takes it out", () => {
+    // Given - a draft
+    repo.write("docs/decisions/a.md", DRAFT);
+
+    // When - touching it with a reason, then again without one
+    const withReason = touch({ reason: "re-checked: the spec moved" });
+    const touched = repo.read("docs/decisions/a.md");
+    const withoutReason = touch();
+
+    // Then - the reason written, quoted, then taken out again
+    expect([withReason, withoutReason]).toStrictEqual([
+      EXIT_CODES.ok,
+      EXIT_CODES.ok,
+    ]);
+    expect(touched).toBe(
+      record([
+        "type: Decision",
+        "status: draft",
+        `generated: { by: ${BY}, at: ${AT} }`,
+        'x-okf-restamp-reason: "re-checked: the spec moved"',
+      ])
+    );
+    expect(repo.read("docs/decisions/a.md")).toBe(
+      record([
+        "type: Decision",
+        "status: draft",
+        `generated: { by: ${BY}, at: ${AT} }`,
+      ])
     );
   });
 

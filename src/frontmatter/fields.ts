@@ -1,7 +1,9 @@
 /*
  * Writes top-level frontmatter fields that each hold one value, in place, as
  * `verifyRecord` edits `verified`: `status` and `superseded_by` for
- * `okf deprecate`, and `stale_after` for `okf verify --stale-in`.
+ * `okf deprecate`, `stale_after` for `okf verify --stale-in`, and
+ * `x-okf-restamp-reason` for `okf touch --reason`, which `removeField` takes
+ * out again on a sign-off.
  *
  * - Edits replace only the characters they change, at the positions the
  *   parser reports, and the result is checked to mean the original plus the
@@ -15,7 +17,12 @@ import { isDeepStrictEqual } from "node:util";
 import { isMap, isScalar, stringify } from "yaml";
 
 import type { RecordVerification, TextEdit } from "./edit.ts";
-import type { Frontmatter, FrontmatterKey, Placed } from "./shared.ts";
+import type {
+  Frontmatter,
+  FrontmatterBlock,
+  FrontmatterKey,
+  Placed,
+} from "./shared.ts";
 
 import { applyEdits, writeScalar } from "./edit.ts";
 import { findAmbiguity } from "./meaning.ts";
@@ -28,6 +35,7 @@ import {
   parseFrontmatter,
   readIndent,
   readLineBreak,
+  readLineStart,
   readNodeEnd,
   readString,
   splitFrontmatter,
@@ -60,6 +68,23 @@ export type FieldWrite = {
    * @example "/metrics/gross-margin.md"
    */
   value: string;
+};
+
+/** What `removeField` needs: the field, and the record it's taken from. */
+export type RemoveFieldParams = {
+  /**
+   * The field's key.
+   *
+   * @example "x-okf-restamp-reason"
+   */
+  key: FrontmatterKey;
+
+  /**
+   * The record's text, frontmatter included.
+   *
+   * @example `"---\nstatus: draft\nx-okf-restamp-reason: a\n---\n"`
+   */
+  text: string;
 };
 
 /** What `writeFields` needs: the fields, and the record they go in. */
@@ -112,6 +137,105 @@ type FieldsPlan =
       reason: string;
     };
 
+/** A record's frontmatter, parsed, or why it can't be edited. */
+type ParsedRecord =
+  | {
+      /**
+       * Where the frontmatter sits in the record.
+       *
+       * @example `splitFrontmatter("---\nstatus: draft\n---\n")`
+       */
+      block: FrontmatterBlock;
+
+      /**
+       * The frontmatter, parsed.
+       *
+       * @example `parseFrontmatter("status: draft\n")`
+       */
+      doc: Frontmatter;
+
+      /**
+       * Whether it can be edited; `true` here.
+       *
+       * @example true
+       */
+      isOk: true;
+    }
+  | Refusal;
+
+/** A refusal to edit a record, with its kind and its reason. */
+type Refusal = Extract<RecordVerification, { isOk: false }>;
+
+/**
+ * Take a top-level field out of a record, with its whole line or lines, or
+ * leave the record as it is when it has no such field.
+ *
+ * - Comments on lines of their own around it are kept.
+ *
+ * - The same refusals as `writeFields` guard it, but a record without the
+ *   field is never refused for its layout, since nothing is edited.
+ */
+export function removeField(params: RemoveFieldParams): RecordVerification {
+  const { key, text: recordText } = params;
+  const parsed = parseRecord(recordText);
+
+  if (!parsed.isOk) {
+    return parsed;
+  }
+
+  const { block, doc } = parsed;
+  const { text } = block;
+  const map = doc.contents;
+  const pair = isMap(map) ? findPair({ key, map }) : undefined;
+
+  if (!isMap(map) || pair === undefined) {
+    return { isOk: true, text: recordText };
+  }
+
+  if (!isPlaced(map) || map.flow === true) {
+    return refuseLayout("the frontmatter isn't a block mapping");
+  }
+
+  const start = readLineStart({ index: pair.key.range[0], text });
+
+  // An anchor or a tag before the key would be left behind on its own.
+  if (text.slice(start, pair.key.range[0]).trim() !== "") {
+    return refuseLayout(`\`${key}\` doesn't start its line`);
+  }
+
+  const lineEnd = findLineEnd({
+    index: Math.max(readNodeEnd(pair.key), readNodeEnd(pair.value)),
+    text,
+  });
+  const end = lineEnd + readLineBreak({ index: lineEnd, text }).length;
+  const edited = applyEdits({ edits: [{ end, start, text: "" }], text });
+  const editedDoc = parseFrontmatter(edited);
+
+  // The frontmatter holds the field, so it reads as an object.
+  const expected = Object.fromEntries(
+    Object.entries(doc.toJS() as Record<string, unknown>).filter(
+      ([name]) => name !== key
+    )
+  );
+
+  if (
+    editedDoc.errors.length > 0 ||
+    findAmbiguity(editedDoc) !== undefined ||
+    !isDeepStrictEqual(editedDoc.toJS(), expected)
+  ) {
+    return refuseLayout(`removing \`${key}\` would change what else it means`);
+  }
+
+  return {
+    isOk: true,
+    text: [
+      recordText.slice(0, block.start),
+      edited,
+      recordText.slice(block.end),
+    ].join(""),
+  };
+}
+
 /**
  * Write each field's value: a field that holds one value is overwritten,
  * keeping its quotes, and a missing one is added on a line of its own.
@@ -128,42 +252,14 @@ type FieldsPlan =
  */
 export function writeFields(params: WriteFieldsParams): RecordVerification {
   const { fields, text: recordText } = params;
-  const block = splitFrontmatter(recordText);
+  const parsed = parseRecord(recordText);
 
-  if (block === undefined) {
-    return {
-      isOk: false,
-      kind: REFUSAL_KINDS.noFrontmatter,
-      reason: findFenceProblem(recordText) ?? "no frontmatter block",
-    };
+  if (!parsed.isOk) {
+    return parsed;
   }
 
+  const { block, doc } = parsed;
   const { text } = block;
-  const doc = parseFrontmatter(text);
-  const inputProblem = describeYamlErrors(doc);
-
-  if (inputProblem !== undefined) {
-    return {
-      isOk: false,
-      kind: REFUSAL_KINDS.invalidYaml,
-      reason: inputProblem,
-    };
-  }
-
-  // YAML 1.2 ends a line at a lone carriage return, though the parser reads
-  // it as text, so other tools could read the edited record differently.
-  if (/\r(?!\n)/u.test(text)) {
-    return refuseLayout(
-      "the frontmatter holds a carriage return that doesn't end a line"
-    );
-  }
-
-  const ambiguity = findAmbiguity(doc);
-
-  if (ambiguity !== undefined) {
-    return refuseLayout(ambiguity);
-  }
-
   const map = doc.contents;
 
   if (!isMap(map) || !isPlaced(map) || map.flow === true) {
@@ -232,6 +328,48 @@ function checkFields(params: {
  */
 function formatValue(value: string): string {
   return stringify(value, { lineWidth: 0 }).trimEnd();
+}
+
+/**
+ * Parse a record's frontmatter for an edit, refusing what `verifyRecord`
+ * refuses before it plans one: no frontmatter, YAML that isn't valid or
+ * whose meaning is ambiguous, and a lone carriage return.
+ */
+function parseRecord(recordText: string): ParsedRecord {
+  const block = splitFrontmatter(recordText);
+
+  if (block === undefined) {
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.noFrontmatter,
+      reason: findFenceProblem(recordText) ?? "no frontmatter block",
+    };
+  }
+
+  const doc = parseFrontmatter(block.text);
+  const inputProblem = describeYamlErrors(doc);
+
+  if (inputProblem !== undefined) {
+    return {
+      isOk: false,
+      kind: REFUSAL_KINDS.invalidYaml,
+      reason: inputProblem,
+    };
+  }
+
+  // YAML 1.2 ends a line at a lone carriage return, though the parser reads
+  // it as text, so other tools could read the edited record differently.
+  if (/\r(?!\n)/u.test(block.text)) {
+    return refuseLayout(
+      "the frontmatter holds a carriage return that doesn't end a line"
+    );
+  }
+
+  const ambiguity = findAmbiguity(doc);
+
+  return ambiguity === undefined
+    ? { block, doc, isOk: true }
+    : refuseLayout(ambiguity);
 }
 
 /**
@@ -310,7 +448,7 @@ function planFields(params: {
 }
 
 /** Refuse a layout that needs a hand edit, saying so. */
-function refuseLayout(problem: string): RecordVerification {
+function refuseLayout(problem: string): Refusal {
   return {
     isOk: false,
     kind: REFUSAL_KINDS.unsupportedLayout,
