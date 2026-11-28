@@ -18,9 +18,12 @@ sources:
   - id: guide
     resource: ../../src/guide.ts
     title: src/guide.ts, the okf guide text and record rules
+  - id: restamp-exceptions
+    resource: ../../src/restamp-exceptions.ts
+    title: src/restamp-exceptions.ts, the edits that keep a record's generated and status
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T06:08:56Z }
-verified: { by: human:jjloneman, at: 2026-11-28T06:30:15Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-28T08:42:59Z }
+verified: { by: human:jjloneman, at: 2026-11-28T08:52:55Z }
 ---
 
 # What `okf guide` prints, and where the agent rules are written
@@ -39,6 +42,8 @@ As of 2026-11-25, from `src/guide.ts`[^guide], `src/agent-block.ts`[^agent-block
 - **The guide prints with no `[okf]` prefix,** like `okf status --format json`, so it reads, and pastes, as the Markdown it is. Its `--help` and usage errors are prefixed like any other line.
   - **Rejected:** prefixing every line, which breaks the Markdown an agent reads.
 - **The intro and the rules are one text, `RECORDS_INTRO` and `RECORD_RULES` in `src/guide.ts`.** The guide prints them, `AGENT_BLOCK` is built from them, and the README's Agents section quotes the block, with tests keeping all three the same.
+  - **The edits that keep a record's `generated` and `status` are one list too,** in `src/restamp-exceptions.ts`: the record rules and the `okf-record` skill quote it in the grammar each sentence needs, and the tag rules quote its reorders, so a new exception reaches every copy at once (#166).[^restamp-exceptions]
+    - **Rejected:** writing the list out in each sentence, with a test pinning each copy, which let one copy go unchanged when an exception was added.
   - **The block keeps the rules inline,** and adds one line pointing at `okf guide` for the commands.
     - The line says to run it through the repo's package manager, such as `pnpm exec okf guide`, since okf-tools is a dev dependency and `okf` may not be on the path.
     - **Rejected:** a block that only says "run `okf guide`", since an agent can skip running it, and the rule against verifying unasked must reach it anyway.
@@ -54,6 +59,7 @@ As of 2026-11-25, from `src/guide.ts`[^guide], `src/agent-block.ts`[^agent-block
 ## Links
 
 - [Issue #50](https://github.com/jjloneman/okf-tools/issues/50)
+- [Issue #166](https://github.com/jjloneman/okf-tools/issues/166)
 - [What `okf init` writes, and how it keeps the agent block current](init.md)
 - [Who verifies a record](who-verifies.md)
 - [How okf-tools lays out its commands](command-layout.md)
@@ -61,3 +67,5 @@ As of 2026-11-25, from `src/guide.ts`[^guide], `src/agent-block.ts`[^agent-block
 [^guide]: `src/guide.ts`, the `okf guide` text and record rules.
 
 [^agent-block]: `src/agent-block.ts`, the agent block's text and markers.
+
+[^restamp-exceptions]: `src/restamp-exceptions.ts`, the edits that keep a record's `generated` and `status`.

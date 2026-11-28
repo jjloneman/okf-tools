@@ -10,6 +10,10 @@
  *   record skill points there rather than restating it.
  */
 
+import {
+  OWNED_RESTAMP_EXCEPTIONS,
+  RESTAMP_EXCEPTIONS,
+} from "./restamp-exceptions.ts";
 import { TAG_RULES } from "./tag-rules.ts";
 
 /** A skill `okf init` installs, as the `SKILL.md` it writes. */
@@ -79,7 +83,7 @@ const RECORD_BODY = [
   "   - okf-generate differs here: it records a `human:<id>` verification once the person confirms the content. In this repo, tell them to run `okf verify` instead.",
   "   - Run `okf verify --yes <record>...` only when the person asks you to verify, naming the records they approved; pass `--changed` instead only when they asked for every changed record. Never verify a record as a side effect of writing it.",
   "2. **The CLI owns the clock.** Never type `generated.at`, or any other timestamp: a wrong time makes a record look changed, or signed off, when it isn't. `okf new` and `okf touch` take the time from the clock.",
-  "3. **A record you write or edit stays `status: draft`** until the person signs it off, unless you changed only its `tags`, the order of its `sources`, the order of its top-level keys, or several of these, which keeps its status.",
+  `3. **A record you write or edit stays \`status: draft\`** until the person signs it off, unless you changed only ${OWNED_RESTAMP_EXCEPTIONS}, which keeps its status.`,
   "4. **Record yourself in `generated.by`** with `--by <producer>/<version>`, such as `--by claude-code/2.1.316`; never the person, whose actor `okf.verifiedBy` in `package.json` holds for signing off.",
   "",
   "## Start a record",
@@ -94,7 +98,7 @@ const RECORD_BODY = [
   "1. Run `okf status <record>` first, for a record that existed before this change. One with a `verified` entry describes something the person signed off, so tell them what you're changing and why.",
   "2. Make the edit, keeping its `verified` history and the text you don't mean to change.",
   "   - Add a `sources` entry for each repo file or folder the edit rests on, footnoted by its `id` on the claim it supports, and remove one the record no longer rests on, with its footnotes.",
-  "3. Run `okf touch <record>... --by <producer>/<version> --draft` after every edit, a link-only one included, unless it changed only `tags`, the order of `sources`, the order of top-level keys, or several of these. It re-stamps `generated` from the clock and sets a `stable` record back to `status: draft`, keeping its `verified` entry, so it shows as changed until it's signed off again.",
+  `3. Run \`okf touch <record>... --by <producer>/<version> --draft\` after every edit, a link-only one included, unless it changed only ${RESTAMP_EXCEPTIONS}. It re-stamps \`generated\` from the clock and sets a \`stable\` record back to \`status: draft\`, keeping its \`verified\` entry, so it shows as changed until it's signed off again.`,
   "4. After a change to a record's title, description, or tags, or a new or removed record, run `okf index` in the same change.",
   "",
   "## Tags",
@@ -116,7 +120,7 @@ const RECORD_BODY = [
   "",
   "Run `okf index --check`, then tell the person:",
   "",
-  "- each record you created or changed, all of them drafts awaiting their sign-off, apart from the ones in which you changed only `tags`, the order of `sources`, the order of top-level keys, or several of these, which keep their status;",
+  `- each record you created or changed, all of them drafts awaiting their sign-off, apart from the ones in which you changed only ${RESTAMP_EXCEPTIONS}, which keep their status;`,
   "- that `okf diff <record>` shows what changed since they last signed one off;",
   "- that they sign records off with `okf verify`, or by asking you to.",
 ].join("\n");

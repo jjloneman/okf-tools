@@ -3,6 +3,10 @@ import { parse } from "yaml";
 
 import type { Skill } from "./skills.ts";
 
+import {
+  OWNED_RESTAMP_EXCEPTIONS,
+  RESTAMP_EXCEPTIONS,
+} from "./restamp-exceptions.ts";
 import { judgeSkill, SKILL_MARKER_PREFIX, SKILLS } from "./skills.ts";
 import { TAG_RULES } from "./tag-rules.ts";
 
@@ -97,24 +101,13 @@ describe("okf-record", () => {
     // Given - the record skill's text
     const { text } = RECORD_SKILL;
 
-    // When/Then - its draft rule, re-stamp step and handover name all three
+    // When/Then - its draft rule, re-stamp step and handover name them all
     expect(text).toContain(
-      [
-        "unless you changed only its `tags`, the order of its `sources`, the",
-        "order of its top-level keys, or several of these",
-      ].join(" ")
+      `unless you changed only ${OWNED_RESTAMP_EXCEPTIONS}, which keeps`
     );
+    expect(text).toContain(`unless it changed only ${RESTAMP_EXCEPTIONS}.`);
     expect(text).toContain(
-      [
-        "unless it changed only `tags`, the order of `sources`, the order of",
-        "top-level keys, or several of these",
-      ].join(" ")
-    );
-    expect(text).toContain(
-      [
-        "apart from the ones in which you changed only `tags`, the order of",
-        "`sources`, the order of top-level keys, or several of these",
-      ].join(" ")
+      `in which you changed only ${RESTAMP_EXCEPTIONS}, which keep`
     );
   });
 
