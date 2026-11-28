@@ -1,7 +1,7 @@
 ---
 type: Decision
 title: How okf new and okf touch stamp generated
-description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses; a change to `tags` alone, or to the order of `sources` alone, isn't re-stamped."
+description: "`okf new` writes a draft record's frontmatter and syncs its index, and `okf touch` re-stamps `generated` in place, both from the clock with no flag for the time; neither adds `verified` or commits, and each writes nothing when any part refuses; a change to `tags` alone, or to the order of `sources` or of the top-level keys alone, isn't re-stamped."
 tags:
   - agents
   - frontmatter
@@ -53,12 +53,15 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - **`--by` is required and must be an actor**, as `okf.verifiedBy` must; it names the producer, so it never falls back to `okf.verifiedBy`.
 - **The agent rules point at both commands** in place of telling an agent to stamp `generated` itself.
 - **A change to `tags` alone isn't re-stamped:** the agent rules and the `okf-record` skill say to skip `okf touch` for it, keeping `generated` and `status`, so a signed-off record stays signed off.
-  - Any other change in the same edit, to the body or another field, is re-stamped as before, apart from a reorder of `sources`.
+  - Any other change in the same edit, to the body or another field, is re-stamped as before, apart from a reorder of `sources` or of the top-level keys.
   - `title` and `description` aren't exempt, since they summarize what the record says.
   - In a tag audit, the record skill proposes every retag in one table first, so the person sees each change before it's written; a retag made in other work is shown only in its diff.
   - **Rejected:** re-stamping every edit, tags included, which sent each retagged record back for sign-off, so a bundle-wide tag audit queued every record it touched.
 - **A change to the order of `sources` alone isn't re-stamped either** (#150, #155): the agent rules and the `okf-record` skill name it beside `tags`, alone or with a `tags` change in the same edit, since a footnote cites its source by `id`, so the order changes no claim. `okf format` sorts `sources` under the `sources-sorted` house rule without re-stamping, per [What okf check --fix fixes, and how it writes](fixes.md).
   - Adding, removing, or editing an entry is re-stamped as before, since it changes what the record rests on.
+- **A change to the order of the top-level keys alone isn't re-stamped either** (#157): the agent rules and the `okf-record` skill name it beside `tags` and the order of `sources`, since a key means the same wherever it sits. `okf format` orders the keys under the `key-order` house rule without re-stamping, per [What okf check --fix fixes, and how it writes](fixes.md).
+  - As of 2026-11-28, `okf check` and `okf status` already kept a signed-off record signed off after a key reorder alone; only the rules were silent on it.
+  - **Rejected:** saying that any change `okf format` alone makes keeps `generated`. It would cover a later fix too, but an agent can't tell a format-only change from a hand edit in a diff, while each exception named here can be checked from it.
 
 ## Why
 
@@ -74,6 +77,7 @@ Agents typed `generated.at` by hand and got it wrong, and a time later than a si
 - [Issue #54](https://github.com/jjloneman/okf-tools/issues/54)
 - [Issue #66](https://github.com/jjloneman/okf-tools/issues/66), where the tags exception was decided
 - [Issue #150](https://github.com/jjloneman/okf-tools/issues/150), where the `sources` sort was decided, and [issue #155](https://github.com/jjloneman/okf-tools/issues/155), which named its exception in the guidance
+- [Issue #157](https://github.com/jjloneman/okf-tools/issues/157), which named the key-order exception
 - [What okf check --fix fixes, and how it writes](fixes.md)
 - [How a record's tags are laid out](tags-layout.md)
 - [How okf index keeps an index.md in step with its records](index-sync.md)

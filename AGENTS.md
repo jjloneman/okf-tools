@@ -232,7 +232,7 @@ Why the package works the way it does is recorded in [docs/decisions/](docs/deci
   - no `verified` means it is an unreviewed draft;
   - either way, update the record in the same PR as the change, and re-stamp `generated` (`by` and `at`), so a signed-off record shows as changed until it is verified again;
   - set a signed-off record you edit back to `status: draft`, even for a link-only edit, keeping its `verified` entry; `okf-verify` sets it to `stable` again on sign-off.
-  - a change to `tags` alone is the exception: keep `generated` and `status` as they are, so a signed-off record stays signed off (see [How okf new and okf touch stamp generated](docs/decisions/new-and-touch.md)); so is a change to the order of `sources` alone, which `okf format` makes under `sources-sorted` (see [What okf check --fix fixes, and how it writes](docs/decisions/fixes.md)).
+  - a change to `tags` alone is the exception: keep `generated` and `status` as they are, so a signed-off record stays signed off (see [How okf new and okf touch stamp generated](docs/decisions/new-and-touch.md)); so is a change to the order of `sources` alone, which `okf format` makes under `sources-sorted` (see [What okf check --fix fixes, and how it writes](docs/decisions/fixes.md)), and a change to the order of the top-level keys alone, which it makes under `key-order`.
 
 ## 🔖 References
 
